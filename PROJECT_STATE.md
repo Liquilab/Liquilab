@@ -1740,6 +1740,14 @@ Standard API error codes:
 --warn: #F59E0B;
 --error: #EF4444;
 
+/* Typography (SP1-T37) */
+--font-header: 'Quicksand', system-ui, sans-serif;  /* Headers h1-h6, weights 600/700 */
+--font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;  /* Body/Tables/Forms, weights 400/500 */
+
+/* Numerics (SP1-T37) */
+--num-style-tabular: tabular-nums;  /* Enforced via .numeric class for KPI/pricing/tabellen */
+font-variant-numeric: var(--num-style-tabular);
+
 /* Spacing (4-pt scale) */
 --space-xs: 4px;
 --space-sm: 8px;
@@ -1771,18 +1779,19 @@ Standard API error codes:
 #### Typography
 
 **Fonts:**
-- **Headers:** Quicksand (weights: 500/600/700)
-- **Body/Tables:** Inter (weights: 400/500/600)
+- **Headers (h1-h6):** Quicksand (weights: 600/700) — via `--font-header` (SP1-T37)
+- **Body/Tables/Forms:** Inter (weights: 400/500) — via `--font-body` (SP1-T37)
 - **Fallback Stack:** 
-  - Quicksand: `Quicksand, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
-  - Inter: `Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
+  - Quicksand: `'Quicksand', system-ui, sans-serif`
+  - Inter: `'Inter', -apple-system, BlinkMacSystemFont, sans-serif`
 
-**Tabular Numerals:**
+**Tabular Numerals (Enforced via SP1-T37):**
 - Apply `font-variant-numeric: tabular-nums` as default for:
   - KPIs (TVL, fees, APR)
-  - Pricing tables
+  - Pricing tables (calculator, checkout)
   - All numeric data tables
-- CSS utility: `.tabular-nums { font-variant-numeric: tabular-nums; }`
+- CSS utility: `.numeric { font-variant-numeric: var(--num-style-tabular); }` (alias: `tabular-nums`)
+- **Enforcement:** All numeric values in UI MUST use `.numeric` class (verified by `npm run verify:typography`)
 
 **Scale:**
 ```css
@@ -1857,6 +1866,24 @@ export function formatPercent(value: number | null): string {
 // Rules: local-first, no remote calls in runtime, unoptimized next/image
 ```
 
+#### UI Canon (SP1-T37/T40)
+
+**Wave-Hero Background (SP1-T40):**
+- **Placement:** Crisp SVG/PNG in bottom 50% viewport fold at breakpoints sm/md/lg (320px/768px/1024px)
+- **Assets:** `/public/media/brand/hero-wave.svg` + `hero-wave@2x.png` (Retina-safe, 2x pixel density)
+- **CSS:** Fixed position, seamless gradient from `--bg-canvas` (top 50%) to wave (bottom 50%)
+- **Rendering:** `image-rendering: -webkit-optimize-contrast` for crisp rendering
+- **Verifiers:** Lighthouse CLS < 0.1, screenshot diff at 320px/768px/1024px (max diff <5%)
+
+**Numerics Default (SP1-T37):**
+- **Rule:** All KPI/fees/pricing values use `class="numeric"` → `font-variant-numeric: tabular-nums`
+- **Enforcement:** Verified by `npm run verify:typography` (checks all numeric values use `.numeric` class)
+- **Rationale:** Prevents layout shift in tables/dashboards when values update
+
+**Icon Policy (Unchanged):**
+- Token icons: local-first strategy (no remote calls in runtime)
+- Fallback chain: SVG → PNG → WEBP → default
+
 #### Accessibility (A11y)
 
 **WCAG AA Targets:**
@@ -1888,6 +1915,9 @@ export function formatPercent(value: number | null): string {
 - Form inputs: associated labels + error messages
 - Modals: `role="dialog"`, `aria-modal="true"`, focus trap
 - Live regions: `aria-live="polite"` for status updates
+
+**Advies — Next Step:**  
+Implement SP1-T37 (Figma Foundations & Tokens) immediately to export `--font-header`, `--font-body`, and `--num-style-tabular` tokens. Validate token export via `npm run tokens:build` before proceeding to wave-hero (SP1-T40) implementation.
 
 <!-- DELTA 2025-11-16 END -->
 

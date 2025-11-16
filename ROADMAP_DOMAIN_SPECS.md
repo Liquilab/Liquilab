@@ -48,11 +48,18 @@
 
 **Hero Composition:**
 - **Wave Hero:** Crisp SVG/PNG in bottom 50% viewport fold; seamless gradient transition from `--bg-canvas` (top 50%)
+- **Responsive Wave Rendering:** Crisp at sm/md/lg breakpoints (320px/768px/1024px); Retina-safe (2x pixel density)
 - **Typography:** Quicksand headers (600/700 weights), Inter body (400/500)
 - **CTA Hierarchy:**
   - Primary: "Start 14-day trial" (Electric Blue #3B82F6, prominent placement)
   - Secondary: "Bekijk demo" (ghost button, lower visual weight)
 - **Device Pixel Ratio:** 2x wave assets for Retina; crisp rendering via `image-rendering: -webkit-optimize-contrast`
+
+**Wave-Hero DoD/Verifiers:**
+- Lighthouse: no layout shift on hero load (CLS < 0.1)
+- Screenshot diff: compare hero rendering at 320px/768px/1024px vs baseline (max diff <5%)
+- Visual QA: wave appears crisp on mobile/tablet/desktop/Retina displays
+- `curl / | grep -q "hero-wave"` → background renders in SSR HTML
 
 **OG Assets (Open Graph):**
 - **DoD:** 1200×630px social preview images
@@ -74,6 +81,12 @@
 - Frame: "Home — Hero V3" (wave + CTA hierarchy)
 - Frame: "Home — Demo Table" (token icons + tabular-nums)
 - Frame: "Home — Empty State" (0 pools)
+
+**Font Canon (Enforced via SP1-T37/T38):**
+- **Headers (h1-h6):** Quicksand 600/700, fallback: system-ui, sans-serif
+- **Body/Tables/Forms:** Inter 400/500, fallback: -apple-system, BlinkMacSystemFont, sans-serif
+- **Numerics (KPI/Pricing/Tabellen):** `font-variant-numeric: tabular-nums` via `.numeric` class (enforced in tokens)
+- **Implementation:** CSS vars `--font-header` + `--font-body` + `--num-style-tabular` exported from Style Dictionary
 
 <!-- DELTA 2025-11-16 END -->
 
@@ -2131,23 +2144,27 @@ GET /api/analytics/leaderboard?metric=tvl|fees|apr&period=7d|30d&limit=100
 
 #### Sprint 1 (SP1) — Foundation & Design System
 
-**SP1-T37:** Figma Foundations & Tokens  
+**Sprint Goals (LOCKED) — Volgorde T37 → T38 → T40 → T39:**
+
+**SP1-T37:** Figma Foundations & Tokens (theming + CSS var export; fonts: Quicksand=Headers, Inter=Body/Tables; numerics: tabular-nums)  
 - **Owner:** Designer + FE  
 - **Model:** CODEX (token export script) + CLAUDE (Figma structure spec)  
 - **DoD:**
   - Figma file structured: Foundations → Components → Patterns → Page Templates
   - Design tokens exported via Style Dictionary → `src/styles/tokens.css`
   - CSS vars: colors (--brand-primary, --brand-secondary, etc.), spacing (4-pt scale), radii, elevations, opacities
-  - Typography tokens: Quicksand (600/700), Inter (400/500) with fallback stacks
+  - Typography tokens: `--font-header: 'Quicksand'` (600/700), `--font-body: 'Inter'` (400/500) with fallback stacks
+  - Numerics tokens: `--num-style-tabular` → `font-variant-numeric: tabular-nums` voor KPI/pricing/tabellen
 - **Verifiers:**
   - `test -f src/styles/tokens.css` → exists
   - `npm run tokens:build` → exit 0
   - Visual regression: demo pools table layout stable after token integration
+  - `grep 'tabular-nums' src/styles/tokens.css` → found
 - **Scope/Files:** `src/styles/tokens.css`, `figma/liquilab-design-system.fig`, `scripts/build-tokens.mjs`
 - **Env:** LOCAL → STAGING → PROD
 - **GECOVERED:** ❌ (nieuw)
 
-**SP1-T38:** DS Components (visual spec)  
+**SP1-T38:** DS Components (visual spec) (ErrorBoundary/Toast/Modal/Form/Accordion/CookieBanner/DataState; states+a11y; tabular-nums voor KPI/prijsvelden)  
 - **Owner:** Designer  
 - **Model:** CLAUDE (component specs) + COMPOSER 1 (Figma frames)  
 - **DoD:**
@@ -2156,15 +2173,37 @@ GET /api/analytics/leaderboard?metric=tvl|fees|apr&period=7d|30d&limit=100
   - A11y annotations: ARIA roles, keyboard nav flows, focus indicators (2px --brand-primary)
   - Color contrast checks: all text ≥4.5:1 WCAG AA
   - Responsive breakpoints: mobile (320px), tablet (768px), desktop (1024px+)
+  - **Numeric fields:** All KPI/pricing values use `class="numeric"` → `font-variant-numeric: tabular-nums` (defined in tokens)
 - **Verifiers:**
   - Figma file contains frames: "DS — ErrorBoundary", "DS — Toast", etc. (7 components)
   - Each component has ≥3 states documented
   - Contrast check pass via Figma plugin (Stark/A11y)
+  - Form.* frames show numeric input with `.numeric` class annotation
 - **Scope/Files:** `figma/liquilab-design-system.fig` (Components section)
 - **Env:** DESIGN → LOCAL (implementation)
 - **GECOVERED:** ❌ (nieuw)
 
-**SP1-T39:** OG & Social Previews  
+**SP1-T40:** Wave-Hero (Home) (wave-hero als crisp background in onderste 50% van de FOLD; naadloze achtergrond; OG hero varianten)  
+- **Owner:** Designer + Marketing  
+- **Model:** CLAUDE (asset specs) + COMPOSER 1 (visual polish)  
+- **DoD:**
+  - Wave hero background: crisp SVG/PNG in bottom 50% viewport fold at breakpoints sm/md/lg (320px/768px/1024px)
+  - Assets: `/public/media/brand/hero-wave.svg`, `/public/media/brand/hero-wave@2x.png` (Retina-safe, 2x pixel density)
+  - CSS: fixed position, seamless gradient from `--bg-canvas` (top 50%) to wave (bottom 50%)
+  - Device pixel ratio awareness: `image-rendering: -webkit-optimize-contrast` for crisp rendering
+  - Hero variants: Home (default), Pricing (calculator focus), RangeBand (interactive demo)
+  - **OG hero variants:** hero-wave-home.png, hero-wave-pricing.png, hero-wave-rangeband.png voor social previews
+- **Verifiers:**
+  - `test -f public/media/brand/hero-wave.svg && test -f public/media/brand/hero-wave@2x.png`
+  - Visual QA: wave appears crisp on mobile/tablet/desktop/Retina (screenshot diff test)
+  - Lighthouse: no layout shift on hero load (CLS < 0.1)
+  - `curl / | grep -q "hero-wave"` → background renders in HTML
+  - Screenshot diff: compare hero at 320px/768px/1024px vs baseline (max diff <5%)
+- **Scope/Files:** `public/media/brand/hero-wave.*`, `src/styles/hero.css`, `components/Hero.tsx`
+- **Env:** LOCAL → STAGING → PROD
+- **GECOVERED:** ❌ (nieuw)
+
+**SP1-T39:** OG & Social Previews (10 OG-varianten; auto meta per route)  
 - **Owner:** Designer + Marketing  
 - **Model:** CLAUDE (Firefly brief) + AUTO (OG meta implementation)  
 - **DoD:**
@@ -2444,6 +2483,9 @@ SP4-B04 (Sentry) + SP4-B05 (Uptime)
 2. Request juridisch advies for SP4-L01 (Legal team intake)
 3. Create Figma file structure (SP1-T38 prep work)
 4. Setup Sentry projects (TEST + PROD) for SP4-B04
+
+**Advies — SP1 LOCKED Goals Next Step:**  
+Start immediately with SP1-T37 (Figma Foundations & Tokens) — critical path blocker for all subsequent design/UI work. Export tokens (Quicksand/Inter/tabular-nums) first, then validate wave-hero rendering (SP1-T40) at all breakpoints before implementing DS components (SP1-T38). OG assets (SP1-T39) can run parallel post-tokens.
 
 <!-- DELTA 2025-11-16 END -->
 
