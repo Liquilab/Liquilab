@@ -1283,5 +1283,7 @@ npm run icons:fetch -- --only-missing --concurrency=8
 
 - S2: Added /api/analytics/{summary,pool} (TTL 60s, degrade-mode), MV refresh orchestrator stub, FE wired /summary & /pool to analytics, verifiers added.
 
+- 2025-11-16 — S0: Added Dockerfile/start.sh/.dockerignore and docker-build CI workflow to prevent missing-Dockerfile crashes.
+
 <!-- CHANGELOG_ARCHIVE_INDEX -->
 See archives in /docs/changelog/.
