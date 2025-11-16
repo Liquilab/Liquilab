@@ -44,6 +44,39 @@
 
 <!-- DELTA 2025-11-16 END -->
 
+<!-- DELTA 2025-11-16 START (Brand/UI/Marketing) -->
+
+**Hero Composition:**
+- **Wave Hero:** Crisp SVG/PNG in bottom 50% viewport fold; seamless gradient transition from `--bg-canvas` (top 50%)
+- **Typography:** Quicksand headers (600/700 weights), Inter body (400/500)
+- **CTA Hierarchy:**
+  - Primary: "Start 14-day trial" (Electric Blue #3B82F6, prominent placement)
+  - Secondary: "Bekijk demo" (ghost button, lower visual weight)
+- **Device Pixel Ratio:** 2x wave assets for Retina; crisp rendering via `image-rendering: -webkit-optimize-contrast`
+
+**OG Assets (Open Graph):**
+- **DoD:** 1200×630px social preview images
+- **Variants:** Home (default), Dashboard (logged-in), RangeBand explainer, Pricing, FAQ
+- **Route-specific meta:** `og:title`, `og:description`, `og:image` populated per route
+- **Verifier:** `npm run verify:og` checks presence + asset existence
+
+**Empty/Degrade States:**
+- **0 pools:** "Connect wallet — start free" CTA with getting started panel
+- **API degrade:** Stale badge + cached demo data (TTL 60s)
+- **Wallet error:** Clear error message "Invalid wallet address" (niet "—")
+
+**Token Icon Fallback Policy:**
+- **Chain:** SVG → PNG → WEBP → `/media/tokens/token-default.svg`
+- **SSR Visibility:** Icons render on initial HTML (no dynamic imports)
+- **Verifier:** `test -f public/media/tokens/token-default.svg`
+
+**Figma References:**
+- Frame: "Home — Hero V3" (wave + CTA hierarchy)
+- Frame: "Home — Demo Table" (token icons + tabular-nums)
+- Frame: "Home — Empty State" (0 pools)
+
+<!-- DELTA 2025-11-16 END -->
+
 ---
 
 #### **/summary**
@@ -130,6 +163,41 @@
 
 <!-- DELTA 2025-11-16 END -->
 
+<!-- DELTA 2025-11-16 START (Brand/UI/Marketing) -->
+
+**RangeBand™ Legend + Tooltips:**
+- **Legend:** Always visible (in-range: green, near-band: orange, out-of-range: red)
+- **Tooltip Content:**
+  - **In Range:** "Position is actively earning fees"
+  - **Near Band:** "Price approaching your range bounds — consider rebalancing"
+  - **Out of Range:** "Position not earning fees — outside range"
+- **Interactive:** Hover/focus shows tooltip; keyboard accessible (Tab navigation)
+
+**Extreme APR Warning:**
+- **Trigger:** APR > 1000%
+- **UI:** Yellow warning badge + tooltip "⚠️ Verify pool liquidity — unusually high APR may indicate low TVL or data anomaly"
+- **Placement:** Next to APR value in pool header
+
+**Token Icon Fallback (Pool Detail):**
+- **Chain:** `/media/tokens/{symbol}.svg` → `.png` → `.webp` → `/media/tokens/by-address/{address}.png` → `token-default.svg`
+- **NO_POSITION state:** Show default icon + message "Pool data loading..."
+- **Missing token:** Log warning (Sentry), render default icon, no blank space
+
+**Chart Styling (7d/30d):**
+- **Compact variant:** Height 200px, minimal labels, tabular-nums for Y-axis
+- **Large variant:** Height 400px, full labels, tooltips on data points
+- **Typography:** Inter 400 for labels, tabular-nums for all numeric values
+- **Colors:** Signal Aqua (#1BE8D2) for lines, semi-transparent fills
+- **Responsive:** Compact on mobile, large on desktop (breakpoint: 768px)
+
+**Figma References:**
+- Frame: "Pool Detail — RangeBand Legend"
+- Frame: "Pool Detail — Extreme APR Warning"
+- Frame: "Pool Detail — Charts 7d/30d Variants"
+- Frame: "Pool Detail — Empty State (NO_POSITION)"
+
+<!-- DELTA 2025-11-16 END -->
+
 ---
 
 #### **/rangeband**
@@ -205,6 +273,41 @@
 
 <!-- DELTA 2025-11-16 END -->
 
+<!-- DELTA 2025-11-16 START (Brand/UI/Marketing) -->
+
+**EUR Label Implementation:**
+- **Display:** "Charged in EUR (≈ €XX.XX)" below USD pricing
+- **FX Cache:** 24h TTL via `/api/billing/fx-rate` (ECB or similar)
+- **Fallback:** If FX API unavailable, use last cached rate + stale indicator
+- **Typography:** Inter 400, `--text-med` opacity, smaller font size (14px)
+- **Verifier:** `npm run verify:pricing` checks EUR label presence
+
+**Trial Countdown Badge:**
+- **Format:** "D-n" (e.g., "D-7" for 7 days remaining)
+- **Placement:** Top-right of pricing card for trialing users
+- **Colors:** Signal Aqua (#1BE8D2) background, white text
+- **State:** Auto-updates daily; disappears on trial end
+- **Verifier:** E2E test with trial subscription fixture
+
+**Degrade States:**
+- **Stripe Degrade:** CTA disabled (opacity 0.5) + warning banner "Billing temporarily unavailable — try again shortly"
+- **0 Pools Selected:** CTA disabled + tooltip "Select at least 5 pools to continue"
+- **Email Missing:** Inline validation error "Email required for receipts" (red border + error message)
+
+**Calculator UX:**
+- **Pool Slider:** Step 5, min 5, max 100+
+- **Add-ons:** Checkboxes for Extra5 packs + Alerts5
+- **Live Update:** Total price updates immediately on slider/checkbox change
+- **Tabular Numerals:** All pricing values use `tabular-nums` for stable layout
+
+**Figma References:**
+- Frame: "Pricing — Calculator + EUR Label"
+- Frame: "Pricing — Trial Countdown Badge"
+- Frame: "Pricing — Degrade States (Stripe/0 Pools/Email Error)"
+- Frame: "Pricing — Success/Cancel Confirmation"
+
+<!-- DELTA 2025-11-16 END -->
+
 ---
 
 #### **/faq**
@@ -267,6 +370,32 @@
 
 <!-- DELTA 2025-11-16 END -->
 
+<!-- DELTA 2025-11-16 START (Brand/UI/Marketing) -->
+
+**Legal Pages Template (Unified):**
+- **Typography:** Quicksand 600 for section headers, Inter 400 for body text
+- **Layout:** Max-width 800px, left-aligned, `--space-lg` vertical rhythm
+- **Sections:** Table of contents (anchor links), collapsible sections (Accordion pattern)
+- **Last Updated:** Visible at top, format "Last updated: DD MMM YYYY"
+- **Footer Links:** Privacy, Terms, Cookies (always visible)
+
+**WCAG AA Compliance:**
+- **Contrast:** All text ≥4.5:1 against `--bg-canvas`
+- **Keyboard Nav:** Tab through sections, Enter/Space to expand accordions
+- **Focus Indicators:** 2px `--brand-primary` outline on interactive elements
+- **Screen Reader:** Proper heading hierarchy (h1 → h2 → h3)
+
+**Verifiers:**
+- SSR 200 status: `curl -I /legal/privacy | grep "200 OK"`
+- Lighthouse A11y score ≥95
+- Anchor links functional: `#data-collection`, `#user-rights`, etc.
+
+**Figma References:**
+- Frame: "Legal — Page Template (Unified)"
+- Frame: "Legal — Table of Contents + Accordion"
+
+<!-- DELTA 2025-11-16 END -->
+
 ---
 
 #### **/legal/terms** ❌ MISSING
@@ -318,6 +447,45 @@
 
 <!-- DELTA 2025-11-16 END -->
 
+<!-- DELTA 2025-11-16 START (Brand/UI/Marketing) -->
+
+**CookieBanner Component:**
+- **Placement:** Fixed bottom, z-index 1000, full-width on mobile, max-width 600px centered on desktop
+- **Content:** "We use essential cookies for wallet sessions. [Learn more](/legal/cookies)"
+- **Actions:** "Accept" (primary button), "Reject" (secondary/ghost)
+- **Dismiss:** Click Accept/Reject or Esc key
+- **Consent Storage:** `localStorage.setItem('ll_cookies_accepted', 'true|false')`
+
+**A11y Requirements:**
+- **ARIA:** `role="dialog"`, `aria-modal="true"`, `aria-label="Cookie consent"`
+- **Focus Trap:** Tab cycles through links + buttons only (not background)
+- **Keyboard:** Esc to dismiss (defaults to Reject), Enter on focused button to confirm
+- **Reduced Motion:** No slide-in animation if `prefers-reduced-motion: reduce`
+
+**Visual Design:**
+- **Background:** `--bg-surface` (rgba(10, 15, 26, 0.88)) with backdrop blur
+- **Typography:** Inter 400, 14px body text, buttons 16px
+- **Spacing:** `--space-md` padding, `--space-sm` between elements
+- **Elevation:** `--elevation-e4` shadow
+
+**First Visit Logic:**
+- Check `localStorage.ll_cookies_accepted` on mount
+- If `null` → show banner after 2s delay (allow page to settle)
+- If `'true'` or `'false'` → hide banner
+
+**Verifiers:**
+- Banner appears on first visit (clear localStorage before test)
+- Banner dismissed on Accept/Reject
+- `localStorage.ll_cookies_accepted` set correctly
+- Keyboard navigation functional (Tab, Esc, Enter)
+- Axe A11y check passes
+
+**Figma References:**
+- Frame: "CookieBanner — Desktop + Mobile Variants"
+- Frame: "CookieBanner — Focus States (Keyboard Nav)"
+
+<!-- DELTA 2025-11-16 END -->
+
 ---
 
 #### **/account** ❌ MISSING
@@ -361,6 +529,52 @@
 - **SP3-T26:** "/api/user/delete flow" (Owner: API/Billing)
   - DoD: Stripe cancel → delete BillingCustomer + UserSettings + AlertConfig; pseudonimize analytics
   - Verifier: Returns `{ok:true}` + AuditLog entry exists
+
+<!-- DELTA 2025-11-16 END -->
+
+<!-- DELTA 2025-11-16 START (Brand/UI/Marketing) -->
+
+**Forms Pattern (react-hook-form):**
+- **Library:** react-hook-form voor form state + validation
+- **Schema Validation:** Zod schemas voor email, preferences
+- **Error Display:** Inline errors (red border + message below field)
+- **Success State:** Green checkmark + "Settings saved" toast (3s auto-dismiss)
+
+**Profile Section:**
+- **Fields:** Email (text input), Wallet Address (read-only, truncated display)
+- **Email Validation:** 
+  - Required: "Email is required"
+  - Format: "Valid email required" (regex: `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`)
+  - Async check: Verify not already in use (debounced 500ms)
+- **Save Button:** Disabled until form dirty + valid
+
+**Email Preferences:**
+- **Checkboxes:** Alerts (position notifications), Reports (weekly summaries), Marketing (product updates)
+- **Default:** All unchecked initially (opt-in only)
+- **Unsubscribe Link:** Links in emails point to `/account?unsubscribe=alerts|reports|marketing`
+- **Persistence:** POST to `/api/user/settings` on change (auto-save, no explicit Save button)
+
+**Danger Zone (GDPR Delete):**
+- **UI:** Red border section, collapsed by default (Accordion pattern)
+- **Button:** "Delete Account" (red, ghost style)
+- **Confirm Modal:**
+  - Title: "Delete your account?"
+  - Content: "This will permanently delete your data and cancel your subscription. Type DELETE to confirm."
+  - Input: Text field (must type "DELETE" exactly)
+  - Actions: "Cancel" (secondary), "Delete Account" (red primary, disabled until "DELETE" typed)
+- **Flow:** Confirm → POST `/api/user/delete` → Success toast → Redirect `/pricing?deleted=true`
+
+**API Degrade Handling:**
+- **Settings Load Error:** Show stale data + "Unable to load latest settings" banner
+- **Settings Save Error:** Toast error "Unable to save — try again" + retry button
+- **Delete Error:** Modal stays open + inline error "Delete failed — contact support"
+
+**Figma References:**
+- Frame: "Account — Profile + Email Form"
+- Frame: "Account — Email Preferences (Checkboxes)"
+- Frame: "Account — Danger Zone (Collapsed/Expanded)"
+- Frame: "Account — Delete Confirmation Modal"
+- Frame: "Account — Form Validation States"
 
 <!-- DELTA 2025-11-16 END -->
 
@@ -497,6 +711,46 @@ type AlertRecord = {
   - DoD: Status page renders; consistent with `/api/health`
   - Verifier: `GET /api/health` matches UI indicators
 
+<!-- DELTA 2025-11-16 START (Brand/UI/Marketing) -->
+
+**Component States (Observability):**
+- **Database:** `ok` (green), `slow` (yellow, >500ms), `down` (red)
+- **Analytics MVs:** Show last refresh timestamp; `stale` if >2h
+- **Billing (Stripe):** `ok` / `degrade` (Stripe API timeout)
+- **Mail (Mailgun):** `ok` / `degrade` (queue paused or API error)
+- **Indexer:** Show last processed block + lag in seconds; `stale` if >300s
+
+**SEV Level Indicators:**
+- **SEV-1 (Critical):** Red badge, entire service affected
+- **SEV-2 (Major):** Orange badge, partial degradation
+- **SEV-3 (Minor):** Yellow badge, minor issues or warning
+
+**Visual Design:**
+- **Layout:** Grid of status cards (3 cols on desktop, 1 col mobile)
+- **Card Structure:** Component name (Quicksand 600), status badge, last checked timestamp (Inter 400, tabular-nums)
+- **Status Badge:** Circle indicator (8px diameter) + text label
+  - Green: `ok`, `operational`
+  - Yellow: `slow`, `stale`, `degraded`
+  - Red: `down`, `critical`
+- **Timestamps:** Relative time (e.g., "2m ago") + absolute on hover
+
+**Incident Log (Optional):**
+- Last 10 incidents, newest first
+- Columns: Timestamp, SEV level, Component, Message
+- Link to full incident log (if separate system exists)
+
+**Verifiers:**
+- `/status` page accessible (no auth required for internal use)
+- Matches `/api/health` response structure
+- Sentry test error visible in log (SP4-B04 integration)
+
+**Figma References:**
+- Frame: "Status — Component Status Grid"
+- Frame: "Status — Status Badge Variants (ok/slow/down)"
+- Frame: "Status — Incident Log (Optional)"
+
+<!-- DELTA 2025-11-16 END -->
+
 <!-- DELTA 2025-11-16 END -->
 
 ---
@@ -582,6 +836,60 @@ type RangeBandProps = {
 };
 ```
 **Rules:** `bandColor`/`positionRatio` exclusively from data layer; FE calculates no logic.
+
+<!-- DELTA 2025-11-16 START (Brand/UI/Marketing) -->
+
+**DS Component Figma References:**
+
+1. **ErrorBoundary**
+   - Frame: "ErrorBoundary — Crash Fallback (Full Page)"
+   - States: Generic error, Sentry logged, "Reload" button
+
+2. **Toast**
+   - Frame: "Toast — Variants (Success/Error/Info/Warning)"
+   - Frame: "Toast — Queue Stack (Multiple Active)"
+   - States: Auto-dismiss (3s), manual dismiss (X button), ARIA live region
+
+3. **Modal**
+   - Frame: "Modal — Generic Wrapper (Overlay + Content)"
+   - Frame: "Modal — Focus Trap + Keyboard Nav"
+   - States: Open, closing animation, Esc key dismiss, click-outside dismiss
+
+4. **Form.* (Text/Select/Checkbox)**
+   - Frame: "Form — Text Input (States: Default/Focus/Error/Success)"
+   - Frame: "Form — Select Dropdown"
+   - Frame: "Form — Checkbox + Label"
+   - Validation: Inline error messages (red text + border), async validation (debounced)
+
+5. **Accordion**
+   - Frame: "Accordion — Collapsed/Expanded States"
+   - Frame: "Accordion — Keyboard Nav (Tab/Enter/Space)"
+   - States: Collapsed (chevron down), Expanded (chevron up), smooth expand/collapse animation
+
+6. **CookieBanner** (already detailed in /legal/cookies section)
+   - Frame: "CookieBanner — Desktop + Mobile Variants"
+   - Frame: "CookieBanner — Focus States (Keyboard Nav)"
+
+7. **DataState**
+   - Frame: "DataState — Loading (Skeleton)"
+   - Frame: "DataState — Empty State (No Data)"
+   - Frame: "DataState — Degrade State (Stale Banner + Cached Data)"
+   - Frame: "DataState — Error State (Retry Button)"
+
+**Component A11y Checklist (All Components):**
+- ✅ WCAG AA contrast (4.5:1 minimum)
+- ✅ Keyboard navigation (Tab, Enter, Esc, Arrow keys)
+- ✅ Focus indicators (2px `--brand-primary` outline)
+- ✅ ARIA attributes (roles, labels, states, live regions)
+- ✅ Screen reader friendly (proper heading hierarchy, alt text)
+- ✅ Reduced motion support (`prefers-reduced-motion: reduce`)
+
+**Verifiers (All Components):**
+- Axe A11y audit: `npm run verify:a11y` ≥95 score
+- Keyboard nav manual test: Tab through all interactive elements
+- Screen reader test: VoiceOver/NVDA verification (optional for MVP, recommended)
+
+<!-- DELTA 2025-11-16 END -->
 
 <!-- DELTA 2025-11-16 END -->
 
@@ -1833,4 +2141,59 @@ GET /api/analytics/leaderboard?metric=tvl|fees|apr&period=7d|30d&limit=100
 4. Generate timeline (GPT Pro: given capacity → sprint plan)
 
 **Deadline suggestie:** Review binnen 2 werkdagen → finalize roadmap vrijdag
+
+---
+
+<!-- DELTA 2025-11-16 START (Brand/UI/Marketing) -->
+
+## ADVIES — Volgende Stappen (Brand/UI/Marketing Delta)
+
+**Prioriteit 1: Figma Library Sync**
+- Align bestaande componenten (Header, PoolCard, RangeBand™) met nieuw gedefinieerde design tokens
+- Export design tokens via Style Dictionary → `src/styles/tokens.css`
+- Verifier: Visual regression test op demo pools table (layout stability)
+
+**Prioriteit 2: Brand System Implementation**
+- Implement `src/lib/format/currency.ts` met SSoT helpers (formatUSD, formatEUR, formatNumber, formatPercent)
+- Refactor inline formatting door hele codebase → gebruik centrale helpers
+- Enforce `tabular-nums` in KPI/pricing/table components via CSS class `.numeric`
+- Verifier: `npm run verify:brand` (nieuw script) checks numeric formatting consistency
+
+**Prioriteit 3: Hero + OG Assets**
+- Finalize Wave Hero crisp rendering (SVG/PNG 2x assets voor Retina)
+- Create 10 OG variants (1200×630) per route (Home, Dashboard, RangeBand, Pricing, FAQ, etc.)
+- Implement `npm run verify:og` voor automated checks
+- Verifier: Lighthouse audit + social preview test (Slack/Discord/Twitter)
+
+**Prioriteit 4: A11y Foundation**
+- Setup `npm run verify:a11y` (AxePuppeteer) met fail-hard threshold ≥95
+- Keyboard nav audit op alle interactive routes (/, /pricing, /account, /legal/*)
+- Implement focus indicators (2px `--brand-primary` outline) globaal via `focus-visible`
+- Verifier: Manual keyboard nav test + Axe audit pass
+
+**Prioriteit 5: Legal + CookieBanner (Pre-Launch Blocker)**
+- CookieBanner component + `/legal/cookies` content (GDPR compliance)
+- `/legal/privacy` + `/legal/terms` content (juridisch advies indien mogelijk)
+- Test banner flow: first visit → consent → localStorage → dismiss
+- Verifier: `curl /legal/privacy | grep "Last updated"` + banner functional test
+
+**Rationale:**
+- Brand System (P1+P2): Prevents UX drift; stable layout; EUR/USD future-proof
+- Hero + OG (P3): Marketing/launch readiness; social shareability
+- A11y (P4): WCAG AA compliance; keyboard users; screen reader friendly
+- Legal (P5): Launch blocker; GDPR compliance non-negotiable
+
+**Time Estimate:**
+- P1+P2: 2-3 dagen (FE + DS sync)
+- P3: 1-2 dagen (Designer + FE)
+- P4: 1 dag (FE + QA)
+- P5: 2-3 dagen (Legal review + FE implementation)
+- **Total: ~1-1.5 week** voor Brand/UI/Marketing Delta completion
+
+**Dependency:**
+- P1 blokkeert P3 (tokens eerst, dan hero styling)
+- P5 blokkeert launch (non-negotiable)
+- P2+P4 parallel executable
+
+<!-- DELTA 2025-11-16 END -->
 
