@@ -2125,6 +2125,192 @@ GET /api/analytics/leaderboard?metric=tvl|fees|apr&period=7d|30d&limit=100
 
 - Reports export, Leaderboard, Onboarding wizard, Advanced IL analytics
 
+---
+
+### NEW SPRINT TASKS — Brand/Design/Marketing/Billing/Observability
+
+#### Sprint 1 (SP1) — Foundation & Design System
+
+**SP1-T37:** Figma Foundations & Tokens  
+- **Owner:** Designer + FE  
+- **Model:** CODEX (token export script) + CLAUDE (Figma structure spec)  
+- **DoD:**
+  - Figma file structured: Foundations → Components → Patterns → Page Templates
+  - Design tokens exported via Style Dictionary → `src/styles/tokens.css`
+  - CSS vars: colors (--brand-primary, --brand-secondary, etc.), spacing (4-pt scale), radii, elevations, opacities
+  - Typography tokens: Quicksand (600/700), Inter (400/500) with fallback stacks
+- **Verifiers:**
+  - `test -f src/styles/tokens.css` → exists
+  - `npm run tokens:build` → exit 0
+  - Visual regression: demo pools table layout stable after token integration
+- **Scope/Files:** `src/styles/tokens.css`, `figma/liquilab-design-system.fig`, `scripts/build-tokens.mjs`
+- **Env:** LOCAL → STAGING → PROD
+- **GECOVERED:** ❌ (nieuw)
+
+**SP1-T38:** DS Components (visual spec)  
+- **Owner:** Designer  
+- **Model:** CLAUDE (component specs) + COMPOSER 1 (Figma frames)  
+- **DoD:**
+  - Figma frames voor alle DS componenten: ErrorBoundary, Toast, Modal, Form.* (Text/Select/Checkbox), Accordion, CookieBanner, DataState
+  - States per component: default, hover, focus, active, disabled, error, loading
+  - A11y annotations: ARIA roles, keyboard nav flows, focus indicators (2px --brand-primary)
+  - Color contrast checks: all text ≥4.5:1 WCAG AA
+  - Responsive breakpoints: mobile (320px), tablet (768px), desktop (1024px+)
+- **Verifiers:**
+  - Figma file contains frames: "DS — ErrorBoundary", "DS — Toast", etc. (7 components)
+  - Each component has ≥3 states documented
+  - Contrast check pass via Figma plugin (Stark/A11y)
+- **Scope/Files:** `figma/liquilab-design-system.fig` (Components section)
+- **Env:** DESIGN → LOCAL (implementation)
+- **GECOVERED:** ❌ (nieuw)
+
+**SP1-T39:** OG & Social Previews  
+- **Owner:** Designer + Marketing  
+- **Model:** CLAUDE (Firefly brief) + AUTO (OG meta implementation)  
+- **DoD:**
+  - Firefly brief: 10 OG variants (1200×630px) — Home, Dashboard, RangeBand, Pricing, FAQ, Pool Detail, Account, Legal, Status, 404
+  - Assets exported: `/public/media/brand/og-*.png` (2x Retina @ 2400×1260, optimized → 1200×630)
+  - Automatic OG meta: Next.js Head component per route with `og:title`, `og:description`, `og:image`, `og:type`, `twitter:card`
+  - Fallback: default OG image if route-specific missing
+- **Verifiers:**
+  - `npm run verify:og` → checks all public routes have OG tags + assets exist
+  - `test -f public/media/brand/og-home.png` (× 10 variants)
+  - Social preview test: Slack/Discord/Twitter card renders correctly
+  - Lighthouse SEO score ≥95
+- **Scope/Files:** `public/media/brand/og-*.png`, `pages/_document.tsx`, `components/SEO/OGTags.tsx`, `scripts/verify-og.mjs`
+- **Env:** LOCAL → STAGING → PROD
+- **GECOVERED:** ❌ (nieuw)
+
+**SP1-T40:** Typografie & Numerals enforce  
+- **Owner:** FE  
+- **Model:** CODEX (global CSS + refactor)  
+- **DoD:**
+  - Quicksand (600/700) applied to all headers (h1-h6) via global CSS
+  - Inter (400/500) applied to body, tables, forms
+  - `font-variant-numeric: tabular-nums` enforced on all numeric values via CSS class `.numeric`
+  - Refactor inline styles → CSS classes: `.heading-xl`, `.heading-lg`, `.body`, `.label`, `.numeric`
+  - SSoT currency helpers: `formatUSD()`, `formatEUR()`, `formatNumber()`, `formatPercent()` in `src/lib/format/currency.ts`
+- **Verifiers:**
+  - `npm run verify:typography` → checks all h1-h6 use Quicksand, all numeric values use `.numeric` class
+  - Visual regression: pricing table, pool table, dashboard KPIs (layout stable)
+  - `grep -r "font-family: 'Quicksand'" src/` → 0 matches (all via CSS vars)
+- **Scope/Files:** `src/styles/globals.css`, `src/lib/format/currency.ts`, `components/**/*.tsx` (refactor inline font styles)
+- **Env:** LOCAL → STAGING → PROD
+- **GECOVERED:** ❌ (nieuw)
+
+**SP1-MKT01:** Hero visuals (Home/Pricing/RangeBand)  
+- **Owner:** Designer + Marketing  
+- **Model:** CLAUDE (asset specs) + COMPOSER 1 (visual polish)  
+- **DoD:**
+  - Wave hero background: crisp SVG/PNG in bottom 50% viewport fold
+  - Assets: `/public/media/brand/hero-wave.svg`, `/public/media/brand/hero-wave@2x.png` (Retina)
+  - CSS: fixed position, seamless gradient from `--bg-canvas` (top 50%) to wave (bottom 50%)
+  - Device pixel ratio awareness: `image-rendering: -webkit-optimize-contrast` for crisp rendering
+  - Hero variants: Home (default), Pricing (calculator focus), RangeBand (interactive demo)
+- **Verifiers:**
+  - `test -f public/media/brand/hero-wave.svg && test -f public/media/brand/hero-wave@2x.png`
+  - Visual QA: wave appears crisp on mobile/tablet/desktop/Retina
+  - Lighthouse: no layout shift on hero load (CLS < 0.1)
+  - `curl / | grep -q "hero-wave"` → background renders in HTML
+- **Scope/Files:** `public/media/brand/hero-wave.*`, `src/styles/hero.css`, `components/Hero.tsx`
+- **Env:** LOCAL → STAGING → PROD
+- **GECOVERED:** ❌ (nieuw)
+
+#### Sprint 3 (SP3) — Billing & Compliance
+
+**SP3-B02:** EUR-label + 24h FX cache (reeds gespecificeerd, aanvulling details)  
+- **Owner:** FE + Billing  
+- **Model:** CODEX (FX API integration) + AUTO (UI implementation)  
+- **DoD:**
+  - UI: "Charged in EUR (≈ €XX.XX)" label below USD pricing on `/pricing`
+  - FX API: `/api/billing/fx-rate` returns EUR/USD rate via ECB or similar (TTL 24h)
+  - Cache: Redis-backed or in-memory with 24h expiration
+  - Fallback: if FX API unavailable, use last cached rate + stale indicator "* Rate from [date]"
+  - Typography: Inter 400, 14px, `--text-med` opacity (0.6)
+- **Verifiers:**
+  - `curl /api/billing/fx-rate | jq '.rate'` → returns numeric EUR/USD rate
+  - Cache headers: `Cache-Control: max-age=86400` (24h)
+  - `npm run verify:pricing` → checks EUR label presence on `/pricing`
+  - Visual test: EUR label visible below USD pricing
+- **Scope/Files:** `pages/api/billing/fx-rate.ts`, `components/Pricing/Calculator.tsx`, `src/lib/format/currency.ts`
+- **Env:** LOCAL (mock rate) → STAGING (ECB API) → PROD
+- **GECOVERED:** ❌ (nieuw)
+
+**SP3-B03:** Trial countdown badge (reeds gespecificeerd, aanvulling details)  
+- **Owner:** FE + Billing  
+- **Model:** AUTO (UI + timer logic)  
+- **DoD:**
+  - Badge format: "D-n" (e.g., "D-7" for 7 days remaining)
+  - Placement: top-right corner of pricing card for users with active trial (`status: 'trialing'`)
+  - Colors: Signal Aqua (#1BE8D2) background, white text, 600 font weight
+  - Timer logic: auto-updates daily (no live countdown); disappears on trial end
+  - Data source: `/api/entitlements?wallet=0x...` returns `{ status: 'trialing', trialEndsAt: ISO8601 }`
+- **Verifiers:**
+  - E2E test: create trial subscription fixture → badge shows "D-14" → advance 7 days → badge shows "D-7"
+  - Visual test: badge appears only for trialing users
+  - `curl /api/entitlements?wallet=0xTRIAL | jq '.data.status'` → `"trialing"`
+- **Scope/Files:** `components/Pricing/TrialBadge.tsx`, `pages/api/entitlements.ts`
+- **Env:** LOCAL (mock trial) → STAGING (Stripe TEST) → PROD
+- **GECOVERED:** ❌ (nieuw)
+
+#### Sprint 4 (SP4) — Observability & Compliance
+
+**SP4-B04:** Sentry front/back (reeds gespecificeerd, aanvulling details)  
+- **Owner:** Ops + FE  
+- **Model:** CODEX (Sentry integration) + COMPOSER 1 (error UI)  
+- **DoD:**
+  - Sentry SDK: `@sentry/nextjs` installed + configured
+  - Frontend: error boundary catches React errors → logs to Sentry + shows fallback UI
+  - Backend: API errors (500, unhandled exceptions) → logs to Sentry with request context (wallet, route, method)
+  - Source maps: uploaded to Sentry for stack trace resolution
+  - Error UI: `ErrorBoundary` component shows "Something went wrong" + Reload button + Sentry event ID (for support)
+  - Test route: `/api/sentry-test` throws intentional error → logs to Sentry
+- **Verifiers:**
+  - `npm run verify:sentry` → test error logged to Sentry dashboard
+  - Frontend: navigate to `/sentry-test-crash` → ErrorBoundary renders + Sentry event visible
+  - Backend: `curl /api/sentry-test` → 500 + Sentry event visible
+  - Sentry dashboard: events appear with source maps (readable stack traces)
+- **Scope/Files:** `sentry.client.config.ts`, `sentry.server.config.ts`, `components/ErrorBoundary.tsx`, `pages/api/sentry-test.ts`
+- **Env:** LOCAL (disabled) → STAGING (Sentry TEST project) → PROD (Sentry PROD project)
+- **GECOVERED:** ❌ (nieuw)
+
+**SP4-L01:** Legal pages + CookieBanner (reeds gespecificeerd, aanvulling details)  
+- **Owner:** Legal + FE  
+- **Model:** CLAUDE (legal content) + AUTO (UI implementation)  
+- **DoD:**
+  - Routes: `/legal/privacy`, `/legal/terms`, `/legal/cookies` (SSR, SEO meta, last updated date)
+  - Content: GDPR-compliant Privacy Policy, Terms of Service, Cookie Policy (juridisch advies indien mogelijk)
+  - Template: unified layout (Quicksand 600 headers, Inter 400 body, max-width 800px, TOC + Accordion)
+  - CookieBanner: fixed bottom, z-index 1000, ARIA dialog, focus trap, Esc dismiss
+  - Consent: `localStorage.ll_cookies_accepted` (`'true'|'false'`)
+  - First visit logic: show banner after 2s delay (allow page to settle)
+- **Verifiers:**
+  - `curl -I /legal/privacy | grep "200 OK"` (× 3 routes)
+  - Banner appears on first visit (clear localStorage before test)
+  - Keyboard nav: Tab → Accept/Reject buttons → Enter to confirm → Esc to dismiss (defaults to Reject)
+  - `npm run verify:a11y` → CookieBanner passes Axe audit (≥95 score)
+  - Footer links: Privacy, Terms, Cookies (all routes accessible)
+- **Scope/Files:** `pages/legal/privacy.tsx`, `pages/legal/terms.tsx`, `pages/legal/cookies.tsx`, `components/CookieBanner.tsx`
+- **Env:** LOCAL → STAGING → PROD (pre-launch blocker)
+- **GECOVERED:** ❌ (nieuw)
+
+**SP4-B05:** Uptime monitor /api/health (reeds gespecificeerd, aanvulling details)  
+- **Owner:** Ops  
+- **Model:** CODEX (monitoring setup)  
+- **DoD:**
+  - External monitor: UptimeRobot, Pingdom, of Railway built-in monitor
+  - Endpoint: `/api/health` returns `{ status: "ok" }` with 200 status (no DB/RPC calls)
+  - Frequency: check every 5 minutes
+  - Alerts: Slack/email notification on downtime (≥2 consecutive failures)
+  - Status page: optional public status page (status.liquilab.io) shows uptime history
+- **Verifiers:**
+  - `curl https://app.liquilab.io/api/health | jq '.status'` → `"ok"`
+  - Monitor dashboard: uptime ≥99.9% (3 months rolling)
+  - Downtime test: stop Railway service → alert received within 10 minutes
+- **Scope/Files:** `pages/api/health.ts` (already exists), external monitor config
+- **Env:** STAGING → PROD
+- **GECOVERED:** ✅ (endpoint exists, monitor setup nieuw)
+
 <!-- DELTA 2025-11-16 END -->
 
 ---
@@ -2194,6 +2380,70 @@ GET /api/analytics/leaderboard?metric=tvl|fees|apr&period=7d|30d&limit=100
 - P1 blokkeert P3 (tokens eerst, dan hero styling)
 - P5 blokkeert launch (non-negotiable)
 - P2+P4 parallel executable
+
+---
+
+**ADVIES — Implementatie Nieuwe SP-Taken (Delta 2025-11-16 Part 3):**
+
+**Sprint 1 Priority (SP1-T37..T40 + SP1-MKT01):**
+1. Start met **SP1-T37 (Figma Foundations)** — dit blokkeert alle andere design/UI work
+2. Parallel: **SP1-T38 (DS Components visual spec)** — Designer kan direct starten
+3. Wacht op tokens → dan **SP1-T40 (Typografie enforce)** — CODEX refactor across codebase
+4. Parallel: **SP1-T39 (OG assets)** + **SP1-MKT01 (Hero visuals)** — Designer/Marketing
+
+**Sprint 3 Priority (SP3-B02..B03):**
+- **SP3-B02 (EUR label)** depends on SP1-T40 (currency helpers in `src/lib/format/currency.ts`)
+- **SP3-B03 (Trial badge)** parallel to B02, independent
+
+**Sprint 4 Priority (SP4-B04..B05 + SP4-L01):**
+- **SP4-B04 (Sentry)** en **SP4-B05 (Uptime)** parallel, Ops can start immediately
+- **SP4-L01 (Legal pages)** BLOKKEERT LAUNCH — start juridisch advies zo vroeg mogelijk
+
+**Model Assignment Rationale:**
+- **CODEX:** Token export scripts, FX API, Sentry config, verify scripts (precise, deterministic)
+- **CLAUDE:** Figma structure, legal content, OG meta specs, asset briefs (creative, spec-heavy)
+- **COMPOSER 1:** Figma frames polish, error UI refinement, hero visual polish (visual iteration)
+- **AUTO:** UI implementation (trial badge, EUR label), combines CODEX logic + CLAUDE polish
+
+**Risk Mitigation:**
+- SP1-T37 has 0 dependencies → start ASAP (critical path)
+- SP4-L01 juridisch advies → external blocker, start intake immediately
+- SP1-T39 OG assets → 10 variants = batch work, consider phased delivery (MVP 5 routes first)
+
+**Time Estimate (cumulative):**
+- SP1 tasks: 4-5 dagen (Designer 2d + FE 3d, parallel where possible)
+- SP3 tasks: 1-2 dagen (FE, depends on SP1-T40)
+- SP4 tasks: 3-4 dagen (Ops 2d parallel + Legal content 2d + FE 1d)
+- **Total: ~1.5 weeks** for all new sprint tasks (assumes parallel work + no juridisch advies delay)
+
+**Verify Suite Integration:**
+- New scripts: `npm run tokens:build`, `npm run verify:typography`, `npm run verify:sentry`
+- Existing scripts extended: `npm run verify:og` (add 10 routes), `npm run verify:a11y` (add CookieBanner)
+- CI integration: all verify scripts run pre-deploy (fail-hard on STAGING/PROD)
+
+**Dependencies Chain:**
+```
+SP1-T37 (tokens) 
+  → SP1-T40 (typography) 
+    → SP3-B02 (EUR label)
+    → SP1-MKT01 (hero CSS uses tokens)
+
+SP1-T38 (DS visual spec) 
+  → SP1-T30..T36 (component implementation, already specified)
+  → SP4-L01 (CookieBanner implementation)
+
+SP1-T39 (OG assets) 
+  → routes SEO (parallel, no blocker)
+
+SP4-B04 (Sentry) + SP4-B05 (Uptime) 
+  → independent, can start immediately
+```
+
+**Next Action:**
+1. Assign SP1-T37 to Designer + FE lead (kick-off meeting)
+2. Request juridisch advies for SP4-L01 (Legal team intake)
+3. Create Figma file structure (SP1-T38 prep work)
+4. Setup Sentry projects (TEST + PROD) for SP4-B04
 
 <!-- DELTA 2025-11-16 END -->
 
