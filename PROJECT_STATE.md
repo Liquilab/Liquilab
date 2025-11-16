@@ -2239,10 +2239,192 @@ if (!ssrHtml.includes('/media/tokens/')) {
 
 ---
 
+<!-- DELTA 2025-11-16 START -->
+
+### D.12 Verify Suite Extensions — Brand & Typography
+
+#### verify:brand — Brand System Compliance
+
+**Purpose:** Validate brand system consistency (fonts, colors, numerics)
+
+**Script:** `scripts/verify-brand/check-brand.mjs`
+
+```javascript
+// Check 1: Typography tokens present
+const tokensCSS = readFileSync('src/styles/tokens.css', 'utf-8');
+const requiredTokens = ['--font-header', '--font-body', '--num-style-tabular'];
+requiredTokens.forEach(token => {
+  if (!tokensCSS.includes(token)) {
+    console.error(`Missing token: ${token}`);
+    process.exit(1);
+  }
+});
+
+// Check 2: Headers use Quicksand
+const components = glob.sync('components/**/*.tsx');
+components.forEach(file => {
+  const content = readFileSync(file, 'utf-8');
+  // Warn if inline font-family (should use CSS var)
+  if (content.match(/font-family:\s*['"]Quicksand['"]/)) {
+    console.warn(`${file}: Use --font-header instead of inline Quicksand`);
+  }
+});
+
+// Check 3: Numeric values use .numeric class
+const numericPattern = /\{.*?\d+\.?\d*.*?\}/g;  // React numeric values
+components.forEach(file => {
+  const content = readFileSync(file, 'utf-8');
+  const matches = content.match(numericPattern);
+  if (matches && !content.includes('className="numeric"')) {
+    console.warn(`${file}: Consider .numeric class for tabular-nums`);
+  }
+});
+```
+
+**DoD:**
+- Validates `--font-header`, `--font-body`, `--num-style-tabular` in tokens.css
+- Warns on inline font-family (should use CSS vars)
+- Checks numeric values use `.numeric` class for tabular-nums
+- Verifies brand colors (`--brand-primary`, `--brand-accent`, `--bg-canvas`) present
+
+**Verifier:**
+```bash
+npm run verify:brand  # Exit 0 if compliant, warnings logged
+```
+
+#### verify:typography — Tabular Numerals Enforcement
+
+**Purpose:** Enforce tabular-nums on all KPI/pricing/table numerics
+
+**Script:** `scripts/verify-typography/check-numerics.mjs`
+
+```javascript
+// Find all numeric displays in components
+const components = glob.sync('components/**/*.tsx');
+const violations = [];
+
+components.forEach(file => {
+  const content = readFileSync(file, 'utf-8');
+  
+  // Patterns: TVL, APR, fees, prices
+  const numericPatterns = [
+    /tvl|fees|apr|price|usd|eur|count/i
+  ];
+  
+  numericPatterns.forEach(pattern => {
+    if (content.match(pattern) && !content.includes('.numeric')) {
+      violations.push(`${file}: Numeric value without .numeric class`);
+    }
+  });
+});
+
+if (violations.length > 0) {
+  console.warn('Tabular-nums violations:', violations);
+  // Soft-fail locally, hard-fail in CI if > 10 violations
+  if (process.env.CI && violations.length > 10) process.exit(1);
+}
+```
+
+**DoD:**
+- Scans components for numeric displays (TVL, APR, fees, prices)
+- Validates `.numeric` class presence
+- Soft-fail local (warnings), hard-fail CI (>10 violations)
+
+**Verifier:**
+```bash
+npm run verify:typography  # Logs violations, exit 0 locally
+CI=true npm run verify:typography  # Hard-fail in CI
+```
+
+#### Integration in Package.json
+
+**Updated scripts:**
+```json
+{
+  "scripts": {
+    "tokens:build": "style-dictionary build --config config/tokens.config.js",
+    "verify": "npm run verify:env && npm run verify:brand && npm run verify:typography && npm run verify:pricing && npm run verify:billing && npm run verify:mailgun && npm run verify:mv && npm run verify:a11y && npm run verify:og && npm run verify:icons",
+    "verify:brand": "node scripts/verify-brand/check-brand.mjs",
+    "verify:typography": "node scripts/verify-typography/check-numerics.mjs"
+  }
+}
+```
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+<!-- DELTA 2025-11-16 START -->
+
+### D.13 Staging Environment & Merge Gating (SP1)
+
+#### Staging Requirements (Pre-SP1 Merge)
+
+**Infrastructure:**
+- **Railway Project:** Separate `liquilab-staging` project (isolated from prod)
+- **Database:** Dedicated Postgres instance (separate connection pool)
+- **Environment Variables:**
+  - `NODE_ENV=staging`
+  - `NEXT_PUBLIC_APP_URL=https://staging.liquilab.io`
+  - `DATABASE_URL=<staging-db-url>`
+  - `STRIPE_SECRET_KEY=<test-key>`  (Stripe TEST mode)
+  - `MAILGUN_MODE=degrade`  (no actual email delivery)
+  - `SENTRY_DSN=<staging-project-dsn>`
+  - `SENTRY_ENVIRONMENT=staging`
+
+**Merge Gate (SP1 PRs):**
+
+Before any SP1 PR can merge to `main`, the following MUST pass:
+
+1. **STAGING Deploy Green:**
+   - Railway deploy succeeds
+   - `/api/health` returns 200
+   - Homepage renders without errors
+
+2. **Sentry Active:**
+   - Test error logged to Sentry staging project
+   - Event appears in Sentry dashboard with readable stack traces
+   - Source maps uploaded correctly
+   - **Verifier:** `curl /api/sentry-test` → 500 + Sentry event ID returned
+
+3. **Uptime Monitor Active:**
+   - External monitor (UptimeRobot/Pingdom) configured for staging
+   - Checks `/api/health` every 5 minutes
+   - Alert channel configured (Slack/email)
+   - **Verifier:** Simulate downtime → alert received within 10 minutes
+
+4. **Verify Suite Pass:**
+   - `npm run verify` exits 0 on staging
+   - All checks green: env, brand, typography, pricing, billing, mailgun, mv, a11y, og, icons
+   - **Verifier:** CI workflow logs show "✓ All verifications passed"
+
+**DoD (Staging Setup):**
+- [ ] Railway staging project created + deployed
+- [ ] Staging database provisioned + seeded with demo data
+- [ ] Stripe TEST keys configured + test payment succeeds
+- [ ] Mailgun degrade mode active (no emails sent, logs only)
+- [ ] Sentry staging project created + test error logged
+- [ ] Uptime monitor configured + downtime alert tested
+- [ ] CI workflow updated: deploy to staging on PR open, run verify suite
+
+**Enforcement:**
+- GitHub branch protection: require "Staging Deploy" status check
+- PR template includes checklist: "☐ Staging verify suite passed"
+- Merge blocked if any check fails
+
+**Rationale:**
+Prevents broken code from reaching production. Catches integration issues early (DB, Stripe, Sentry, email). Ensures SP1 brand/design changes don't break existing functionality.
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
 ## Advies
 
-**Next Step:** Implement `src/lib/format/currency.ts` met SSoT currency/number helpers (formatUSD, formatEUR, formatNumber, formatPercent) en refactor bestaande inline formattering naar deze centrale helpers. Dit zorgt voor consistente numerieke weergave across dashboard, pricing, en analytics. Verifieer daarna met visual regression test op demo pools table (controleer: "0.00" voor zero fees, "—" voor null APR, tabular-nums in numerieke kolommen).
+**Next Step (SP1 Pre-merge):** Setup staging environment (Railway + DB + Sentry + Uptime) en configureer merge gate voor SP1 PRs. Implement SP1-T37 (Figma Foundations & Tokens) immediately na staging activering. Validate tokens export via `npm run tokens:build` + `npm run verify:brand` before proceeding to wave-hero (SP1-T40) implementation.
 
-**Rationale:** Centralized formatting prevents drift in UX (bv. inconsistente null-handling) en maakt toekomstige EUR/USD dual-display makkelijker (één plek aanpassen). Tabular numerals zorgen voor stable layout in tables (belangrijkst voor pricing + portfolio overview).
+**Rationale:** Staging gate prevents broken SP1 brand changes from reaching production. Tokens export (Quicksand/Inter/tabular-nums) must complete first as dependency for all subsequent design/UI work (T38/T40/T39). Tabular numerals via `.numeric` class enforced by `verify:typography` ensures stable layout in tables/dashboards.
+
+**Post-SP1:** Implement `src/lib/format/currency.ts` met SSoT currency/number helpers (formatUSD, formatEUR, formatNumber, formatPercent) en refactor bestaande inline formattering naar deze centrale helpers. Verifieer met visual regression test op demo pools table (controleer: "0.00" voor zero fees, "—" voor null APR, tabular-nums in numerieke kolommen).
 
 ---
