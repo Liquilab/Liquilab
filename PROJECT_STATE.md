@@ -95,19 +95,23 @@
 
 ---
 
-## 4. Environment Variables
-- **RPC:**  
-  - `FLARE_RPC_URL` (primary; e.g. `https://rpc.ankr.com/flare/<apiKey>`).  
-  - `FLARE_RPC_URLS` (comma-separated failover list, optional).  
-- **DEX contracts:**  
-  - `ENOSYS_V3_FACTORY` / `SPARKDEX_V3_FACTORY`.  
-  - `ENOSYS_NFPM` / `SPARKDEX_NFPM` (NonfungiblePositionManager addresses).  
-- **Database:** `DATABASE_URL` (Postgres; Railway / local).  
-- **Indexer tuning (optional):**  
-  - `INDEXER_CONCURRENCY`, `INDEXER_CHUNK`, `INDEXER_RPS` override defaults.  
-  - `POOLS_ALLOWLIST` (path override), `INDEXER_START_BLOCK` (global fallback).  
-- **Hosting:** Node / Next.js listens on `$PORT` per Railway requirement.  
-- **Local assumptions:** macOS Sonoma/Sequoia + zsh, data directory at project root, external RPC accessible.
+## Changelog — 2025-11-16
+- Updated env matrix + endpoint contracts + security baseline (PROJECT_STATE.md, docs/ENVIRONMENT.md).
+- Added middleware CSP/CORS/rate-limit, health/details, entitlements, GDPR stub, consent banner, and legal pages.
+- Added MV freshness + SSR verify scripts and expanded roadmap (Roadmap_Features.md); wired verify chain.
+
+## 4. Environments & Env Keys (Web = Flare-only)
+- **Matrix (Local → Staging → Production):**  
+  - **Local:** `FLARE_RPC_URL` (public ok), `DATABASE_URL` local, `DB_DISABLE=false`, `HEALTH_DB_REQUIRED=false`, `NEXT_PUBLIC_APP_URL=http://localhost:3000`, Stripe/Mailgun optional.  
+  - **Staging (Railway Web):** Flare RPC only (`FLARE_RPC_URL`), `DB_DISABLE=false`, `HEALTH_DB_REQUIRED=false`, `CRON_SECRET` set, Stripe test keys (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`), Mailgun sandbox, feature flags via `FEATURE_FLAGS`, `DEGRADED_MODE` optional.  
+  - **Production (Railway Web):** Flare RPC only; `HEALTH_DB_REQUIRED=false` to avoid false reds when DB is intentionally paused for web; `CRON_SECRET` required; `DEGRADED_MODE=0`; HSTS on; rate-limit + CORS enforced.  
+  - **Worker / Indexer (Railway Worker):** May use `ANKR_ADV_API_URL`/`ANKR_ADV_API_KEY` in addition to `FLARE_RPC_URL`; `DATABASE_URL` required; `HEALTH_DB_REQUIRED=true`.  
+- **Server env (core):** `FLARE_RPC_URL`, `FLARE_WS_URL`, `FLARE_RPC_URLS`, `ENOSYS_V3_FACTORY`, `SPARKDEX_V3_FACTORY`, `ENOSYS_NFPM`, `SPARKDEX_NFPM`, `DATABASE_URL`, `RAW_DB`, `DB_DISABLE` (web may set `true`), `HEALTH_DB_REQUIRED` (web=`false`), `CRON_SECRET`, `FEATURE_FLAGS`, `DEGRADED_MODE`, `WALLET_REQUIRED`.  
+- **Billing (EUR naming):** `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PREMIUM_EUR`, `STRIPE_PRICE_PRO_EUR`, `STRIPE_PRICE_ADDON5_EUR`, `STRIPE_PRICE_ALERTS5_EUR`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_LL_STRIPE_PRICE_PREMIUM_BASE_5`, `NEXT_PUBLIC_LL_STRIPE_PRICE_POOL_SLOT`, `NEXT_PUBLIC_LL_STRIPE_PRICE_ALERTS_PACK_5`.  
+- **Mail:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_FROM`, `MAILGUN_MODE` (sandbox/live).  
+- **Client (`NEXT_PUBLIC_*`):** `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_FLARE_RPC_URL`, `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_CHAIN_ID`, `NEXT_PUBLIC_FEATURE_FLAGS`, `NEXT_PUBLIC_LL_STRIPE_PRICE_*`, `NEXT_PUBLIC_ENABLE_BLAZESWAP`, `NEXT_PUBLIC_KOEN_WALLET`.  
+- **Hosting:** Node / Next.js listens on `$PORT` (Railway). **Web routes stay Flare-only**; ANKR endpoints blocked on web.  
+- **Rotation:** Rotate `CRON_SECRET`, Stripe keys, Mailgun keys per release; staging keys refreshed before promoting to prod.
 
 ---
 
@@ -307,6 +311,46 @@ type AlertRecord = {
 **Status:** Nice to have (post-MVP).
 
 <!-- DELTA 2025-11-16 END -->
+
+### 7.2 Endpoint Manifest (v1)
+- `GET /api/health` → `{ ok, ts }` (log-only).  
+- `GET /api/health/details` → `{ ok|degrade, ts, components:{db,analytics,billing,mail,indexer}, notes:{lastRefreshTs,degradeCount} }` (no DB reads when `DB_DISABLE=true`).  
+- `GET /api/prices/current` → `{ ok|degrade, ts, prices, ttl=60s }` (Flare-only; legacy `/api/prices/ankr*` = 410).  
+- `GET /api/analytics/summary` → `{ ok|degrade, analytics:{indexedUpToTs,...} }` (MV-driven; accepts `degrade:true`).  
+- `GET /api/analytics/pool/[address]` → `{ ok|degrade, pool, indexedUpToTs }` (includes RangeBand fields).  
+- `GET|POST /api/entitlements` → `{ ok|degrade, plan:'VISITOR'|'PREMIUM'|'PRO', status, maxPools, features, indexedUpToTs }` (server authoritative; VISITOR fallback on degrade).  
+- `POST /api/billing/create-checkout-session` → `{ ok|degrade, url? }` (requires `walletAddress`, plan, Stripe EUR IDs).  
+- `POST /api/billing/portal` → `{ ok|degrade, url? }` (requires wallet; uses `NEXT_PUBLIC_APP_URL`/origin).  
+- `POST /api/webhooks/stripe` → `{ ok|degrade }` (Stripe signature + DB on).  
+- `POST /api/mail/test` → `{ ok|degrade }` (mode-aware; Mailgun sandbox allowed).  
+- `POST /api/user/delete` → `{ ok:true, degrade:true, code:'GDPR_STUB', wallet, email }` (MVP runbook stub, audit via logs).
+
+### 7.3 Design System & Pages (UI-canon)
+- **Table/Detail:** Pool table columns = pair, TVL (tabular-nums), fees24h, APR, RangeBand status, owner concentration. Pool detail sections: hero, liquidity band, fee accrual, owner stats, whale watch, alerts CTA.  
+- **Pages:** `/`, `/summary`, `/pool/[address]`, `/pricing`, `/rangeband`, `/account`, `/status`, `/legal/{terms,privacy,cookies}`.  
+- **Consent:** `CookieBanner` is non-blocking; renders once via `_app.tsx`; uses primary “Electric Blue” + Aqua accent; backgrounds `#0B1530`. Token icons are local SVG (`/media/tokens/*.svg`), fallback `/media/icons/token-default.svg`.  
+- **Gating:** No auto-connect; browser-only flows wrapped in `useClientReady()`. Legal pages + consent available pre-auth.  
+- **RangeBand:** labels Aggressive/Balanced/Conservative; tokens rendered via SSR `<img>` with tabular numerals.
+
+### 7.4 DoD & Verify Matrix
+- **Policy:** Local = log-only for billing/mailgun; Staging = fail-hard on verify suite; Prod = fail-hard + HSTS + placeholder gate unless `PLACEHOLDER_OFF=1`. `HEALTH_DB_REQUIRED=false` keeps web green when DB paused.  
+- **Verify suite:** `npm run verify` = `lint:ci && scan:prices && verify:api:prices && verify:pricing && verify:icons && verify:api:analytics && verify:billing && verify:mailgun && verify:mv && verify:ssr`.  
+- **Additional verifiers:** `verify:mv` (MV freshness), `verify:ssr` (SSR HTML markers), billing/mailgun scripts remain soft-fail locally but required on staging/prod handoff.  
+- **Ops checks:** cron guarded by `CRON_SECRET`; rate-limit active on `/api/*` (60 req/min per IP, skipped on localhost); CORS restricted to localhost/staging/prod.
+
+### 7.5 Sprints (S0…S4)
+- **S0 (SSoT Δ-2025-11-16):** Env matrix + endpoint contracts + consent/legal stubs + DoD/verify matrix.  
+- **S1 (Web launch readiness):** Pricing SSoT aligned (`config/pricing` → `/api/public/pricing` → UI), entitlement gate active, SSR smoke green, degraded modes documented.  
+- **S2 (Analytics hardening):** MV freshness monitors (`verify:mv`), pool detail stability, `/status` page hydration + alerts CTA.  
+- **S3 (Billing & mail):** Stripe EUR plans live, portal flows via `/api/billing/*`, Mailgun live mode, GDPR automation follow-up.  
+- **S4 (Post-MVP nice-to-haves):** Leaderboard, reports/export, onboarding wizard, payment history UI, alerts CRUD UI.
+
+### 7.6 Security Baseline
+- **Headers:** CSP (self + Stripe JS/frames + Coingecko connect; mixed-content blocked via upgrade), `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, HSTS on production only.  
+- **CORS:** allow only localhost, staging, prod app domains (extend via `CORS_ALLOW_ORIGINS`).  
+- **Rate-limit:** token bucket 60 req/min per IP for `/api/*` (skips localhost); OPTIONS replies are fast.  
+- **Gate:** placeholder auth cookie (`ll_pass`) active in production unless `PLACEHOLDER_OFF=1`.  
+- **Secrets rotation:** rotate Stripe/Mailgun/CRON secrets per release; avoid runtime FS for config (TS modules only).
 
 ---
 
@@ -1635,5 +1679,510 @@ Standard API error codes:
 - `RANGEBAND_NO_DATA` — Insufficient data for RangeBand calculation.
 
 <!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.7 Brand System
+
+<!-- DELTA 2025-11-16 START -->
+
+#### Design Tokens (CSS Variables + Aliasing)
+
+**Colors:**
+```css
+/* Brand */
+--brand-primary: #3B82F6;        /* Electric Blue */
+--brand-accent: #1BE8D2;         /* Signal Aqua */
+--brand-navy: #0B1530;           /* LiquiLab Navy */
+
+/* Background */
+--bg-canvas: #0B1530;            /* Main background */
+--bg-surface: rgba(10, 15, 26, 0.88); /* Card background */
+--bg-elevated: rgba(15, 20, 36, 0.95);
+
+/* Text */
+--text-high: rgba(255, 255, 255, 0.95);
+--text-med: rgba(255, 255, 255, 0.70);
+--text-low: rgba(255, 255, 255, 0.50);
+
+/* Semantic */
+--success: #10B981;
+--warn: #F59E0B;
+--error: #EF4444;
+
+/* Spacing (4-pt scale) */
+--space-xs: 4px;
+--space-sm: 8px;
+--space-md: 16px;
+--space-lg: 24px;
+--space-xl: 32px;
+--space-2xl: 48px;
+
+/* Radii */
+--radius-xs: 4px;
+--radius-sm: 8px;
+--radius-md: 12px;
+--radius-lg: 16px;
+--radius-full: 9999px;
+
+/* Elevations (box-shadow) */
+--elevation-e1: 0 1px 2px rgba(0,0,0,0.1);
+--elevation-e2: 0 4px 6px rgba(0,0,0,0.1);
+--elevation-e3: 0 10px 15px rgba(0,0,0,0.1);
+--elevation-e4: 0 20px 25px rgba(0,0,0,0.15);
+--elevation-e5: 0 25px 50px rgba(0,0,0,0.25);
+
+/* Opacities */
+--opacity-low: 0.50;
+--opacity-med: 0.70;
+--opacity-high: 0.95;
+```
+
+#### Typography
+
+**Fonts:**
+- **Headers:** Quicksand (weights: 500/600/700)
+- **Body/Tables:** Inter (weights: 400/500/600)
+- **Fallback Stack:** 
+  - Quicksand: `Quicksand, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
+  - Inter: `Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
+
+**Tabular Numerals:**
+- Apply `font-variant-numeric: tabular-nums` as default for:
+  - KPIs (TVL, fees, APR)
+  - Pricing tables
+  - All numeric data tables
+- CSS utility: `.tabular-nums { font-variant-numeric: tabular-nums; }`
+
+**Scale:**
+```css
+--text-xs: 0.75rem;    /* 12px */
+--text-sm: 0.875rem;   /* 14px */
+--text-base: 1rem;     /* 16px */
+--text-lg: 1.125rem;   /* 18px */
+--text-xl: 1.25rem;    /* 20px */
+--text-2xl: 1.5rem;    /* 24px */
+--text-3xl: 1.875rem;  /* 30px */
+--text-4xl: 2.25rem;   /* 36px */
+```
+
+#### Numerics & Currency Notation
+
+**Helper Functions (SSoT):**
+
+```typescript
+// src/lib/format/currency.ts
+export function formatUSD(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
+export function formatEUR(value: number): string {
+  return new Intl.NumberFormat('nl-NL', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
+export function formatNumber(value: number): string {
+  if (value === 0) return '0.00';
+  if (value < 1000) return value.toFixed(2);
+  if (value < 1_000_000) return `${(value / 1000).toFixed(2)}K`;
+  if (value < 1_000_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  return `${(value / 1_000_000_000).toFixed(2)}B`;
+}
+
+export function formatPercent(value: number | null): string {
+  if (value === null) return '—';
+  return `${value.toFixed(2)}%`;
+}
+```
+
+**Rules:**
+- Fees: always show "0.00" when `fees === 0` (never "—")
+- Null values: display "—" (em dash)
+- Thousand separator: comma (en-US) for USD, space (nl-NL) for EUR
+
+#### Iconography
+
+**Token Icons (Local-First Strategy):**
+
+1. **Primary:** `/public/media/tokens/{SYMBOL}.svg|png|webp` (lowercase)
+2. **By-address fallback:** `/public/media/tokens/by-address/{address}.png`
+3. **Default fallback:** `/public/media/tokens/token-default.svg`
+
+**SSR Visibility:**
+- Token icons must render on SSR (use `<img>` with static paths, not dynamic imports)
+- Verify presence: `test -f public/media/tokens/token-default.svg`
+
+**Component:**
+```typescript
+// src/lib/icons/tokenIcon.tsx (existing)
+// Rules: local-first, no remote calls in runtime, unoptimized next/image
+```
+
+#### Accessibility (A11y)
+
+**WCAG AA Targets:**
+- Text contrast: ≥4.5:1 (normal), ≥3:1 (large/bold)
+- Interactive elements: ≥3:1 contrast
+- Focus indicators: visible 2px outline with `--brand-primary`
+
+**Focus Management:**
+```css
+*:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+```
+
+**Reduced Motion:**
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+**ARIA Requirements:**
+- All interactive elements: ARIA labels
+- Form inputs: associated labels + error messages
+- Modals: `role="dialog"`, `aria-modal="true"`, focus trap
+- Live regions: `aria-live="polite"` for status updates
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.8 Design System → Figma Library
+
+<!-- DELTA 2025-11-16 START -->
+
+#### Figma Structure
+
+**Libraries:**
+1. **Foundations** — Colors, typography, spacing, radii, shadows
+2. **Components** — Buttons, inputs, modals, cards, badges, RangeBand™
+3. **Patterns** — Data tables, forms, empty states, error boundaries
+4. **Page Templates** — Home, Dashboard, Pool Detail, Pricing, Account
+5. **Email** — Transactional email templates (plain text + HTML)
+
+#### Tokens Mapping (Figma → CSS)
+
+**Export Strategy:**
+
+1. **Style Dictionary:** Use Style Dictionary to export Figma tokens as JSON
+2. **Token Format:**
+```json
+{
+  "color": {
+    "brand": {
+      "primary": { "value": "#3B82F6" },
+      "accent": { "value": "#1BE8D2" }
+    }
+  },
+  "spacing": {
+    "md": { "value": "16px" }
+  }
+}
+```
+
+3. **Build Pipeline:**
+```bash
+# Generate CSS from tokens
+npm run tokens:build
+# Output: src/styles/tokens.css (imported in globals.css)
+```
+
+**Figma Plugins:**
+- **Figma Tokens:** Sync design tokens bidirectionally
+- **Design Lint:** Validate contrast, spacing, typography
+
+**Workflow:**
+1. Design in Figma → Export tokens JSON
+2. Run `tokens:build` → Generate CSS variables
+3. Import in `globals.css`
+4. Verify: `npm run verify:tokens` (check CSS var coverage)
+
+#### Component Inventory
+
+**Status:**
+- ✅ Header, Footer, WalletConnect, PoolCard, RangeBand™, TokenIcon
+- ❌ ErrorBoundary, Toast, Modal, Form.*, Accordion, CookieBanner, DataState
+
+**Figma Deliverables (Required):**
+- Component specs (props, states, variants)
+- Interaction states (hover, active, disabled, focus)
+- Responsive breakpoints (mobile, tablet, desktop)
+- Dark mode variants (if applicable)
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.9 Hero Wave Background Specification
+
+<!-- DELTA 2025-11-16 START -->
+
+#### Hero Rendering Rules
+
+**Layout:**
+- **Wave hero:** Crisp SVG/PNG background, positioned in **bottom 50% of viewport fold**
+- **Top 50%:** Seamless gradient transition from `--bg-canvas` to wave top edge
+- **No blur:** Wave must render sharp at all resolutions
+
+**CSS Implementation:**
+```css
+.page-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    var(--bg-canvas) 0%,
+    var(--bg-canvas) 50%,
+    transparent 50%
+  );
+}
+
+.page-bg::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 50vh;
+  background: url('/media/brand/wave-bg.svg') bottom center / cover no-repeat;
+  image-rendering: -webkit-optimize-contrast; /* Crisp rendering */
+}
+```
+
+**Device Pixel Ratio Awareness:**
+- Export wave assets at 2x resolution for Retina displays
+- Use `srcset` for responsive images if needed
+
+**Verification:**
+- Visual QA: Wave appears crisp on all devices (mobile, tablet, desktop, Retina)
+- Lighthouse: No layout shift on hero load
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.10 Observability & Compliance (Visual Indicators)
+
+<!-- DELTA 2025-11-16 START -->
+
+#### Status Badges
+
+**Component: `StatusBadge`**
+
+```typescript
+type BadgeVariant = 'ok' | 'degrade' | 'stale' | 'error';
+
+type StatusBadgeProps = {
+  variant: BadgeVariant;
+  label?: string;
+  timestamp?: string; // ISO8601
+};
+```
+
+**Visual States:**
+- **OK:** Green dot + "Operational"
+- **Degrade:** Orange dot + "Degraded" + timestamp
+- **Stale:** Yellow dot + "Data may be stale" + `staleTs`
+- **Error:** Red dot + "Error" + error code
+
+**CSS:**
+```css
+.badge-ok { background: var(--success); }
+.badge-degrade { background: var(--warn); }
+.badge-stale { background: var(--warn); opacity: 0.8; }
+.badge-error { background: var(--error); }
+```
+
+#### Stale Indicator Pattern
+
+**Rule:** Show stale badge when `Date.now() - staleTs > 3600_000` (1 hour)
+
+**API Response (Degrade Mode):**
+```typescript
+type ApiEnvelope<T> = {
+  ok: boolean;
+  degrade?: boolean;
+  code?: string;
+  message?: string;
+  ts: number;          // Server timestamp
+  staleTs?: number;    // Last fresh data timestamp
+  data?: T;
+};
+```
+
+**UI Implementation:**
+```typescript
+// src/components/status/StaleIndicator.tsx
+export function StaleIndicator({ staleTs }: { staleTs?: number }) {
+  if (!staleTs) return null;
+  const ageMs = Date.now() - staleTs;
+  if (ageMs < 3600_000) return null;
+  
+  return (
+    <StatusBadge 
+      variant="stale" 
+      label={`Data from ${formatRelativeTime(staleTs)}`}
+      timestamp={new Date(staleTs).toISOString()}
+    />
+  );
+}
+```
+
+**Placement:**
+- Dashboard header (if portfolio data stale)
+- Pool detail page (if analytics stale)
+- Analytics summary (if MV refresh lag > 1h)
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.11 Verify Suite Extensions
+
+<!-- DELTA 2025-11-16 START -->
+
+#### New Verification Checks
+
+**1. `verify:a11y` — Accessibility Audit**
+
+```javascript
+// scripts/verify-a11y/axe-check.mjs
+import { AxePuppeteer } from '@axe-core/puppeteer';
+import puppeteer from 'puppeteer';
+
+const routes = ['/', '/pricing', '/rangeband', '/faq'];
+const browser = await puppeteer.launch();
+
+for (const route of routes) {
+  const page = await browser.newPage();
+  await page.goto(`http://localhost:3000${route}`);
+  const results = await new AxePuppeteer(page).analyze();
+  
+  // Soft-fail local (warnings), hard-fail staging (errors)
+  const severity = process.env.CI ? 'error' : 'warning';
+  if (results.violations.length > 0 && severity === 'error') {
+    console.error(`A11y violations on ${route}`);
+    process.exit(1);
+  }
+}
+```
+
+**DoD:**
+- Checks WCAG AA compliance (contrast, ARIA, keyboard nav)
+- Soft-fail local (log warnings), hard-fail staging/CI
+- Integrated in `npm run verify`
+
+**2. `verify:og` — Open Graph Tags**
+
+```javascript
+// scripts/verify-og/meta-tags.mjs
+import { readFileSync } from 'fs';
+import { glob } from 'glob';
+
+const pages = glob.sync('pages/**/*.tsx');
+const requiredTags = ['og:title', 'og:description', 'og:image'];
+
+for (const page of pages) {
+  const content = readFileSync(page, 'utf-8');
+  // Check for Next.js Head component with required OG tags
+  // Exit 1 if missing on public routes
+}
+```
+
+**DoD:**
+- Validates OG tags presence on all public routes
+- Checks asset existence (`/media/brand/og-image.png`)
+- Per-route validation (title, description, image)
+
+**3. `verify:icons-path` — Token Icon Paths + SSR**
+
+```javascript
+// scripts/verify-icons/ssr-markers.mjs
+import { readFileSync } from 'fs';
+import { existsSync } from 'fs';
+
+// 1. Check required icon files exist
+const requiredIcons = ['flr', 'usd0', 'usdce', 'fxrp', 'wflr', 'token-default'];
+for (const icon of requiredIcons) {
+  const paths = [
+    `public/media/tokens/${icon}.svg`,
+    `public/media/tokens/${icon}.png`,
+    `public/media/tokens/${icon}.webp`
+  ];
+  if (!paths.some(p => existsSync(p))) {
+    console.error(`Missing icon: ${icon}`);
+    process.exit(1);
+  }
+}
+
+// 2. Check SSR output contains <img src="/media/tokens/...">
+const ssrHtml = readFileSync('.next/server/pages/index.html', 'utf-8');
+if (!ssrHtml.includes('/media/tokens/')) {
+  console.error('Token icons not SSR-visible');
+  process.exit(1);
+}
+```
+
+**DoD:**
+- Validates all required token icons exist locally
+- Checks SSR HTML output contains token icon paths
+- Fails if default fallback missing
+
+#### Integration in Verify Pipeline
+
+**Updated `package.json`:**
+
+```json
+{
+  "scripts": {
+    "verify": "npm run verify:env && npm run verify:pricing && npm run verify:billing && npm run verify:mailgun && npm run verify:mv && npm run verify:a11y && npm run verify:og && npm run verify:icons",
+    "verify:a11y": "node scripts/verify-a11y/axe-check.mjs",
+    "verify:og": "node scripts/verify-og/meta-tags.mjs",
+    "verify:icons": "node scripts/verify-icons/ssr-markers.mjs"
+  }
+}
+```
+
+**CI Workflow:**
+```yaml
+# .github/workflows/verify.yml
+- name: Run verification suite
+  run: |
+    npm run build
+    npm run verify
+  env:
+    CI: true
+```
+
+**Fail-hard vs Log-only:**
+- **Fail-hard (block deploy):** `verify:env`, `verify:pricing`, `verify:icons`
+- **Log-only (local dev):** `verify:a11y` (soft-fail), `verify:billing` (degrade mode OK)
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+## Advies
+
+**Next Step:** Implement `src/lib/format/currency.ts` met SSoT currency/number helpers (formatUSD, formatEUR, formatNumber, formatPercent) en refactor bestaande inline formattering naar deze centrale helpers. Dit zorgt voor consistente numerieke weergave across dashboard, pricing, en analytics. Verifieer daarna met visual regression test op demo pools table (controleer: "0.00" voor zero fees, "—" voor null APR, tabular-nums in numerieke kolommen).
+
+**Rationale:** Centralized formatting prevents drift in UX (bv. inconsistente null-handling) en maakt toekomstige EUR/USD dual-display makkelijker (één plek aanpassen). Tabular numerals zorgen voor stable layout in tables (belangrijkst voor pricing + portfolio overview).
 
 ---
