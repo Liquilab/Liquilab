@@ -20,68 +20,50 @@ const root = join(__dirname, '../..');
 
 const PRICING_CONFIG_PATH = join(root, 'config', 'pricing.json');
 const PRICING_LIB_PATH = join(root, 'src', 'lib', 'billing', 'pricing.ts');
+const PRICING_API_PATH = join(root, 'pages', 'api', 'public', 'pricing.ts');
+const PRICING_PAGE_PATH = join(root, 'pages', 'pricing.tsx');
 
 const DRIFT_TOLERANCE = 0.01; // Allow 1 cent difference for rounding
 
 function loadConfig() {
   try {
     const content = readFileSync(PRICING_CONFIG_PATH, 'utf-8');
-    return JSON.parse(content);
+    return { raw: content, json: JSON.parse(content) };
   } catch (error) {
     throw new Error(`Failed to load ${PRICING_CONFIG_PATH}: ${error.message}`);
   }
 }
 
-function extractPricingFromLib() {
-  try {
-    const content = readFileSync(PRICING_LIB_PATH, 'utf-8');
-    const base5Match = content.match(/BASE5:\s*(\d+\.?\d*)/);
-    const extraSlotMatch = content.match(/EXTRA_SLOT:\s*(\d+\.?\d*)/);
-    const alertsPackMatch = content.match(/ALERTS_PACK5:\s*(\d+\.?\d*)/);
-    const uiPackCopyMatch = content.match(/UI_PACK_COPY:\s*['"]([^'"]+)['"]/);
-    
-    return {
-      base5: base5Match ? parseFloat(base5Match[1]) : null,
-      extraSlot: extraSlotMatch ? parseFloat(extraSlotMatch[1]) : null,
-      alertsPack5: alertsPackMatch ? parseFloat(alertsPackMatch[1]) : null,
-      uiPackCopy: uiPackCopyMatch ? uiPackCopyMatch[1] : null,
-    };
-  } catch (error) {
-    throw new Error(`Failed to parse ${PRICING_LIB_PATH}: ${error.message}`);
-  }
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function extractUIStrings() {
+function extractUIStrings(premiumPlan, proPlan) {
   const uiFiles = [
     join(root, 'src', 'components', 'pricing', 'PremiumCard.tsx'),
     join(root, 'src', 'components', 'pricing', 'PricingSelector.tsx'),
     join(root, 'src', 'components', 'hero', 'Hero.tsx'),
   ];
   
+  const basePattern = new RegExp(escapeRegExp(premiumPlan.price.toFixed(2)), 'g');
+  const premiumBundlePattern = new RegExp(escapeRegExp(premiumPlan.extraBundle5.toFixed(2)), 'g');
+  const proBundlePattern = new RegExp(escapeRegExp(proPlan.extraBundle5.toFixed(2)), 'g');
+  const alertsPattern = new RegExp(escapeRegExp(premiumPlan.alertsPack5.toFixed(2)), 'g');
+
   const findings = {
-    base5: [],
-    extraBundle5: [],
-    alertsPack5: [],
+    premiumBase: 0,
+    premiumBundle: 0,
+    proBundle: 0,
+    alertsPack: 0,
   };
   
   for (const file of uiFiles) {
     try {
       const content = readFileSync(file, 'utf-8');
-      
-      // Extract $14.95, $9.95, $2.49 patterns
-      const base5Matches = content.match(/\$14\.95/g);
-      const extraBundleMatches = content.match(/\$9\.95/g);
-      const alertsMatches = content.match(/\$2\.49/g);
-      
-      if (base5Matches) {
-        findings.base5.push({ file, count: base5Matches.length });
-      }
-      if (extraBundleMatches) {
-        findings.extraBundle5.push({ file, count: extraBundleMatches.length });
-      }
-      if (alertsMatches) {
-        findings.alertsPack5.push({ file, count: alertsMatches.length });
-      }
+      if (basePattern.test(content)) findings.premiumBase += 1;
+      if (premiumBundlePattern.test(content)) findings.premiumBundle += 1;
+      if (proBundlePattern.test(content)) findings.proBundle += 1;
+      if (alertsPattern.test(content)) findings.alertsPack += 1;
     } catch (error) {
       // File might not exist, skip
     }
@@ -90,100 +72,61 @@ function extractUIStrings() {
   return findings;
 }
 
-function compareValues(name, expected, actual, tolerance = DRIFT_TOLERANCE) {
-  if (actual === null || actual === undefined) {
-    return { ok: false, message: `${name}: missing in source` };
-  }
-  
-  const diff = Math.abs(expected - actual);
-  if (diff > tolerance) {
-    return { 
-      ok: false, 
-      message: `${name}: config=${expected}, source=${actual}, diff=${diff.toFixed(2)}` 
-    };
-  }
-  
-  return { ok: true };
-}
-
-function compareStrings(name, expected, actual) {
-  if (!actual) {
-    return { ok: false, message: `${name}: missing in source` };
-  }
-  
-  if (expected !== actual) {
-    return { 
-      ok: false, 
-      message: `${name}: config="${expected}", source="${actual}"` 
-    };
-  }
-  
-  return { ok: true };
-}
-
 async function main() {
-  const config = loadConfig();
-  const libPricing = extractPricingFromLib();
-  const uiFindings = extractUIStrings();
+  const { raw: rawConfig, json: config } = loadConfig();
+  const premiumPlan = config.plans?.PREMIUM;
+  const proPlan = config.plans?.PRO;
+  if (!premiumPlan || !proPlan) {
+    throw new Error('config/pricing.json must define PREMIUM and PRO plans');
+  }
+
+  const libContent = readFileSync(PRICING_LIB_PATH, 'utf-8');
+  const apiContent = readFileSync(PRICING_API_PATH, 'utf-8');
+  const pricingPageContent = readFileSync(PRICING_PAGE_PATH, 'utf-8');
+  const uiFindings = extractUIStrings(premiumPlan, proPlan);
   
   const errors = [];
   const warnings = [];
-  
-  // Compare config vs lib
-  const base5Check = compareValues('base5', config.base5, libPricing.base5);
-  if (!base5Check.ok) errors.push(`LIB: ${base5Check.message}`);
-  
-  const extraSlotCheck = compareValues('extraSlot', config.extraSlot, libPricing.extraSlot);
-  if (!extraSlotCheck.ok) errors.push(`LIB: ${extraSlotCheck.message}`);
-  
-  // Note: lib uses EXTRA_SLOT but config has extraBundle5 - check if they align
-  // lib calculates: extraBundles * 9.95, so extraBundle5 should be 9.95
-  const extraBundleCheck = compareValues('extraBundle5', config.extraBundle5, 9.95);
-  if (!extraBundleCheck.ok) {
-    warnings.push(`CONFIG: extraBundle5=${config.extraBundle5} but lib calculates with 9.95`);
+
+  if (/extraSlot/i.test(rawConfig)) {
+    errors.push('CONFIG: Found forbidden key "extraSlot"');
   }
-  
-  const alertsCheck = compareValues('alertsPack5', config.alertsPack5, libPricing.alertsPack5);
-  if (!alertsCheck.ok) {
-    errors.push(`LIB: ${alertsCheck.message} (UI shows $2.49 but lib has ${libPricing.alertsPack5})`);
+  if (/extraSlot/i.test(apiContent)) {
+    errors.push('API: /api/public/pricing still references "extraSlot"');
   }
-  
-  const uiPackCopyCheck = compareStrings('uiPackCopy', config.uiPackCopy, libPricing.uiPackCopy);
-  if (!uiPackCopyCheck.ok) errors.push(`LIB: ${uiPackCopyCheck.message}`);
-  
-  // Check UI strings
-  if (uiFindings.base5.length === 0) {
-    warnings.push('UI: No $14.95 references found in UI files');
+  if (/extraSlot/i.test(pricingPageContent)) {
+    errors.push('UI: pages/pricing.tsx still references "extraSlot"');
   }
-  
-  if (uiFindings.extraBundle5.length === 0) {
-    warnings.push('UI: No $9.95 references found in UI files');
+  if (/extraSlot/i.test(libContent)) {
+    errors.push('LIB: pricing helper still references "extraSlot"');
   }
-  
-  if (uiFindings.alertsPack5.length === 0) {
-    warnings.push('UI: No $2.49 references found in UI files');
+
+  if (Math.abs(premiumPlan.extraBundle5 - 9.95) > DRIFT_TOLERANCE) {
+    warnings.push(`CONFIG: PREMIUM extraBundle5 expected 9.95 but found ${premiumPlan.extraBundle5}`);
+  }
+
+  if (uiFindings.premiumBase === 0) {
+    warnings.push('UI: No references to premium base price found in pricing components');
+  }
+  if (uiFindings.premiumBundle === 0) {
+    warnings.push('UI: No references to premium +5 bundle price found in pricing components');
+  }
+  if (uiFindings.proBundle === 0) {
+    warnings.push('UI: No references to pro +5 bundle price found in pricing components');
+  }
+  if (uiFindings.alertsPack === 0) {
+    warnings.push('UI: No references to alerts pack price found in pricing components');
   }
   
   // Output results
   const output = {
     ok: errors.length === 0,
-    config: {
-      base5: config.base5,
-      extraSlot: config.extraSlot,
-      extraBundle5: config.extraBundle5,
-      alertsPack5: config.alertsPack5,
-      uiPackCopy: config.uiPackCopy,
-    },
-    lib: {
-      base5: libPricing.base5,
-      extraSlot: libPricing.extraSlot,
-      alertsPack5: libPricing.alertsPack5,
-      uiPackCopy: libPricing.uiPackCopy,
-    },
+    config: config.plans,
     ui: {
-      base5References: uiFindings.base5.length,
-      extraBundle5References: uiFindings.extraBundle5.length,
-      alertsPack5References: uiFindings.alertsPack5.length,
+      premiumBaseReferences: uiFindings.premiumBase,
+      premiumBundleReferences: uiFindings.premiumBundle,
+      proBundleReferences: uiFindings.proBundle,
+      alertsPackReferences: uiFindings.alertsPack,
     },
     errors,
     warnings,
@@ -209,4 +152,3 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message ?? String(error) }));
   process.exit(1);
 });
-

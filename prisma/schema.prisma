@@ -506,6 +506,18 @@ model DiscoveredWalletSource {
   @@map("discovered_wallet_source")
 }
 
+model BillingCustomer {
+  id               String   @id @default(cuid())
+  walletAddress    String   @unique @db.VarChar(64)
+  stripeCustomerId String?  @db.VarChar(255)
+  plan             String   @db.VarChar(16)
+  status           String   @db.VarChar(32)
+  currentPeriodEnd DateTime?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
 /// App-wide key/value settings (admin-toggles)
 model AppSetting {
   key       String  @id

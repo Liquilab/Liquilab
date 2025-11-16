@@ -416,8 +416,8 @@ function PremiumCard() {
       </h2>
       <p className="mt-3 font-ui text-sm text-white/80">
         Follow <span className="font-num text-white/90">5</span> pools (Ēnosys &amp; SparkDEX) •{' '}
-        <span className="font-num text-white/90">$14.95</span>/month • RangeBand™ Alerts +{' '}
-        <span className="font-num text-white/90">$2.45</span> / 5 pools
+        <span className="font-num text-white/90">$14.95</span>/month · RangeBand™ Alerts +{' '}
+        <span className="font-num text-white/90">$2.49</span> / 5 pools
       </p>
       <a
         href="#personal-plan"

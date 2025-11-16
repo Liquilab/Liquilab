@@ -1,48 +1,55 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-import { isMailConfigured, sendMail } from '@/lib/mail';
+import { sendSimple } from '@/lib/mail/provider';
 
-type MailBody = {
-  to?: string;
-  subject?: string;
-  text?: string;
-  html?: string;
-};
+function resolveRecipient(req: NextApiRequest): string | null {
+  if (typeof req.body?.to === 'string' && req.body.to.trim()) {
+    return req.body.to.trim();
+  }
+  if (typeof req.query.to === 'string' && req.query.to.trim()) {
+    return req.query.to.trim();
+  }
+  const fallback = process.env.MAILGUN_TEST_RECIPIENT?.trim();
+  return fallback && fallback.length > 0 ? fallback : null;
+}
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ ok: false, error: 'method_not_allowed' });
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { to, subject, text, html } = (req.body ?? {}) as MailBody;
-
+  const to = resolveRecipient(req);
   if (!to) {
-    return res.status(400).json({ ok: false, error: 'missing_to' });
-  }
-
-  if (!isMailConfigured()) {
-    return res.status(501).json({ ok: false, error: 'mail_not_configured' });
-  }
-
-  try {
-    const result = await sendMail({
-      to,
-      subject: subject || 'LiquiLab test email',
-      text,
-      html,
+    return res.status(200).json({
+      ok: false,
+      degrade: true,
+      reason: 'NO_TEST_RECIPIENT',
+      ts: Date.now(),
     });
-
-    if (result.ok) {
-      return res.status(200).json(result);
-    }
-
-    return res.status(502).json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ ok: false, error: message });
   }
+
+  const result = await sendSimple({
+    to,
+    subject: 'LiquiLab Mail provider test',
+    html: '<p>This is a test email from the LiquiLab Mailgun provider.</p>',
+  });
+
+  if (result.ok) {
+    return res.status(200).json({
+      ok: true,
+      degrade: false,
+      id: result.id ?? null,
+      ts: Date.now(),
+    });
+  }
+
+  return res.status(200).json({
+    ok: false,
+    degrade: true,
+    reason: result.reason,
+    ts: Date.now(),
+  });
 }

@@ -1,60 +1,111 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-import { priceBreakdown } from '@/lib/billing/pricing';
-import { getEntitlements } from '@/lib/entitlements';
-import { resolveRole, roleFlags } from '@/lib/entitlements/resolveRole';
+import pricingConfig from '@/config/pricing';
+import type { Plan } from '@/lib/roles';
+import { getPlanForAddress } from '@/lib/roles';
 
-function parseBoolean(value: string | string[] | undefined, fallback = false): boolean {
-  if (Array.isArray(value)) return parseBoolean(value[0], fallback);
-  if (typeof value === 'string') {
-    const lowered = value.toLowerCase();
-    if (['1', 'true', 'yes', 'on'].includes(lowered)) return true;
-    if (['0', 'false', 'no', 'off'].includes(lowered)) return false;
+type EntitlementStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'none';
+
+type EntitlementsEnvelope = {
+  ok: boolean;
+  degrade?: boolean;
+  ts: number;
+  wallet: string | null;
+  plan: Plan;
+  status: EntitlementStatus;
+  maxPools: number;
+  features: string[];
+  indexedUpToTs: string | null;
+  reason?: string;
+};
+
+const MAX_POOLS: Record<Plan, number> = {
+  VISITOR: 0,
+  PREMIUM: pricingConfig.plans.PREMIUM.pools,
+  PRO: pricingConfig.plans.PRO.pools * 3,
+};
+
+const FEATURES: Record<Plan, string[]> = {
+  VISITOR: ['rangeband'],
+  PREMIUM: ['rangeband', 'reports', 'alerts'],
+  PRO: ['rangeband', 'reports', 'alerts', 'priority'],
+};
+
+function hasDatabase(): boolean {
+  return process.env.DB_DISABLE !== 'true' && Boolean(process.env.DATABASE_URL);
+}
+
+function parseWallet(req: NextApiRequest): string | null {
+  const queryWallet = typeof req.query.wallet === 'string' ? req.query.wallet : undefined;
+  const headerWallet =
+    typeof req.headers['x-wallet-address'] === 'string' ? req.headers['x-wallet-address'] : undefined;
+  const candidate = (queryWallet || headerWallet || '').trim();
+  return candidate ? candidate.toLowerCase() : null;
+}
+
+async function resolveEntitlements(wallet: string | null): Promise<EntitlementsEnvelope> {
+  const ts = Date.now();
+  if (!hasDatabase()) {
+    return {
+      ok: false,
+      degrade: true,
+      ts,
+      wallet,
+      plan: 'VISITOR',
+      status: 'none',
+      maxPools: 0,
+      features: FEATURES.VISITOR,
+      indexedUpToTs: null,
+      reason: 'DB_DISABLED',
+    };
   }
-  return fallback;
+
+  try {
+    const plan = await getPlanForAddress(wallet);
+    const status: EntitlementStatus = plan === 'VISITOR' ? 'none' : 'active';
+    return {
+      ok: true,
+      ts,
+      wallet,
+      plan,
+      status,
+      maxPools: MAX_POOLS[plan],
+      features: FEATURES[plan],
+      indexedUpToTs: null,
+    };
+  } catch {
+    return {
+      ok: false,
+      degrade: true,
+      ts,
+      wallet,
+      plan: 'VISITOR',
+      status: 'none',
+      maxPools: MAX_POOLS.VISITOR,
+      features: FEATURES.VISITOR,
+      indexedUpToTs: null,
+      reason: 'ENTITLEMENTS_ERROR',
+    };
+  }
 }
 
-function parseSlots(value: string | string[] | undefined): number {
-  const raw = Array.isArray(value) ? value[0] : value;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 5;
-  return Math.max(5, Math.ceil(parsed / 5) * 5);
-}
-
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
-    return res.status(405).json({ error: 'Method not allowed' });
+export default async function handler(req: NextApiRequest, res: NextApiResponse<EntitlementsEnvelope>) {
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({
+      ok: false,
+      degrade: true,
+      ts: Date.now(),
+      wallet: null,
+      plan: 'VISITOR',
+      status: 'none',
+      maxPools: MAX_POOLS.VISITOR,
+      features: FEATURES.VISITOR,
+      indexedUpToTs: null,
+      reason: 'METHOD_NOT_ALLOWED',
+    });
   }
 
-  const slots = parseSlots(req.query.slots);
-  const alertsSelected = parseBoolean(req.query.alertsSelected, false);
-  const resolution = resolveRole(req);
-  const flags = roleFlags(resolution.role);
-
-  const breakdown = priceBreakdown({ slots, alertsSelected });
-  const entitlements = getEntitlements(resolution.role, slots, alertsSelected, slots);
-
-  const response = {
-    role: resolution.role,
-    source: resolution.source,
-    flags,
-    entitlements: {
-      role: entitlements.role,
-      flags,
-      caps: { maxPools: entitlements.maxPools },
-      fields: {
-        apr: flags.premium ? entitlements.fields.apr : false,
-        incentives: flags.premium ? entitlements.fields.incentives : false,
-        rangeBand: flags.premium ? entitlements.fields.rangeBand : false,
-      },
-      ...(typeof entitlements.remainingSlots === 'number'
-        ? { remainingSlots: entitlements.remainingSlots }
-        : {}),
-    },
-    pricingPreview: breakdown,
-  };
-
-  return res.status(200).json(response);
+  const wallet = parseWallet(req);
+  const payload = await resolveEntitlements(wallet);
+  return res.status(200).json(payload);
 }
-

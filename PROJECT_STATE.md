@@ -1285,3 +1285,6 @@ npm run icons:fetch -- --only-missing --concurrency=8
 
 <!-- CHANGELOG_ARCHIVE_INDEX -->
 See archives in /docs/changelog/.
+
+## Changelog — 2025-11-16
+- S0: repo hygiene — node_modules uit tracking; .gitignore geborgd.

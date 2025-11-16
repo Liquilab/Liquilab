@@ -2,14 +2,23 @@
 
 import React from 'react';
 import Head from 'next/head';
-import { useRouter } from 'next/router';
 import { useAccount } from 'wagmi';
 import Header from '@/components/Header';
-import { formatEUR, calcPoolsCost, calcNotifCost, calcTotal, nextTierFor } from '@/lib/pricing';
+import {
+  formatEUR,
+  calcNotifCost,
+  calcTotal,
+  nextTierFor,
+  BASE_PLAN_PRICE_EUR,
+  EXTRA_BUNDLE5_PRICE_EUR,
+  BASE_PLAN_POOLS,
+  BUNDLE_SIZE,
+} from '@/lib/pricing';
 import { TokenIcon } from '@/components/TokenIcon';
 import WalletConnect from '@/components/WalletConnect';
 import { fetchPositions, computeSummary as computeClientSummary } from '@/lib/positions/client';
 import type { PositionRow } from '@/lib/positions/types';
+import { createBillingCheckoutSession, openBillingPortal } from '@/lib/api/billing';
 
 type PositionSummary = {
   total: number;
@@ -92,13 +101,13 @@ function hydratePositionForUi(position: PositionRow): PositionRow {
 }
 
 export default function PricingPage() {
-  const router = useRouter();
   const { address, isConnected } = useAccount();
 
   const [positions, setPositions] = React.useState<PositionRow[] | null>(null);
   const [summary, setSummary] = React.useState<PositionSummary | null>(null);
-  const [loadingPositions, setLoadingPositions] = React.useState(false);
   const [positionsError, setPositionsError] = React.useState<string | null>(null);
+  const [positionsStatus, setPositionsStatus] = React.useState<'idle' | 'loading' | 'ready' | 'degraded' | 'error'>('idle');
+  const [positionsReason, setPositionsReason] = React.useState<'NO_WALLET' | 'INVALID_WALLET' | 'UNKNOWN' | null>(null);
 
   const [paidPools, setPaidPools] = React.useState<number>(5);
   const [notificationsEnabled, setNotificationsEnabled] = React.useState<boolean>(false);
@@ -106,18 +115,32 @@ export default function PricingPage() {
   const [selectedPoolIds, setSelectedPoolIds] = React.useState<Set<string>>(new Set());
   const [showArchived, setShowArchived] = React.useState<boolean>(false);
   const [expandedPairs, setExpandedPairs] = React.useState<Set<string>>(new Set());
+  const [checkoutBusy, setCheckoutBusy] = React.useState(false);
+  const [portalBusy, setPortalBusy] = React.useState(false);
+  const [billingDisabled, setBillingDisabled] = React.useState(false);
+  const [billingMessage, setBillingMessage] = React.useState<string | null>(null);
+  const degradeMessage = React.useMemo(() => {
+    if (positionsStatus !== 'degraded') return null;
+    if (positionsReason === 'INVALID_WALLET') {
+      return 'Please connect a valid Flare wallet to see your pools. You can still explore plans and start a trial.';
+    }
+    return 'Connect your wallet to see your pools. You can still explore plans and start a trial.';
+  }, [positionsStatus, positionsReason]);
+
 
   const loadPositions = React.useCallback(
     async (signal?: AbortSignal) => {
       if (!address || !isConnected) {
+        setPositionsStatus('degraded');
+        setPositionsReason('NO_WALLET');
         setPositions(null);
         setSummary(null);
         setPositionsError(null);
-        setLoadingPositions(false);
         return;
       }
 
-      setLoadingPositions(true);
+      setPositionsStatus('loading');
+      setPositionsReason(null);
       setPositionsError(null);
 
       try {
@@ -128,8 +151,19 @@ export default function PricingPage() {
 
         setPositions(hydratedPositions);
         setSummary(buildPositionSummary(hydratedPositions, summaryData));
+        setPositionsStatus('ready');
       } catch (error) {
         if ((error as Error).name === 'AbortError') {
+          return;
+        }
+
+        if (error instanceof Error && error.message === 'Invalid wallet') {
+          console.warn('[pricing] positions degraded due to invalid wallet');
+          setPositionsStatus('degraded');
+          setPositionsReason('INVALID_WALLET');
+          setPositions([]);
+          setSummary(null);
+          setPositionsError(null);
           return;
         }
 
@@ -137,8 +171,9 @@ export default function PricingPage() {
         setPositions([]);
         setSummary(null);
         setPositionsError('Couldn\'t load positions. Please retry.');
+        setPositionsStatus('error');
+        setPositionsReason('UNKNOWN');
       } finally {
-        setLoadingPositions(false);
       }
     },
     [address, isConnected],
@@ -147,6 +182,8 @@ export default function PricingPage() {
   // Fetch positions when wallet connects
   React.useEffect(() => {
     if (!address || !isConnected) {
+      setPositionsStatus('degraded');
+      setPositionsReason('NO_WALLET');
       setPositions(null);
       setSummary(null);
       setPositionsError(null);
@@ -191,9 +228,12 @@ export default function PricingPage() {
     }
   }, [calculatedSummary, tierRecommended, hasAutoSet, positions]);
 
-  const poolsCost = calcPoolsCost(paidPools);
   const notifCost = calcNotifCost(paidPools, notificationsEnabled);
   const totalCost = calcTotal(paidPools, notificationsEnabled);
+  const normalizedPools = Math.max(BASE_PLAN_POOLS, Math.ceil(paidPools / BUNDLE_SIZE) * BUNDLE_SIZE);
+  const extraBundles = Math.max(0, (normalizedPools - BASE_PLAN_POOLS) / BUNDLE_SIZE);
+  const baseBundleCost = BASE_PLAN_PRICE_EUR;
+  const extraBundlesCost = extraBundles * EXTRA_BUNDLE5_PRICE_EUR;
 
   // Calculate capacity feedback (only count Active + Inactive; Archived excluded)
   const getCapacityFeedback = (): string | null => {
@@ -303,13 +343,70 @@ export default function PricingPage() {
   const selectedCount = selectedPoolIds.size;
   const allSelected = positions && selectedCount === positions.length;
 
-  const handleSubscribe = () => {
-    const query = new URLSearchParams({
-      paidPools: String(paidPools),
-      addNotifications: notificationsEnabled ? '1' : '0',
-    });
-    router.push(`/sales?${query.toString()}`);
-  };
+  const handleCheckout = React.useCallback(async () => {
+    if (!address) {
+      setBillingMessage('Please connect your wallet before starting a trial.');
+      return;
+    }
+    setCheckoutBusy(true);
+    setBillingMessage(null);
+    const normalized = Math.max(BASE_PLAN_POOLS, Math.ceil(paidPools / BUNDLE_SIZE) * BUNDLE_SIZE);
+    const extraBundles = Math.max(0, (normalized - BASE_PLAN_POOLS) / BUNDLE_SIZE);
+    const alertsPacks = notificationsEnabled ? Math.ceil(normalized / BUNDLE_SIZE) : 0;
+    try {
+      const response = await createBillingCheckoutSession({
+        plan: 'PREMIUM',
+        extraBundles5: extraBundles,
+        alertsPacks5: alertsPacks,
+      });
+      if (response.ok && response.url) {
+        window.location.href = response.url;
+        return;
+      }
+      if (response.degrade) {
+        setBillingDisabled(true);
+        setBillingMessage('Billing is temporarily unavailable. Please try again later.');
+        return;
+      }
+      if (response.reason === 'WALLET_REQUIRED') {
+        setBillingMessage('Please connect your wallet before starting a trial.');
+        return;
+      }
+      setBillingMessage('Unable to start checkout. Please try again.');
+    } catch (error) {
+      console.error('[pricing] checkout error', error);
+      setBillingMessage('Unable to start checkout. Please try again.');
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }, [address, paidPools, notificationsEnabled]);
+
+  const handleManageSubscription = React.useCallback(async () => {
+    setPortalBusy(true);
+    setBillingMessage(null);
+    try {
+      const response = await openBillingPortal();
+      if (response.ok && response.url) {
+        window.location.href = response.url;
+        return;
+      }
+      if (response.degrade) {
+        setBillingDisabled(true);
+        setBillingMessage('Subscription portal is temporarily unavailable. Please try again later.');
+        return;
+      }
+      if (response.reason === 'WALLET_REQUIRED') {
+        setBillingMessage('Please connect your wallet to manage your subscription.');
+        return;
+      }
+      setBillingMessage('Unable to open subscription portal. Please try again.');
+    } catch (error) {
+      console.error('[pricing] portal error', error);
+      setBillingMessage('Unable to open subscription portal. Please try again.');
+    } finally {
+      setPortalBusy(false);
+    }
+  }, []);
 
   return (
     <>
@@ -317,7 +414,7 @@ export default function PricingPage() {
         <title>Pricing · LiquiLab</title>
         <meta
           name="description"
-          content="€1.99 per pool/month. Keep effortless overview of all your Flare LPs in one place."
+          content="5 pools for €14.95/month, then add +5-pool bundles (+€9.95) and optional alerts."
         />
       </Head>
 
@@ -430,12 +527,17 @@ export default function PricingPage() {
                     How it works
                   </h3>
                   <p className="font-ui text-base leading-relaxed text-white/80">
-                    First 5 pools: <strong className="tabular-nums">$1.99/mo</strong> (one bundle). Add more in packs of 5.
+                    Base plan: <strong className="tabular-nums">{formatEUR(BASE_PLAN_PRICE_EUR)}</strong> for{' '}
+                    <strong className="tabular-nums">{BASE_PLAN_POOLS}</strong> pools. Need more? Add{' '}
+                    <strong className="tabular-nums">+{BUNDLE_SIZE}</strong>-pool bundles for{' '}
+                    <strong className="tabular-nums">{formatEUR(EXTRA_BUNDLE5_PRICE_EUR)}</strong> each.
                   </p>
                   <ul className="space-y-2.5 font-ui text-sm leading-relaxed text-white/70">
                     <li className="flex items-start gap-2">
                       <span className="mt-0.5 text-[#1BE8D2]" aria-hidden="true">•</span>
-                      <span><strong className="text-white">Notifications Add-on +25%</strong> — email alerts for Near/Out of Range</span>
+                      <span>
+                        <strong className="text-white">RangeBand™ Alerts</strong> — email nudges for Near/Out of Range (+€2.50 per 5 pools)
+                      </span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="mt-0.5 text-[#1BE8D2]" aria-hidden="true">•</span>
@@ -454,11 +556,42 @@ export default function PricingPage() {
                     Your pools
                   </h3>
 
-                  {loadingPositions ? (
-                    <div className="rounded-xl bg-white/[0.02] p-8 text-center">
-                      <p className="font-ui text-sm text-white/70">Loading your pools...</p>
-                    </div>
-                  ) : calculatedSummary && calculatedSummary.total > 0 ? (
+                  {(() => {
+                    if (positionsStatus === 'loading') {
+                      return (
+                        <div className="rounded-xl bg-white/[0.02] p-8 text-center">
+                          <p className="font-ui text-sm text-white/70">Loading your pools...</p>
+                        </div>
+                      );
+                    }
+
+                    if (positionsStatus === 'degraded') {
+                      return (
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
+                          <p className="font-ui text-sm text-white/70">{degradeMessage}</p>
+                        </div>
+                      );
+                    }
+
+                    if (positionsStatus === 'error') {
+                      return (
+                        <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
+                          <p className="font-ui text-sm text-white/70">
+                            We couldn&apos;t load your pools right now. Please try again later.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleRetry}
+                            className="rounded-lg border border-white/20 px-4 py-2 font-ui text-sm font-semibold text-white transition hover:border-white/40"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    if (calculatedSummary && calculatedSummary.total > 0) {
+                      return (
                     <div className="space-y-6">
                       {/* Summary + Your Plan combined */}
                       <div className="rounded-xl bg-[#3B82F6]/5 p-6">
@@ -943,14 +1076,25 @@ export default function PricingPage() {
                       <div className="rounded-xl bg-white/[0.06] p-6" aria-live="polite" aria-atomic="true">
                         <div className="space-y-3">
                           <div className="flex items-baseline justify-between gap-4 font-ui text-sm text-white/70">
-                            <span>Pools: <span className="tabular-nums">{paidPools}</span> × €<span className="tabular-nums">1.99</span> / month</span>
+                            <span>Base plan ({BASE_PLAN_POOLS} pools)</span>
                             <span className="tabular-nums font-semibold text-white">
-                              {formatEUR(poolsCost)}
+                              {formatEUR(baseBundleCost)}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline justify-between gap-4 font-ui text-sm text-white/70">
+                            <span>
+                              Extra bundles
+                              <span className="ml-1 text-white/60">
+                                ({extraBundles} × {formatEUR(EXTRA_BUNDLE5_PRICE_EUR)})
+                              </span>
+                            </span>
+                            <span className="tabular-nums font-semibold text-white">
+                              {formatEUR(extraBundlesCost)}
                             </span>
                           </div>
                           {notificationsEnabled && (
                             <div className="flex items-baseline justify-between gap-4 font-ui text-sm text-white/70">
-                              <span>Notifications: €<span className="tabular-nums">2.50</span> per 5 pools</span>
+                              <span>RangeBand™ Alerts (€2.50 per {BUNDLE_SIZE} pools)</span>
                               <span className="tabular-nums font-semibold text-white">
                                 {formatEUR(notifCost)}
                               </span>
@@ -961,9 +1105,7 @@ export default function PricingPage() {
                               <span className="font-brand text-base font-semibold text-white">
                                 Total
                               </span>
-                              <span
-                                className="tabular-nums font-brand text-3xl font-bold text-white"
-                              >
+                              <span className="tabular-nums font-brand text-3xl font-bold text-white">
                                 {formatEUR(totalCost)}
                               </span>
                             </div>
@@ -973,14 +1115,30 @@ export default function PricingPage() {
                       </div>
 
                       {/* CTA */}
-                      <button
-                        type="button"
-                        onClick={handleSubscribe}
-                        className="w-full rounded-2xl bg-[#3B82F6] px-6 py-4 font-ui text-base font-semibold text-white transition hover:bg-[#2563EB] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B82F6]/60"
-                        aria-label="Continue to checkout"
-                      >
-                        Continue to checkout
-                      </button>
+                      <div className="space-y-3">
+                        <button
+                          type="button"
+                          onClick={handleCheckout}
+                          disabled={billingDisabled || checkoutBusy}
+                          className="w-full rounded-2xl bg-[#3B82F6] px-6 py-4 font-ui text-base font-semibold text-white transition hover:bg-[#2563EB] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B82F6]/60 disabled:cursor-not-allowed disabled:opacity-60"
+                          aria-label="Start checkout"
+                        >
+                          {checkoutBusy ? 'Redirecting…' : 'Start 14-day trial'}
+                        </button>
+                        {isConnected && (
+                          <button
+                            type="button"
+                            onClick={handleManageSubscription}
+                            disabled={billingDisabled || portalBusy}
+                            className="w-full rounded-2xl border border-white/20 px-6 py-4 font-ui text-base font-semibold text-white transition hover:border-white/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {portalBusy ? 'Opening portal…' : 'Manage subscription'}
+                          </button>
+                        )}
+                        {billingMessage && (
+                          <p className="text-center font-ui text-sm text-[#FCA5A5]">{billingMessage}</p>
+                        )}
+                      </div>
 
                       {positionsError && (
                         <div className="mt-3 flex flex-col items-center gap-2">
@@ -997,29 +1155,33 @@ export default function PricingPage() {
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="rounded-xl bg-white/[0.02] p-8">
-                      <p className="mb-4 text-center font-ui text-base text-white">
-                        No pools found
-                      </p>
-                      <p className="mb-6 text-center font-ui text-sm text-white/60">
-                        We couldn&apos;t detect any LP positions in your wallet. If you have positions on Enosys, SparkDEX or BlazeSwap, try connecting again or check the links below.
-                      </p>
-                      <div className="flex flex-wrap justify-center gap-3">
-                        {Object.entries(PROVIDER_LINKS).map(([name, url]) => (
-                          <a
-                            key={name}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded-lg bg-white/[0.05] px-4 py-2 font-ui text-sm capitalize text-white/80 transition hover:bg-white/10 hover:text-white"
-                          >
-                            {name}
-                          </a>
-                        ))}
+                    );
+                    }
+
+                    return (
+                      <div className="rounded-xl bg-white/[0.02] p-8">
+                        <p className="mb-4 text-center font-ui text-base text-white">
+                          No pools found
+                        </p>
+                        <p className="mb-6 text-center font-ui text-sm text-white/60">
+                          We couldn&apos;t detect any LP positions in your wallet. If you have positions on Enosys, SparkDEX or BlazeSwap, try connecting again or check the links below.
+                        </p>
+                        <div className="flex flex-wrap justify-center gap-3">
+                          {Object.entries(PROVIDER_LINKS).map(([name, url]) => (
+                            <a
+                              key={name}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-lg bg-white/[0.05] px-4 py-2 font-ui text-sm capitalize text-white/80 transition hover:bg-white/10 hover:text-white"
+                            >
+                              {name}
+                            </a>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
           </div>
         </div>
       )}
