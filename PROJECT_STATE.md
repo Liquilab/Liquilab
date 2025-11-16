@@ -1,7 +1,7 @@
 # PROJECT_STATE · LiquiLab Indexer & API (Concise)
 
 > Living document for the LiquiLab Flare V3 indexer stack.  
-> Last updated: 2025-11-10 20:00 CET. Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
+> Last updated: 2025-11-16 (Delta 2025-11-16 applied). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
 
 ---
 
@@ -71,6 +71,27 @@
   - Address storage: lower-case hex.  
   - Monetary columns stored as stringified integers (wei) in raw tables; analytics layer casts to numeric.  
   - BigInt-likes stored as strings to avoid JS precision loss.
+
+<!-- DELTA 2025-11-16 START -->
+
+### 3.1 New Tables (MVP + Compliance)
+
+- **`UserSettings(wallet PK, email, email_verified, notifications JSONB, created_at, updated_at)`** — User preferences for GDPR compliance.
+- **`AlertConfig(id, wallet, position_id, type, enabled, created_at)`** — Alert configuration per position.
+- **`AlertLog(id, alert_id, triggered_at, code, meta JSONB)`** — **Nice to have** — Alert trigger history.
+- **`AuditLog(id, ts, actor, action, target, meta JSONB)`** — GDPR/ops audit trail.
+
+### 3.2 New Materialized Views (MVP)
+
+- **`mv_wallet_portfolio_latest(wallet_address, tvl_total_usd, positions_active, fees24h_usd, ts)`** — Wallet-level portfolio snapshot.
+- **`mv_position_overview_latest(position_id, wallet_address, pool_id, tvl_usd_current, unclaimed_fees_usd, apr_7d, range_min, range_max, current_price, strategy_code, spread_pct, band_color, position_ratio, unclaimed_fees_pct_of_tvl, claim_signal_state, ts)`** — Position-level analytics with RangeBand™ status.
+- **`mv_position_day_stats(position_id, date, price_open, price_close, range_lower_price, range_upper_price, tvl_usd_avg, fees_usd_earned, fees_usd_claimed, time_in_range_pct)`** — Daily position performance.
+- **`mv_position_events_recent(position_id, ts, event_type, token0_delta, token1_delta, fees_usd, incentives_usd, tx_hash)`** — Recent position events (7d window).
+
+**Indices:** `(wallet_address)` and `(position_id,date)`; refresh ≤60s/MV.  
+**Verifiers:** `npm run verify:mv` checks row counts and column names.
+
+<!-- DELTA 2025-11-16 END -->
 
 ---
 
@@ -142,7 +163,7 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
   - `GET /api/positions?address=0x…` — aggregated positions (Free tier masking applied; uses analytics snapshots).  
   - `GET /api/health` — reports provider status (RPC, mail, indexer freshness).  
   - `GET /api/indexer/progress` — exposes checkpoint/lag info (global + per-stream).  
-  - `GET /api/intel/news` (Perplexity-powered web signals; not indexer but relies on Pool metadata).  
+  - `GET /api/intel/news` (Perplexity-powered web signals; not indexer but relies on Pool metadata).
 - **Analytics tables & metrics:**  
   - `analytics_market` (per provider, TVL, volume, APR).  
   - `analytics_position_snapshot` (tokenId share, inRange%, fee accrual, strategy width).  
@@ -154,6 +175,138 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
     • Fee yield (daily fees / liquidity)  
     • Impermanent loss estimator (IL_est) vs hold baseline.  
   - Pool detail view uses: owner concentration, whale entries/exits, collect cadence, RangeBand strategy buckets (Aggressive/Balanced/Conservative), alerts readiness.
+
+<!-- DELTA 2025-11-16 START -->
+
+### 7.1 API Payload Specs (v1) — New/Extended Endpoints
+
+#### Entitlements & server-side gating
+
+**GET /api/entitlements?wallet=0x…**  
+
+Response (`ApiEnvelope<Entitlements>`):
+
+```ts
+type Entitlements = {
+  wallet: string;
+  plan: 'VISITOR' | 'PREMIUM' | 'PRO';
+  status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'none';
+  maxPools: number;
+  features: string[]; // e.g. ['rangeband','reports','alerts']
+  indexedUpToTs?: string | null;
+};
+```
+
+**DoD:** 200 with valid wallet → plan/status from DB (`BillingCustomer`).  
+**Verifiers:** `curl -s /api/entitlements?wallet=0x... | jq -r '.data.plan'`
+
+#### Positions overview (wallet)
+
+**GET /api/analytics/wallet/{wallet}/positions**
+
+Response (`ApiEnvelope<WalletPositionsResponse>`):
+
+```ts
+type PositionOverview = {
+  positionId: string;
+  wallet: string;
+  dex: 'Enosys' | 'SparkDEX' | 'Other';
+  chain: 'Flare';
+  token0Symbol: string; token1Symbol: string;
+  feeTierBps: number;
+  tvlUsd: number;
+  unclaimedFeesUsd: number;
+  incentivesUsd: number;
+  apr7dPct: number | null;
+  // RangeBand™
+  minPrice: number; maxPrice: number; currentPrice: number;
+  strategyCode: 'AGR'|'BAL'|'CONS';
+  spreadPct: number; bandColor: 'GREEN'|'ORANGE'|'RED'|'UNKNOWN';
+  positionRatio: number | null;
+  // Claim signal
+  unclaimedFeesPctOfTvl: number | null;
+  claimSignalState: 'NONE'|'ELEVATED'|'OPTIMAL';
+};
+
+type WalletPositionsResponse = {
+  header: { tvlTotalUsd: number; positionsActive: number; fees24hUsd: number; };
+  positions: PositionOverview[];
+};
+```
+
+**Degrade:** `code: 'INDEXER_LAGGING'` + `staleTs`.  
+**Verifiers:** Golden wallet returns ≥1 position; `jq '.data.positions|length'`.
+
+#### RangeBand preview
+
+**GET /api/rangeband/preview?pool=0x…&min=…&max=…[&wallet=0x…]**
+
+Response (`ApiEnvelope<RangeBandPreview>`):
+
+```ts
+type RangeBandPreview = {
+  currentPrice: number;
+  band: { min: number; max: number };
+  status: 'IN_RANGE'|'OUT_OF_RANGE'|'INSUFFICIENT_DATA';
+  estFees7dUsd?: number | null;
+  estIl7dUsd?: number | null;
+};
+```
+
+**Degrade:** `code:'RANGEBAND_NO_DATA'`.  
+**Verifier:** `curl -s '/api/rangeband/preview?pool=0x..&min=..&max=..' | jq '.ok'`
+
+#### User settings (GDPR/notifications)
+
+**GET /api/user/settings?wallet=0x…**  
+**POST /api/user/settings** (body: `{ wallet, email?, notifications? }`)
+
+Response (`ApiEnvelope<UserSettings>`):
+
+```ts
+type UserSettings = {
+  email?: string; emailVerified: boolean;
+  notifications: { alerts: boolean; reports: boolean; marketing: boolean; };
+};
+```
+
+**DoD:** e-mail validation; unsubscribe updates notifications.  
+**Verifiers:** CRUD via cURL; `jq '.data.settings.emailVerified'`.
+
+#### GDPR delete
+
+**POST /api/user/delete** (body: `{ wallet, confirm: true }`)
+
+**Actions:** Stripe cancel → delete `BillingCustomer` + `UserSettings` + `AlertConfig`; pseudonimize analytics (wallet→hash).  
+**DoD:** Audit log entry + confirmation email (Mailgun mode-aware).  
+**Verifier:** Returns `{ ok:true }` and audit record exists.
+
+#### Alerts CRUD (post MVP UI, backend MVP-ready)
+
+**GET/POST/PUT/DELETE /api/user/alerts**
+
+Schema:
+
+```ts
+type AlertRecord = {
+  id: string; wallet: string; positionId: string;
+  type: 'out_of_range'|'near_band'|'claim_ready';
+  enabled: boolean; lastTriggered?: string | null;
+};
+```
+
+**Rate limiting:** max 50 alerts/wallet.  
+**Degrade:** queue pause → `code:'ALERTS_PAUSED'`.  
+**Verifiers:** CRUD integration test.
+
+#### Nice to have (post-MVP)
+
+**POST /api/reports/export** → `{ downloadUrl, expiresAt }` (CSV/PDF).  
+**GET /api/analytics/leaderboard?metric=…** (wallets masked).
+
+**Status:** Nice to have (post-MVP).
+
+<!-- DELTA 2025-11-16 END -->
 
 ---
 
@@ -442,6 +595,12 @@ Next (accuracy): when NFPM address is stored per event/transfer, replace the fir
 - Create/refresh: `psql "$PSQL_URL" -f scripts/dev/backfill-analytics-position-flat.sql && psql "$PSQL_URL" -c 'REFRESH MATERIALIZED VIEW CONCURRENTLY analytics_position_flat;'`
 - Verify: `psql "$PSQL_URL" -f scripts/dev/verify-analytics-position-flat.sql`
 
+-## Known issues
+- Mailgun account still pending reactivation, so `MAILGUN_MODE` remains `degrade` locally/CI until mg.liquilab.io is fully approved.
+-
+-## Open actions
+- Once Mailgun is active, flip `MAILGUN_MODE=live` in staging, run `npm run verify:mailgun`, and only then roll to Railway production.
+-
 ## Changelog — 2025-11-08
 
 ### **ERC-721 Full Indexing + Pool Metadata Architecture**
@@ -1281,7 +1440,200 @@ npm run icons:fetch -- --only-missing --concurrency=8
 
 ## Changelog — 2025-11-15
 
+- Pricing: made positions loading wallet-aware and degrade-safe on /pricing (NO_WALLET/INVALID_WALLET) so the page stays stable while billing CTAs remain available.
+
 - S2: Added /api/analytics/{summary,pool} (TTL 60s, degrade-mode), MV refresh orchestrator stub, FE wired /summary & /pool to analytics, verifiers added.
+
+## Changelog — 2025-11-15
+
+- S3-prep: Added billing scaffolding (Stripe checkout/portal/webhook + Mailgun test) with degrade=true fallback plus verify:billing and config/billing.ts SSoT.
+
+## Changelog — 2025-11-15
+
+- Stripe MVP: env-driven billing config, Prisma BillingCustomer + roles helper, degrade-safe checkout/portal/webhook + Mailgun provider + verify:billing covering all routes.
+
+## Changelog — 2025-11-15
+
+- S3-prep: Removed 'extraSlot' from pricing SSoT/UI/verifier; kept Extra5 bundles + Alerts only and tightened drift enforcement.
+
+## Changelog — 2025-11-15
+
+- .env.local: normalized Stripe TEST env variable names and updated price IDs for Premium/Pro/Extra5/Alerts5.
+
+- Billing: wired Stripe TEST checkout, portal, webhooks (BillingCustomer + Mailgun) and pricing CTAs; verify:billing tolerates degrade builds.
+
+- Billing: added src/lib/api/billing client helpers and wired /pricing CTAs to create-checkout-session and portal with wallet-aware degrade cues.
+
+- Mailgun: degrade-safe provider (`MAILGUN_MODE`, `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_BASE_URL`, `MAILGUN_FROM_DEFAULT`, `MAILGUN_TEST_RECIPIENT`) plus /api/mail/test + verify:mailgun to keep email flows from breaking the UI.
+
+## Changelog — 2025-11-16
+
+### Delta 2025-11-16: Sprint Roadmap Foundation
+
+**Files changed:**
+- `PROJECT_STATE.md` — Added comprehensive Delta 2025-11-16 covering:
+  - Section 7.1: New/extended API endpoints (entitlements, wallet positions, RangeBand preview, user settings, GDPR delete, alerts CRUD)
+  - Section 3.1-3.2: New database tables (UserSettings, AlertConfig, AuditLog) and materialized views (mv_wallet_portfolio_latest, mv_position_overview_latest, mv_position_day_stats, mv_position_events_recent)
+  - Appendix D: Design System & Components, Security & Compliance, Environments & Operations, Route Gating Matrix, Non-Goals, Error Codes Catalog
+
+**Purpose:** Consolidate all project specifications for definitive sprint-based roadmap generation via GPT Pro.
+
+**Key additions:**
+- **API specs:** 8 new/extended endpoints with TypeScript contracts, DoD, and verifiers
+- **Database:** 4 new tables + 4 new MVs with indices and refresh requirements
+- **Design System:** RangeBand™ props SSoT + 7 new DS components (ErrorBoundary, Toast, Modal, Form.*, Accordion, CookieBanner, DataState)
+- **Security:** CORS, rate limiting, GDPR compliance, cookie consent, legal routes
+- **Operations:** Staging requirements, observability (Sentry, uptime, logging), backup strategy, incident levels
+- **Gating:** Route × plan matrix with server-side enforcement via `/api/entitlements`
+- **Non-goals:** Multi-chain, on-chain transactions in UI, advanced IL viz, PWA
+- **Error codes:** 10 standard API error codes cataloged
+
+**Notes:**
+- All existing content preserved; delta additions marked with `<!-- DELTA 2025-11-16 START/END -->`
+- Nice-to-have items explicitly marked (AlertLog table, reports export, leaderboard)
+- Verifiers specified for all new capabilities (curl/jq/npm run verify:*)
+- Consistent with existing terminology (plan/gating, degrade, RangeBand™, MV, SSoT)
+
+---
 
 <!-- CHANGELOG_ARCHIVE_INDEX -->
 See archives in /docs/changelog/.
+
+---
+
+## Appendix D — Delta 2025-11-16
+
+### D.1 Design System & Components (v1)
+
+<!-- DELTA 2025-11-16 START -->
+
+#### RangeBand™ Props (SSoT)
+
+```ts
+type RangeBandProps = {
+  currentPrice: number;
+  minPrice: number; maxPrice: number;
+  strategyCode: 'AGR'|'BAL'|'CONS';
+  spreadPct: number;
+  bandColor: 'GREEN'|'ORANGE'|'RED'|'UNKNOWN';
+  positionRatio: number | null; // 0..1, null when unknown
+  variant: 'compact'|'large';
+  tooltip?: string;
+};
+```
+
+**Rules:** `bandColor`/`positionRatio` exclusively from data layer; FE calculates no logic.
+
+#### DS Components (New)
+
+- **`ErrorBoundary`** — React error boundary (page-level).
+- **`Toast`** — success/error/info queue.
+- **`Modal`** — generic modal component.
+- **`Form.*`** — text/select/checkbox with validation.
+- **`Accordion`** — FAQ component.
+- **`CookieBanner`** — GDPR cookie consent.
+- **`DataState`** — loading/empty/degrade pattern component.
+
+**DoD:** Storybook entries + A11y (ARIA, focus); number format helpers (USD, pct, K/M/B).
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.2 Security & Compliance
+
+<!-- DELTA 2025-11-16 START -->
+
+- **CORS:** Allow only `app.liquilab.io`, `staging.liquilab.io`, `localhost`.
+- **Rate limiting:** Redis-backed; 10 req/min/IP public routes, 100 req/min/wallet user routes. 429 JSON response.
+- **Cookie consent:** `CookieBanner` + `/legal/cookies` (consent in `localStorage: ll_cookies_accepted`).
+- **Legals:** `/legal/privacy`, `/legal/terms`, `/legal/cookies` required before launch.
+- **GDPR delete:** Server-side flow via `/api/user/delete` + `AuditLog` entry + email confirmation.
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.3 Environments & Operations
+
+<!-- DELTA 2025-11-16 START -->
+
+#### Staging Environment
+
+- **Required:** Separate Railway project + separate DB + Stripe TEST keys + `MAILGUN_MODE='degrade'`.
+
+#### Observability
+
+- **Sentry:** Front+back required.
+- **Uptime:** Monitor on `/api/health`.
+- **Logging:** JSON format (`ts`, `component`, `severity`, `code`, `requestId`).
+
+#### Backups
+
+- **Daily:** Full backup (7d retention).
+- **Weekly:** Full backup (90d retention).
+- **Quarterly:** Test-restore runbook execution.
+
+#### Incident Levels
+
+- **SEV-1:** Site down / analytics incorrect.
+- **SEV-2:** Degrade > X%.
+- **SEV-3:** UI glitch.
+- **Status:** `/status` reflects component states.
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.4 Route Gating Matrix (Plan-Based Enforcement)
+
+<!-- DELTA 2025-11-16 START -->
+
+#### Route × Plan Matrix
+
+- **`/` (Home):** Visitor = demo; Premium/Pro = connect→dashboard.
+- **`/summary` vs `/dashboard`:** **TODO consolidate** — dashboard = logged-in home.
+- **`/pool/[id]`:** Visitor blurred metrics; Premium details; Pro + peer metrics (post-MVP).
+- **`/rangeband`:** Visitor explainer; Premium/Pro interactive.
+- **`/pricing`:** Always visible; CTAs depend on billing health/plan.
+- **`/account`:** Premium/Pro only; `past_due` = read-only + banner.
+
+**Enforcement:** FE uses `usePlanGating()`; BE validates via `/api/entitlements` (no client-override).
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.5 Non-Goals / Out of Scope (MVP)
+
+<!-- DELTA 2025-11-16 START -->
+
+- **No multi-chain** — Flare-only.
+- **No on-chain transactions** (claim/collect) in UI — deep links only.
+- **No advanced IL visualizations** — status/indication only.
+- **No PWA/offline/push notifications**.
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
+### D.6 Error Codes Catalog
+
+<!-- DELTA 2025-11-16 START -->
+
+Standard API error codes:
+
+- `UPSTREAM_TIMEOUT` — External service timeout.
+- `INDEXER_LAGGING` — Indexer behind chain head.
+- `INVALID_WALLET` — Invalid wallet address format.
+- `POOL_NOT_FOUND` — Pool does not exist.
+- `RATE_LIMITED` — Too many requests.
+- `BILLING_DEGRADED` — Billing service unavailable.
+- `MAILGUN_DEGRADE_MODE` — Email service in degrade mode.
+- `ALERTS_PAUSED` — Alert processing paused.
+- `UNAUTHORIZED` — Authentication required.
+- `RANGEBAND_NO_DATA` — Insufficient data for RangeBand calculation.
+
+<!-- DELTA 2025-11-16 END -->
+
+---
