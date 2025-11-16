@@ -6,6 +6,9 @@
 ---
 
 ## 1. Indexer Overview
+
+**GECOVERED:** ✅ Fully implemented and operational.
+
 - **Purpose:** Consolidated Flare V3 pipeline that ingests raw Ēnosys/Sparkdex NonfungiblePositionManager/pool events, enriches them, and feeds LiquiLab dashboards.
 - **Mode (2025-11-09):** **Flare-only RPC** (no ANKR traffic). Middleware gate funnels all traffic to `/placeholder` until demo cookie set; `/placeholder` password is **Demo88**. Admin dashboards: `/admin/ankr` (cache-only stats) and `/admin/db` (table explorer, confirmation pending).
 - **Architecture:** `CLI (backfill | follower)` → `IndexerCore` → `RpcScanner` → `Decoders (factory | pool | nfpm | state)` → `DbWriter` → Postgres (`PoolEvent`, `PositionEvent`, analytics tables). Streams still match Ēnosys/Sparkdex pools + NFPM + pool_state + position_reads.
@@ -28,6 +31,9 @@
 ---
 
 ## 2. Key Components
+
+**GECOVERED:** ✅ Core indexer components fully implemented.
+
 - **CLI entrypoints:**  
   - `scripts/indexer-backfill.ts` — orchestrates batch runs, stream selection (factories, nfpm, pools), structured start logs. When `--streams=pools` is passed, now invokes `IndexerCore.indexPoolEvents`.  
   - `scripts/indexer-follower.ts` — resilient hourly tail; supports factory/pool catch-up plus NFPM stream by default.  
@@ -55,6 +61,9 @@
 ---
 
 ## 3. Database Schema Summary
+
+**GECOVERED:** ✅ Core tables and relationships fully implemented.
+
 - **Core tables:**  
   - `PoolEvent (id=txHash:logIndex)` — rows for `PoolCreated`, pool Swap/Mint/Burn/Collect. Columns: `pool`, `timestamp`, `eventName`, `sender`, `owner`, `recipient`, `tickLower`, `tickUpper`, `amount`, `amount0`, `amount1`, `sqrtPriceX96`, `liquidity`, `tick`.  
   - `PositionEvent` — Mint/Increase/Decrease/Collect (per tokenId & pool).  
@@ -76,17 +85,17 @@
 
 ### 3.1 New Tables (MVP + Compliance)
 
-- **`UserSettings(wallet PK, email, email_verified, notifications JSONB, created_at, updated_at)`** — User preferences for GDPR compliance.
-- **`AlertConfig(id, wallet, position_id, type, enabled, created_at)`** — Alert configuration per position.
+- **`UserSettings(wallet PK, email, email_verified, notifications JSONB, created_at, updated_at)`** — User preferences for GDPR compliance. **(SP3-D10)**
+- **`AlertConfig(id, wallet, position_id, type, enabled, created_at)`** — Alert configuration per position. **(SP6-D11)**
 - **`AlertLog(id, alert_id, triggered_at, code, meta JSONB)`** — **Nice to have** — Alert trigger history.
-- **`AuditLog(id, ts, actor, action, target, meta JSONB)`** — GDPR/ops audit trail.
+- **`AuditLog(id, ts, actor, action, target, meta JSONB)`** — GDPR/ops audit trail. **(SP3-D12)**
 
 ### 3.2 New Materialized Views (MVP)
 
-- **`mv_wallet_portfolio_latest(wallet_address, tvl_total_usd, positions_active, fees24h_usd, ts)`** — Wallet-level portfolio snapshot.
-- **`mv_position_overview_latest(position_id, wallet_address, pool_id, tvl_usd_current, unclaimed_fees_usd, apr_7d, range_min, range_max, current_price, strategy_code, spread_pct, band_color, position_ratio, unclaimed_fees_pct_of_tvl, claim_signal_state, ts)`** — Position-level analytics with RangeBand™ status.
-- **`mv_position_day_stats(position_id, date, price_open, price_close, range_lower_price, range_upper_price, tvl_usd_avg, fees_usd_earned, fees_usd_claimed, time_in_range_pct)`** — Daily position performance.
-- **`mv_position_events_recent(position_id, ts, event_type, token0_delta, token1_delta, fees_usd, incentives_usd, tx_hash)`** — Recent position events (7d window).
+- **`mv_wallet_portfolio_latest(wallet_address, tvl_total_usd, positions_active, fees24h_usd, ts)`** — Wallet-level portfolio snapshot. **(SP2-D01)**
+- **`mv_position_overview_latest(position_id, wallet_address, pool_id, tvl_usd_current, unclaimed_fees_usd, apr_7d, range_min, range_max, current_price, strategy_code, spread_pct, band_color, position_ratio, unclaimed_fees_pct_of_tvl, claim_signal_state, ts)`** — Position-level analytics with RangeBand™ status. **(SP2-D02)**
+- **`mv_position_day_stats(position_id, date, price_open, price_close, range_lower_price, range_upper_price, tvl_usd_avg, fees_usd_earned, fees_usd_claimed, time_in_range_pct)`** — Daily position performance. **(SP2-D03)**
+- **`mv_position_events_recent(position_id, ts, event_type, token0_delta, token1_delta, fees_usd, incentives_usd, tx_hash)`** — Recent position events (7d window). **(SP2-D04)**
 
 **Indices:** `(wallet_address)` and `(position_id,date)`; refresh ≤60s/MV.  
 **Verifiers:** `npm run verify:mv` checks row counts and column names.
@@ -99,8 +108,20 @@
 - Updated env matrix + endpoint contracts + security baseline (PROJECT_STATE.md, docs/ENVIRONMENT.md).
 - Added middleware CSP/CORS/rate-limit, health/details, entitlements, GDPR stub, consent banner, and legal pages.
 - Added MV freshness + SSR verify scripts and expanded roadmap (Roadmap_Features.md); wired verify chain.
+- **Added GECOVERED markers** to sections 1-6 (Indexer Overview, Key Components, Database Schema, Environments, Configuration, CLI Usage, API Endpoints).
+- **Added Sprint IDs** to all Delta 2025-11-16 items:
+  - Database: SP2-D01..D04 (MVs), SP3-D10, SP3-D12, SP6-D11 (Tables)
+  - API Endpoints: SP2-T50, SP2-T51, SP3-T52, SP3-T53, SP3-T54, SP6-T55
+  - DS Components: SP1-T30..T36
+  - Security & Compliance: SP3-T42, SP3-T54, SP4-T40..T42
+  - Observability: SP4-B04..B06
+  - Gating: SP3-G01, SP3-G02
+  - Verify Suite: SP4-T44..T46
 
 ## 4. Environments & Env Keys (Web = Flare-only)
+
+**GECOVERED:** ✅ Environment matrix fully documented and operational.
+
 - **Matrix (Local → Staging → Production):**  
   - **Local:** `FLARE_RPC_URL` (public ok), `DATABASE_URL` local, `DB_DISABLE=false`, `HEALTH_DB_REQUIRED=false`, `NEXT_PUBLIC_APP_URL=http://localhost:3000`, Stripe/Mailgun optional.  
   - **Staging (Railway Web):** Flare RPC only (`FLARE_RPC_URL`), `DB_DISABLE=false`, `HEALTH_DB_REQUIRED=false`, `CRON_SECRET` set, Stripe test keys (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`), Mailgun sandbox, feature flags via `FEATURE_FLAGS`, `DEGRADED_MODE` optional.  
@@ -116,6 +137,9 @@
 ---
 
 ## 5. Configuration Defaults
+
+**GECOVERED:** ✅ Indexer configuration fully documented.
+
 - `indexer.config.ts`:  
   ```ts
   rpc: { batchSize: 1000, maxConcurrency: 12, minConcurrency: 4, requestTimeout: 30_000 }
@@ -131,6 +155,9 @@
 ---
 
 ## 6. CLI Usage
+
+**GECOVERED:** ✅ CLI commands documented and operational.
+
 ```bash
 # Backfill everything (factories + nfpm + pools + state readers)
 pnpm exec tsx -r dotenv/config scripts/indexer-backfill.ts \
@@ -184,7 +211,7 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
 
 ### 7.1 API Payload Specs (v1) — New/Extended Endpoints
 
-#### Entitlements & server-side gating
+#### Entitlements & server-side gating **(SP3-T52)**
 
 **GET /api/entitlements?wallet=0x…**  
 
@@ -204,7 +231,7 @@ type Entitlements = {
 **DoD:** 200 with valid wallet → plan/status from DB (`BillingCustomer`).  
 **Verifiers:** `curl -s /api/entitlements?wallet=0x... | jq -r '.data.plan'`
 
-#### Positions overview (wallet)
+#### Positions overview (wallet) **(SP2-T50)**
 
 **GET /api/analytics/wallet/{wallet}/positions**
 
@@ -241,7 +268,7 @@ type WalletPositionsResponse = {
 **Degrade:** `code: 'INDEXER_LAGGING'` + `staleTs`.  
 **Verifiers:** Golden wallet returns ≥1 position; `jq '.data.positions|length'`.
 
-#### RangeBand preview
+#### RangeBand preview **(SP2-T51)**
 
 **GET /api/rangeband/preview?pool=0x…&min=…&max=…[&wallet=0x…]**
 
@@ -260,7 +287,7 @@ type RangeBandPreview = {
 **Degrade:** `code:'RANGEBAND_NO_DATA'`.  
 **Verifier:** `curl -s '/api/rangeband/preview?pool=0x..&min=..&max=..' | jq '.ok'`
 
-#### User settings (GDPR/notifications)
+#### User settings (GDPR/notifications) **(SP3-T53)**
 
 **GET /api/user/settings?wallet=0x…**  
 **POST /api/user/settings** (body: `{ wallet, email?, notifications? }`)
@@ -277,7 +304,7 @@ type UserSettings = {
 **DoD:** e-mail validation; unsubscribe updates notifications.  
 **Verifiers:** CRUD via cURL; `jq '.data.settings.emailVerified'`.
 
-#### GDPR delete
+#### GDPR delete **(SP3-T54)**
 
 **POST /api/user/delete** (body: `{ wallet, confirm: true }`)
 
@@ -285,7 +312,7 @@ type UserSettings = {
 **DoD:** Audit log entry + confirmation email (Mailgun mode-aware).  
 **Verifier:** Returns `{ ok:true }` and audit record exists.
 
-#### Alerts CRUD (post MVP UI, backend MVP-ready)
+#### Alerts CRUD (post MVP UI, backend MVP-ready) **(SP6-T55)**
 
 **GET/POST/PUT/DELETE /api/user/alerts**
 
@@ -313,6 +340,9 @@ type AlertRecord = {
 <!-- DELTA 2025-11-16 END -->
 
 ### 7.2 Endpoint Manifest (v1)
+
+**GECOVERED:** ✅ Core API endpoints operational.
+
 - `GET /api/health` → `{ ok, ts }` (log-only).  
 - `GET /api/health/details` → `{ ok|degrade, ts, components:{db,analytics,billing,mail,indexer}, notes:{lastRefreshTs,degradeCount} }` (no DB reads when `DB_DISABLE=true`).  
 - `GET /api/prices/current` → `{ ok|degrade, ts, prices, ttl=60s }` (Flare-only; legacy `/api/prices/ankr*` = 410).  
@@ -1570,13 +1600,13 @@ type RangeBandProps = {
 
 #### DS Components (New)
 
-- **`ErrorBoundary`** — React error boundary (page-level).
-- **`Toast`** — success/error/info queue.
-- **`Modal`** — generic modal component.
-- **`Form.*`** — text/select/checkbox with validation.
-- **`Accordion`** — FAQ component.
-- **`CookieBanner`** — GDPR cookie consent.
-- **`DataState`** — loading/empty/degrade pattern component.
+- **`ErrorBoundary`** — React error boundary (page-level). **(SP1-T30)**
+- **`Toast`** — success/error/info queue. **(SP1-T31)**
+- **`Modal`** — generic modal component. **(SP1-T32)**
+- **`Form.*`** — text/select/checkbox with validation. **(SP1-T33)**
+- **`Accordion`** — FAQ component. **(SP1-T34)**
+- **`CookieBanner`** — GDPR cookie consent. **(SP1-T35)**
+- **`DataState`** — loading/empty/degrade pattern component. **(SP1-T36)**
 
 **DoD:** Storybook entries + A11y (ARIA, focus); number format helpers (USD, pct, K/M/B).
 
@@ -1588,11 +1618,11 @@ type RangeBandProps = {
 
 <!-- DELTA 2025-11-16 START -->
 
-- **CORS:** Allow only `app.liquilab.io`, `staging.liquilab.io`, `localhost`.
-- **Rate limiting:** Redis-backed; 10 req/min/IP public routes, 100 req/min/wallet user routes. 429 JSON response.
-- **Cookie consent:** `CookieBanner` + `/legal/cookies` (consent in `localStorage: ll_cookies_accepted`).
-- **Legals:** `/legal/privacy`, `/legal/terms`, `/legal/cookies` required before launch.
-- **GDPR delete:** Server-side flow via `/api/user/delete` + `AuditLog` entry + email confirmation.
+- **CORS:** Allow only `app.liquilab.io`, `staging.liquilab.io`, `localhost`. **(SP4-T40)**
+- **Rate limiting:** Redis-backed; 10 req/min/IP public routes, 100 req/min/wallet user routes. 429 JSON response. **(SP4-T41)**
+- **Cookie consent:** `CookieBanner` + `/legal/cookies` (consent in `localStorage: ll_cookies_accepted`). **(SP4-T42)**
+- **Legals:** `/legal/privacy`, `/legal/terms`, `/legal/cookies` required before launch. **(SP3-T42)**
+- **GDPR delete:** Server-side flow via `/api/user/delete` + `AuditLog` entry + email confirmation. **(SP3-T54)**
 
 <!-- DELTA 2025-11-16 END -->
 
@@ -1604,12 +1634,12 @@ type RangeBandProps = {
 
 #### Staging Environment
 
-- **Required:** Separate Railway project + separate DB + Stripe TEST keys + `MAILGUN_MODE='degrade'`.
+- **Required:** Separate Railway project + separate DB + Stripe TEST keys + `MAILGUN_MODE='degrade'`. **(SP4-B06)**
 
 #### Observability
 
-- **Sentry:** Front+back required.
-- **Uptime:** Monitor on `/api/health`.
+- **Sentry:** Front+back required. **(SP4-B04)**
+- **Uptime:** Monitor on `/api/health`. **(SP4-B05)**
 - **Logging:** JSON format (`ts`, `component`, `severity`, `code`, `requestId`).
 
 #### Backups
@@ -1642,7 +1672,7 @@ type RangeBandProps = {
 - **`/pricing`:** Always visible; CTAs depend on billing health/plan.
 - **`/account`:** Premium/Pro only; `past_due` = read-only + banner.
 
-**Enforcement:** FE uses `usePlanGating()`; BE validates via `/api/entitlements` (no client-override).
+**Enforcement:** FE uses `usePlanGating()`; BE validates via `/api/entitlements` (no client-override). **(SP3-G01 + SP3-G02)**
 
 <!-- DELTA 2025-11-16 END -->
 
@@ -2060,7 +2090,7 @@ export function StaleIndicator({ staleTs }: { staleTs?: number }) {
 
 #### New Verification Checks
 
-**1. `verify:a11y` — Accessibility Audit**
+**1. `verify:a11y` — Accessibility Audit** **(SP4-T44)**
 
 ```javascript
 // scripts/verify-a11y/axe-check.mjs
@@ -2089,7 +2119,7 @@ for (const route of routes) {
 - Soft-fail local (log warnings), hard-fail staging/CI
 - Integrated in `npm run verify`
 
-**2. `verify:og` — Open Graph Tags**
+**2. `verify:og` — Open Graph Tags** **(SP4-T45)**
 
 ```javascript
 // scripts/verify-og/meta-tags.mjs
@@ -2111,7 +2141,7 @@ for (const page of pages) {
 - Checks asset existence (`/media/brand/og-image.png`)
 - Per-route validation (title, description, image)
 
-**3. `verify:icons-path` — Token Icon Paths + SSR**
+**3. `verify:icons-path` — Token Icon Paths + SSR** **(SP4-T46)**
 
 ```javascript
 // scripts/verify-icons/ssr-markers.mjs
