@@ -108,6 +108,7 @@
 - Updated env matrix + endpoint contracts + security baseline (PROJECT_STATE.md, docs/ENVIRONMENT.md).
 - Added middleware CSP/CORS/rate-limit, health/details, entitlements, GDPR stub, consent banner, and legal pages.
 - Added MV freshness + SSR verify scripts and expanded roadmap (Roadmap_Features.md); wired verify chain.
+- Added staging deploy workflow + merge gate, staging env notes (Stripe TEST, Mailgun degrade, Sentry DSN), and uptime/Sentry test docs.
 - **Added GECOVERED markers** to sections 1-6 (Indexer Overview, Key Components, Database Schema, Environments, Configuration, CLI Usage, API Endpoints).
 - **Added Sprint IDs** to all Delta 2025-11-16 items:
   - Database: SP2-D01..D04 (MVs), SP3-D10, SP3-D12, SP6-D11 (Tables)
@@ -124,10 +125,10 @@
 
 - **Matrix (Local → Staging → Production):**  
   - **Local:** `FLARE_RPC_URL` (public ok), `DATABASE_URL` local, `DB_DISABLE=false`, `HEALTH_DB_REQUIRED=false`, `NEXT_PUBLIC_APP_URL=http://localhost:3000`, Stripe/Mailgun optional.  
-  - **Staging (Railway Web):** Flare RPC only (`FLARE_RPC_URL`), `DB_DISABLE=false`, `HEALTH_DB_REQUIRED=false`, `CRON_SECRET` set, Stripe test keys (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`), Mailgun sandbox, feature flags via `FEATURE_FLAGS`, `DEGRADED_MODE` optional.  
+  - **Staging (Railway Web):** Flare RPC only (`FLARE_RPC_URL`), `DB_DISABLE=false`, `HEALTH_DB_REQUIRED=false`, `CRON_SECRET` set, Stripe **TEST** keys (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`), Mailgun sandbox (`MAILGUN_MODE=degrade`), Sentry DSN (staging), feature flags via `FEATURE_FLAGS`, `DEGRADED_MODE` optional.  
   - **Production (Railway Web):** Flare RPC only; `HEALTH_DB_REQUIRED=false` to avoid false reds when DB is intentionally paused for web; `CRON_SECRET` required; `DEGRADED_MODE=0`; HSTS on; rate-limit + CORS enforced.  
   - **Worker / Indexer (Railway Worker):** May use `ANKR_ADV_API_URL`/`ANKR_ADV_API_KEY` in addition to `FLARE_RPC_URL`; `DATABASE_URL` required; `HEALTH_DB_REQUIRED=true`.  
-- **Server env (core):** `FLARE_RPC_URL`, `FLARE_WS_URL`, `FLARE_RPC_URLS`, `ENOSYS_V3_FACTORY`, `SPARKDEX_V3_FACTORY`, `ENOSYS_NFPM`, `SPARKDEX_NFPM`, `DATABASE_URL`, `RAW_DB`, `DB_DISABLE` (web may set `true`), `HEALTH_DB_REQUIRED` (web=`false`), `CRON_SECRET`, `FEATURE_FLAGS`, `DEGRADED_MODE`, `WALLET_REQUIRED`.  
+- **Server env (core):** `FLARE_RPC_URL`, `FLARE_WS_URL`, `FLARE_RPC_URLS`, `ENOSYS_V3_FACTORY`, `SPARKDEX_V3_FACTORY`, `ENOSYS_NFPM`, `SPARKDEX_NFPM`, `DATABASE_URL`, `RAW_DB`, `DB_DISABLE` (web may set `true`), `HEALTH_DB_REQUIRED` (web=`false`), `CRON_SECRET`, `FEATURE_FLAGS`, `DEGRADED_MODE`, `WALLET_REQUIRED`, `SENTRY_DSN` (staging/prod).  
 - **Billing (EUR naming):** `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PREMIUM_EUR`, `STRIPE_PRICE_PRO_EUR`, `STRIPE_PRICE_ADDON5_EUR`, `STRIPE_PRICE_ALERTS5_EUR`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_LL_STRIPE_PRICE_PREMIUM_BASE_5`, `NEXT_PUBLIC_LL_STRIPE_PRICE_POOL_SLOT`, `NEXT_PUBLIC_LL_STRIPE_PRICE_ALERTS_PACK_5`.  
 - **Mail:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_FROM`, `MAILGUN_MODE` (sandbox/live).  
 - **Client (`NEXT_PUBLIC_*`):** `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_FLARE_RPC_URL`, `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_CHAIN_ID`, `NEXT_PUBLIC_FEATURE_FLAGS`, `NEXT_PUBLIC_LL_STRIPE_PRICE_*`, `NEXT_PUBLIC_ENABLE_BLAZESWAP`, `NEXT_PUBLIC_KOEN_WALLET`.  
@@ -367,6 +368,17 @@ type AlertRecord = {
 - **Verify suite:** `npm run verify` = `lint:ci && scan:prices && verify:api:prices && verify:pricing && verify:icons && verify:api:analytics && verify:billing && verify:mailgun && verify:mv && verify:ssr`.  
 - **Additional verifiers:** `verify:mv` (MV freshness), `verify:ssr` (SSR HTML markers), billing/mailgun scripts remain soft-fail locally but required on staging/prod handoff.  
 - **Ops checks:** cron guarded by `CRON_SECRET`; rate-limit active on `/api/*` (60 req/min per IP, skipped on localhost); CORS restricted to localhost/staging/prod.
+
+### 7.7 Environments & Merge Gates
+- **Staging deploy:** via GitHub Actions workflow `Staging Deploy` (trigger: PR base `staging` or label `staging`; runs `npm run verify` then Railway deploy to “Liquilab (staging project)”).  
+- **Status check:** `Staging Deploy` must be green before merge.  
+- **Uptime:** external monitor hits `GET /api/health` on staging every 5 minutes; alert to ops channel.
+
+### 7.8 Sentry test (manual, docs-only)
+- Staging curl to emit test error (once Sentry SDK wired):  
+  ```bash
+  curl -X POST https://staging.liquilab.io/api/sentry-test || true
+  ```
 
 ### 7.5 Sprints (S0…S4)
 - **S0 (SSoT Δ-2025-11-16):** Env matrix + endpoint contracts + consent/legal stubs + DoD/verify matrix.  
@@ -1541,6 +1553,65 @@ npm run icons:fetch -- --only-missing --concurrency=8
 - Mailgun: degrade-safe provider (`MAILGUN_MODE`, `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_BASE_URL`, `MAILGUN_FROM_DEFAULT`, `MAILGUN_TEST_RECIPIENT`) plus /api/mail/test + verify:mailgun to keep email flows from breaking the UI.
 
 ## Changelog — 2025-11-16
+
+### Scope Decisions Finalized: Option B (Balanced MVP, 18 weeks) — APPROVED ✅
+
+**Date:** 2025-11-16  
+**Decision Maker:** Product Owner + Engineering Lead  
+**Status:** 🔒 LOCKED
+
+**Scope Decision Applied:** Option B (Balanced MVP, 18 weeks)
+
+**5 Decisions Finalized:**
+
+1. **SP5 Polish Components → KEEP ALL in MVP (moved to SP1)**
+   - Tasks: ErrorBoundary (SP1-T30), Toast (SP1-T31), Modal (SP1-T32), Forms (SP1-T33), DataState (SP1-T36)
+   - Rationale: Professional polish worth 2-week delay (16w → 18w MVP). ErrorBoundary required for Sentry integration, Modal required for GDPR delete flow, Forms required for Account page.
+   - Impact: +68h dev time, +2 weeks timeline
+
+2. **FAQ Page (SP1-T13) → MOVE TO POST-MVP**
+   - Alternative: External help center (Notion/Intercom) for MVP launch
+   - Impact: -16h dev time (2 days saved)
+
+3. **Internal Status Panel (SP4-T43) → KEEP IN SP4**
+   - Rationale: Low effort (8h), high value for ops visibility
+   - Impact: +8h dev time (1 day)
+
+4. **EUR Pricing Label (SP3-B02) → KEEP IN SP3**
+   - Rationale: EU market transparency, competitive advantage
+   - Impact: +8h dev time (1 day)
+
+5. **GDPR Delete Flow (SP3-T54 + SP3-T26) → FULL IMPLEMENTATION**
+   - Rationale: Legal requirement (GDPR Art. 17 Right to be Forgotten)
+   - Impact: No change (already planned in SP3)
+
+**Final MVP Scope (18 weeks):**
+- **S0 (1w):** Infrastructure + CI/CD + verify suite
+- **SP1 (3w):** Tokens + DS + Hero + OG + Typography + 5 polish components (absorbed from SP5)
+- **SP2 (2-3w):** 4 MVs + Analytics APIs + Charts
+- **SP3 (3w):** Billing + Legal + Account + EUR label
+- **SP4 (2w):** Sentry + Uptime + Status panel + CookieBanner
+- **SP5:** Absorbed in SP1 ✅
+- **SP6:** Deferred to Post-MVP ✅
+- **Post-MVP:** FAQ, Alerts, Reports, Leaderboard, Onboarding
+
+**Documents Created:**
+1. `SCOPE_DECISIONS_FINALIZED.md` — Locked decisions + approval sign-off
+2. `SCOPE_VALIDATION_REPORT.md` — 8 items flagged + 5 decision points analyzed
+3. `SPRINT_ROADMAP_EXECUTIVE_SUMMARY.md` — Updated timeline (18w) + cost estimates
+4. `TASK_INTAKE_SPRINTS.md` — 62 tasks (54 MVP + 8 Post-MVP), copy/paste ready
+
+**Critical Path:** S0 (1w) → SP1 (3w, incl. polish) → SP2 (2-3w) → SP3 (3w) → SP4 (2w) + Buffer (3-4w)
+
+**Go-Live Target:** Week 18 (estimated mid-Q2 2025 if starting now)
+
+**Next Actions (Week 1):**
+- Kick off S0-OPS01 (Staging environment setup) — **BLOCKER** for SP1
+- Start legal drafting (external lawyer, Privacy/Terms/Cookies) — **HIGH RISK** in SP3
+- Test Figma → Style Dictionary export (validate SP1-T37 feasibility)
+- Setup Sentry + UptimeRobot accounts (validate SP4-B04/B05 feasibility)
+
+---
 
 ### Delta 2025-11-16: Sprint Roadmap Foundation
 
