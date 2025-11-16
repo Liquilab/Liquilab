@@ -2499,3 +2499,6 @@ Prevents broken code from reaching production. Catches integration issues early 
 **Post-SP1:** Implement `src/lib/format/currency.ts` met SSoT currency/number helpers (formatUSD, formatEUR, formatNumber, formatPercent) en refactor bestaande inline formattering naar deze centrale helpers. Verifieer met visual regression test op demo pools table (controleer: "0.00" voor zero fees, "—" voor null APR, tabular-nums in numerieke kolommen).
 
 ---
+
+## Changelog — 2025-11-17
+- S0: Staging Dockerfile hotfix (removed BuildKit cache mounts), start via start.sh, docker-build CI ready.
