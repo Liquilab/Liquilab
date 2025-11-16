@@ -1,55 +1,29 @@
-# Build stage
-FROM node:20-alpine AS builder
+# syntax=docker/dockerfile:1
 
-# Cache buster - increment this manually when changes aren't picked up
-# IMPORTANT: Update this value (v0.1.X) whenever Railway doesn't deploy your changes
-ARG CACHE_BUST=v0.1.7
-
+# ---- deps ----
+FROM node:20-alpine AS deps
 WORKDIR /app
-
-# Copy package files
+# toolchain voor native deps (bufferutil/utf-8-validate e.d.)
+RUN apk add --no-cache python3 make g++
 COPY package*.json ./
-
-# Copy Prisma schema BEFORE npm install (needed for postinstall hook)
 COPY prisma ./prisma
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=optional
 
-# Install dependencies (use install instead of ci to handle lock file discrepancies)
-RUN npm install
-
-# Copy rest of source code
-COPY . .
-
-# FORCE clean build - remove any cached .next folder
-RUN rm -rf .next
-
-# Build Next.js app (Prisma Client already generated via postinstall hook)
-# Set NODE_OPTIONS to increase memory limit and disable parallelism
-ENV NODE_OPTIONS="--max-old-space-size=2048"
-RUN npm run build
-
-# Production stage
-FROM node:20-alpine AS runner
-
+# ---- build ----
+FROM node:20-alpine AS build
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN rm -rf .next && npm run build
 
-# Copy necessary files from builder
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/start.sh ./start.sh
-
-# Make start script executable
-RUN chmod +x ./start.sh
-
-# Set production environment
+# ---- run ----
+FROM node:20-alpine AS runner
+WORKDIR /app
 ENV NODE_ENV=production
-
-# Expose port (Railway sets this dynamically)
+COPY --from=build /app ./
+# gebruik shell-script zodat $PORT wordt geëxpand
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
 EXPOSE 3000
-
-# Start the app
 CMD ["./start.sh"]
