@@ -2354,6 +2354,117 @@ GET /api/analytics/leaderboard?metric=tvl|fees|apr&period=7d|30d&limit=100
 
 ---
 
+<!-- DELTA 2025-11-16 START -->
+
+## GUARDRAILS (Niet-Onderhandelbaar)
+
+### RangeBand™ SSoT
+
+**Regel:** FE berekent GEEN status. `bandColor` en `positionRatio` komen **uitsluitend** uit data-laag.
+
+**Enforcement:**
+- API endpoint `/api/analytics/wallet/{wallet}/positions` levert `bandColor` en `positionRatio` per positie
+- FE `RangeBand` component accepteert deze als props, berekent niets
+- Code review: reject elke PR die RangeBand logica in FE introduceert
+
+**Rationale:**  
+Single Source of Truth voorkomt divergentie tussen dashboard/API. Data-laag heeft authoritative pool state (current tick, liquidity). FE is presentational layer only.
+
+**Verifier:**
+```bash
+# Check: no RangeBand calculation in components
+grep -r "calculateBandColor\|calculatePositionRatio" components/
+# Should return 0 matches
+```
+
+### Flare-Only Runtime
+
+**Regel:** Web/runtime blijft Flare-only. Prijzen via unified API. Token-icons local-first met fallback. SSR-zichtbaar.
+
+**Enforcement:**
+- No ANKR endpoints in `/pages/api/*` (blocked by middleware)
+- Token prices via `/api/prices/current` (CoinGecko backend, cached)
+- Token icons: `/public/media/tokens/*.svg|png|webp` → SSR `<img>`
+- No dynamic imports for critical assets (icons, fonts, hero)
+
+**Rationale:**  
+Simplifies deployment (één chain), reduces external dependencies, improves SSR performance (no client-only rendering).
+
+**Verifier:**
+```bash
+# Check: no ANKR in API routes
+grep -r "ankr" pages/api/
+# Should return 0 matches (except legacy 410 responses)
+
+# Check: icons SSR-visible
+curl http://localhost:3000/ | grep '/media/tokens/'
+# Should find token icon paths in HTML
+```
+
+### Compliance (Pre-Launch Blocker)
+
+**Regel:** `/legal/{privacy,terms,cookies}` + `CookieBanner` + `/api/entitlements` + Sentry + Uptime VERPLICHT voor launch.
+
+**Enforcement:**
+- `/legal/*` routes return 200 (not 404)
+- `CookieBanner` appears on first visit (`localStorage.ll_cookies_accepted` check)
+- `/api/entitlements` server-authoritative (no client-override van plan)
+- Sentry active: test error logs to dashboard
+- Uptime monitor: `/api/health` checked every 5min
+
+**Rationale:**  
+GDPR compliance (cookie consent, privacy policy), billing integrity (server-side entitlements), operational visibility (Sentry/uptime).
+
+**Verifier:**
+```bash
+# Legal pages exist
+curl -I https://app.liquilab.io/legal/privacy | grep "200 OK"
+curl -I https://app.liquilab.io/legal/terms | grep "200 OK"
+curl -I https://app.liquilab.io/legal/cookies | grep "200 OK"
+
+# Entitlements server-authoritative
+curl '/api/entitlements?wallet=0xTEST' | jq '.data.plan'
+# Should return plan from DB, not client query param
+
+# Sentry active
+curl /api/sentry-test
+# Should return 500 + Sentry event ID
+
+# Uptime monitor configured
+# Manual check: UptimeRobot/Pingdom dashboard shows liquilab.io monitored
+```
+
+### Brand Kleurkaders
+
+**Regel:** Primair Electric Blue (#3B82F6), Aqua accent (#1BE8D2), achtergrond #0B1530. Tabular numerals voor KPI/pricing.
+
+**Enforcement:**
+- Design tokens export: `--brand-primary`, `--brand-accent`, `--bg-canvas`
+- All brand colors via CSS vars (no hardcoded hex in components)
+- Numeric values use `.numeric` class → `font-variant-numeric: tabular-nums`
+- Verify via `npm run verify:brand` + `npm run verify:typography`
+
+**Rationale:**  
+Consistent brand identity, stable numeric layout (prevents column width jitter in tables).
+
+**Verifier:**
+```bash
+# Brand tokens present
+grep -E "(--brand-primary|--brand-accent|--bg-canvas)" src/styles/tokens.css
+
+# No hardcoded brand colors in components
+grep -r "#3B82F6\|#1BE8D2\|#0B1530" components/
+# Should return 0 matches (all via CSS vars)
+
+# Tabular numerals enforced
+npm run verify:typography
+# Should exit 0 (or warnings only, no hard failures locally)
+```
+
+<!-- DELTA 2025-11-16 END -->
+
+---
+
 ## DELIVERY
 
 **Auteur:** Codebase analyse + team intake synthesis
@@ -2486,6 +2597,17 @@ SP4-B04 (Sentry) + SP4-B05 (Uptime)
 
 **Advies — SP1 LOCKED Goals Next Step:**  
 Start immediately with SP1-T37 (Figma Foundations & Tokens) — critical path blocker for all subsequent design/UI work. Export tokens (Quicksand/Inter/tabular-nums) first, then validate wave-hero rendering (SP1-T40) at all breakpoints before implementing DS components (SP1-T38). OG assets (SP1-T39) can run parallel post-tokens.
+
+**Guardrails Check:**  
+Before merging any SP1 PR, verify:
+- [ ] RangeBand™: `grep -r "calculateBandColor" components/` → 0 matches (FE ≠ berekenen)
+- [ ] Flare-only: `grep -r "ankr" pages/api/` → 0 matches (no ANKR endpoints)
+- [ ] Brand tokens: `npm run verify:brand` → exit 0
+- [ ] Tabular numerals: `npm run verify:typography` → warnings only (no hard fail locally)
+- [ ] STAGING gate: deploy green + Sentry active + Uptime monitor + verify suite pass
+
+**Merge Sequence:**  
+SP1-T37 (tokens) → SP1-T38 (DS specs) → SP1-T40 (wave-hero) → SP1-T39 (OG assets). Each PR requires STAGING checks pass.
 
 <!-- DELTA 2025-11-16 END -->
 
