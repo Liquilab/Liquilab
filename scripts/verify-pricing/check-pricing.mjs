@@ -39,9 +39,9 @@ for (const [key, val] of Object.entries(expected.rangebandAlerts)) {
   if (config.rangebandAlerts?.[key] !== val) fail(`rangebandAlerts.${key} expected ${val} but found ${config.rangebandAlerts?.[key]}`);
 }
 
-// Only ban pricing literals that appear as actual prices (with $ or €), not standalone numbers
-// Allow "1.99" in documentation when explaining legacy pricing
-const bannedLiterals = ['$1.99', '€1.99'];
+// Block ALL legacy pricing references - new bundle-based pricing only ($14.95/$24.95 for 5 pools + bundles)
+// No exceptions - legacy "$1.99 per pool/month" must not appear anywhere
+const bannedLiterals = ['$1.99', '€1.99', '1.99 per pool', '1.99/month', '1.99 per month'];
 const whitelistDirs = new Set(['.git', 'node_modules', '.next', 'Finance', '_archive', 'docs', 'public', 'Documentatie', 'backups', 'brandguide', '1x']);
 const whitelistExts = new Set(['.pdf', '.docx', '.csv', '.json.bak', '.ndjson']);
 

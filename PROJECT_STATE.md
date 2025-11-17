@@ -55,7 +55,10 @@
 - **Data paths & artefacts:**  
   - `data/raw/*.ndjson`, `data/enriched/*.json`, `logs/indexer-YYYYMMDD.log`.  
   - Configuration: `data/config/startBlocks.json`, optional `data/config/pools.allowlist.json`.  
-  - Progress snapshots: `data/indexer.progress.json` (JSON with phase, stream, window).  
+  - Progress snapshots: `data/indexer.progress.json` (JSON with phase, stream, window).
+- **Config files:**  
+  - `config/pricing.json` — canonical pricing config used by `/pricing`, hero, and billing UI (SSoT for all pricing).  
+  - `src/lib/billing/pricing.ts` — pricing calculation helpers and plan configuration (references `config/pricing.json`).  
 - **Resilience:** confirmation depth=2, reorg trim via checkpoints, autoslow with exponential backoff + jitter on 429, concurrency downshifts on repeated failures.
 
 ---
@@ -142,7 +145,15 @@
   - ✅ Sentry test: `POST /api/sentry-test` returns `{ ok: true, sentry: true, sentryConfigured: true, env: "staging", eventId: "..." }` - Sentry events successfully logged to dashboard
   - ✅ DB seed verify: Script functional - connects to staging DB, checks table row counts. Production database successfully copied to staging (607k PoolEvent, 233k PositionEvent, 79k PositionTransfer rows). `analytics_market_metrics_daily` marked as optional (non-blocking) since it may be empty in production.
   - ✅ Stripe TEST verify: TEST keys validated successfully when run in Railway environment (`railway run npm run verify:billing:stripe`). Keys are correct and functional in staging deployment.
-- **Status:** S0-OPS01 repo/config side complete and deployed to staging. Sentry configured and operational. DB verify script functional - staging DB seeded with production data. Stripe TEST keys validated and working in Railway environment.
+- **Status:** S0-OPS01 complete and deployed to staging. S0-OPS02 complete - CI verify suite workflow active, branch protection configured for staging/main. Sentry configured and operational. DB verify script functional - staging DB seeded with production data. Stripe TEST keys validated and working in Railway environment.
+- **SP1-T11 Completion (2025-11-17):**
+  - `pages/index.tsx`: Home hero with water-wave background (fully visible), RangeBand demo, table/grid toggle
+  - `pages/api/demo/pools.ts`: Demo pools endpoint returning DemoPoolItem format with RangeBand data (rangeMin, rangeMax, currentPrice, status, strategy)
+  - `src/styles/globals.css`: Hero wave CSS with crisp rendering, hero-section styling
+  - Hero renders with LiquiLab brand, water-wave visible in bottom 50% viewport
+  - Demo table/grid toggle works with data from `/api/demo/pools`
+  - RangeBand demo cells show plausible status/fees using existing RangeBand data contracts
+  - HTML includes RangeBand text and token icons sourced via `/media/tokens/*.svg`
 
 ## 4. Environments & Env Keys (Web = Flare-only)
 
@@ -177,6 +188,36 @@
 - Railway / production runtime uses `pnpm run start` (`next start -p $PORT`).  
 - Autoslow policy: base delay `ceil(1000 / rps)` with cap 15 s jitter; concurrency reduces after 3 consecutive failures.  
 - Reorg mitigation: before each window the follower checks `windowStart-1`; if mismatch, entries ≥ reorgBlock trimmed and checkpoint rewound.
+
+### 5.1 Canonical Pricing — DO NOT OVERRIDE IN COPY
+
+**Single Source of Truth:** `config/pricing.json` and `src/lib/billing/pricing.ts` are the **single technical SSoT** for all pricing across `/pricing`, hero, emails, billing UI, and documentation.
+
+**Pricing Model:**
+
+- **Visitor:** Free (read-only, limited features, demo data only).
+
+- **Premium:**
+  - $14.95/month for 5 pools included (1 bundle).
+  - Additional bundles: $9.95/month per extra 5 pools.
+
+- **Pro:**
+  - $24.95/month for 5 pools included (1 bundle).
+  - Additional bundles: $14.95/month per extra 5 pools.
+
+- **RangeBand™ Alerts add-on:**
+  - $2.49/month per 5 pools (applies to Premium and Pro).
+  - Scales with pool bundles (1 alerts pack per 5 pools).
+
+**Legacy Pricing — REMOVED:**
+
+- The previous "$1.99 per pool/month" pricing model has been completely replaced by the bundle-based model above. All legacy pricing references have been removed from code and documentation.
+
+**Enforcement:**
+
+- All pricing displays (`/pricing`, hero CTAs, billing emails, checkout UI) must read from `config/pricing.json` or `src/lib/billing/pricing.ts`.
+- No hardcoded pricing values in components or pages.
+- Verify script `npm run verify:pricing` enforces pricing consistency.
 
 ---
 
@@ -395,8 +436,9 @@ type AlertRecord = {
 - **Ops checks:** cron guarded by `CRON_SECRET`; rate-limit active on `/api/*` (60 req/min per IP, skipped on localhost); CORS restricted to localhost/staging/prod.
 
 ### 7.7 Environments & Merge Gates
-- **Staging deploy:** via GitHub Actions workflow `Staging Deploy` (trigger: PR base `staging` or label `staging`; runs `npm run verify` then Railway deploy to “Liquilab (staging project)”).  
-- **Status check:** `Staging Deploy` must be green before merge.  
+- **Staging deploy:** via GitHub Actions workflow `Staging Deploy` (trigger: PR base `staging` or label `staging`; runs `npm run verify` then Railway deploy to "Liquilab (staging project)").  
+- **Branch protection:** Configured for `staging` and `main` branches requiring "verify" status check (from `CI — Verify Suite` workflow) to pass before merging. PRs are blocked until the verify suite completes successfully.
+- **Status check:** `CI — Verify Suite / verify` must be green before merge (enforced by branch protection rules).  
 - **S0-OPS01 DoD:** Staging environment must pass:
   - ✅ Sentry test event logged (`POST /api/sentry-test`) - **COMPLETE**
   - ✅ DB seed validation (`npm run verify:db:staging`) - **COMPLETE** (production data copied: 607k PoolEvent, 233k PositionEvent, 79k PositionTransfer)
@@ -1722,22 +1764,46 @@ See archives in /docs/changelog/.
 
 <!-- DELTA 2025-11-16 START -->
 
-#### RangeBand™ Props (SSoT)
+#### RangeBand™ Canonical Frontend Implementation
+
+**Single Source of Truth:** `src/components/pools/PoolRangeIndicator.tsx` exports the canonical `RangeBand` component responsible for all RangeBand UI across the application.
+
+**Component Props (SSoT):**
 
 ```ts
 type RangeBandProps = {
-  currentPrice: number;
-  minPrice: number; maxPrice: number;
-  strategyCode: 'AGR'|'BAL'|'CONS';
-  spreadPct: number;
-  bandColor: 'GREEN'|'ORANGE'|'RED'|'UNKNOWN';
-  positionRatio: number | null; // 0..1, null when unknown
-  variant: 'compact'|'large';
-  tooltip?: string;
+  min?: number | null;
+  max?: number | null;
+  current?: number | null;
+  status: 'in' | 'near' | 'out';
+  token0Symbol: string;
+  token1Symbol: string;
+  className?: string;
+  explainer?: boolean;
 };
 ```
 
-**Rules:** `bandColor`/`positionRatio` exclusively from data layer; FE calculates no logic.
+**Data Contract (from backend/analytics):**
+
+The RangeBand component accepts RangeBand data fields that are produced exclusively by the backend/data/analytics layer:
+
+- `bandColor`: 'GREEN'|'ORANGE'|'RED'|'UNKNOWN' — computed by analytics layer (e.g., `mv_position_overview_latest.band_color`).
+- `positionRatio`: number | null (0..1) — computed by analytics layer (e.g., `mv_position_overview_latest.position_ratio`).
+- `strategyCode`: 'AGR'|'BAL'|'CONS' — derived from range width in analytics layer.
+- `spreadPct`: number — computed from range bounds in analytics layer.
+- `currentPrice`, `minPrice`, `maxPrice`: number — provided by data layer.
+
+**Frontend MUST NOT Compute RangeBand Status:**
+
+- **Rule:** `bandColor` and `positionRatio` are produced **only** by the backend/data/analytics layer (materialized views, API endpoints).
+- **UI responsibility:** The RangeBand component may only map `bandColor` to CSS classes and labels (e.g., "In range", "Near band", "Out of range").
+- **No FE calculations:** Frontend components must not recalculate `bandColor`, `positionRatio`, or strategy classification from price/range data.
+
+**Usage Requirements:**
+
+- Any view that shows RangeBand information (home hero/demo, pool tables, pool detail, `/rangeband`) must use the canonical `RangeBand` component from `src/components/pools/PoolRangeIndicator.tsx`.
+- No custom ad-hoc markup or duplicate RangeBand implementations.
+- Verify script `scripts/verify-brand/check-rangeband.mjs` (or equivalent) enforces that RangeBand UI is only implemented via this DS component and that no other component recalculates `bandColor` or `positionRatio`.
 
 #### DS Components (New)
 
@@ -2562,6 +2628,8 @@ Prevents broken code from reaching production. Catches integration issues early 
 
 ## Advies
 
+**SP1-T11 Complete (2025-11-17):** Home hero + demo table/grid implemented. Hero renders with water-wave background (fully visible), RangeBand demo, table/grid toggle working with `/api/demo/pools` endpoint. RangeBand demo cells show plausible status/fees using existing data contracts. Files: `pages/index.tsx`, `pages/api/demo/pools.ts`, `src/styles/globals.css`.
+
 **Next Step (SP1 Pre-merge):** Setup staging environment (Railway + DB + Sentry + Uptime) en configureer merge gate voor SP1 PRs. Implement SP1-T37 (Figma Foundations & Tokens) immediately na staging activering. Validate tokens export via `npm run tokens:build` + `npm run verify:brand` before proceeding to wave-hero (SP1-T40) implementation.
 
 **Rationale:** Staging gate prevents broken SP1 brand changes from reaching production. Tokens export (Quicksand/Inter/tabular-nums) must complete first as dependency for all subsequent design/UI work (T38/T40/T39). Tabular numerals via `.numeric` class enforced by `verify:typography` ensures stable layout in tables/dashboards.
@@ -2575,3 +2643,7 @@ Prevents broken code from reaching production. Catches integration issues early 
 - S0 (staging): Dockerfile zonder BuildKit cache-mounts + start.sh; staging Docker build gestabiliseerd.
 - S0-OPS01: Sentry server init + smoke-route; Dockerfile/start.sh/.dockerignore geborgd; ops runbook toegevoegd voor staging reset en health.
 - Changelog — 2025-11-17: Added Sentry STAGING test endpoint /api/sentry-test using @sentry/node helper and documented env vars.
+- Changelog — 2025-11-17: Aligned pricing SSoT (config/pricing.json + billing helper), refreshed hero/pricing UI, added pricing/rangeband verify checks, and introduced canonical RangeBand DS component.
+- S0-OPS02: CI — Verify Suite added (fail-hard: env/pricing/icons/brand; soft: billing/a11y); workflow `CI — Verify Suite` runs `npm run verify:ci` on PRs to staging/main (excludes API checks that require running server). Branch protection configured for staging and main branches requiring "verify" status check to pass before merging. Test PR #12 created to validate protection rules. PR #13 fixes CI workflow to skip API checks (verify:api:prices, verify:api:analytics) that require a running server.
+- SP1-T11: Home hero + demo table/grid implemented. Hero renders with water-wave background (fully visible), RangeBand demo, table/grid toggle working with `/api/demo/pools` endpoint. RangeBand demo cells show plausible status/fees using existing data contracts. Files: `pages/index.tsx`, `pages/api/demo/pools.ts`, `src/styles/globals.css`.
+- **Canonical Pricing & RangeBand SSoT (2025-11-17):** Documented canonical pricing model (Visitor/Premium/Pro/RangeBand Alerts) with `config/pricing.json` and `src/lib/billing/pricing.ts` as single source of truth. Codified RangeBand DS component (`src/components/pools/PoolRangeIndicator.tsx`) as canonical implementation with explicit "no FE RangeBand logic" rule — `bandColor` and `positionRatio` must come from backend/analytics layer only. Files: `PROJECT_STATE.md`.
