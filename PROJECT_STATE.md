@@ -398,11 +398,11 @@ type AlertRecord = {
 - **Staging deploy:** via GitHub Actions workflow `Staging Deploy` (trigger: PR base `staging` or label `staging`; runs `npm run verify` then Railway deploy to “Liquilab (staging project)”).  
 - **Status check:** `Staging Deploy` must be green before merge.  
 - **S0-OPS01 DoD:** Staging environment must pass:
-  - Sentry test event logged (`POST /api/sentry-test`)
-  - DB seed validation (`npm run verify:db:staging`)
-  - Stripe TEST keys verified (`npm run verify:billing:stripe`)
-  - Uptime monitor configured (`docs/ops/UPTIME_MONITOR.md`)
-  - Verify suite green (`npm run verify`)
+  - ✅ Sentry test event logged (`POST /api/sentry-test`) - **COMPLETE**
+  - ✅ DB seed validation (`npm run verify:db:staging`) - **COMPLETE** (production data copied: 607k PoolEvent, 233k PositionEvent, 79k PositionTransfer)
+  - ⚠️ Stripe TEST keys verified (`npm run verify:billing:stripe`) - **KEYS PRESENT** in Railway but validation failed (may need key refresh)
+  - ⏳ Uptime monitor configured (`docs/ops/UPTIME_MONITOR.md`) - **DOCUMENTED**, needs external service setup (UptimeRobot/Pingdom)
+  - ⏳ Verify suite green (`npm run verify`) - **REQUIRES RUNNING SERVER** for API endpoint checks
 
 ### 7.8 Sentry test (S0-OPS01)
 - **Endpoint:** `POST /api/sentry-test`
