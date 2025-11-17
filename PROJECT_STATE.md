@@ -401,7 +401,7 @@ type AlertRecord = {
   - ✅ Sentry test event logged (`POST /api/sentry-test`) - **COMPLETE**
   - ✅ DB seed validation (`npm run verify:db:staging`) - **COMPLETE** (production data copied: 607k PoolEvent, 233k PositionEvent, 79k PositionTransfer)
   - ✅ Stripe TEST keys verified (`npm run verify:billing:stripe`) - **VALIDATED** in Railway environment. Keys work correctly when executed in Railway service context.
-  - ⏳ Uptime monitor configured (`docs/ops/UPTIME_MONITOR.md`, `docs/ops/UPTIME_MONITOR_SETUP.md`) - **DOCUMENTED**, needs external service setup (UptimeRobot/Pingdom). See setup guide for step-by-step instructions.
+  - ⏳ Uptime monitor configured (`docs/ops/UPTIME_MONITOR.md`, `docs/ops/UPTIME_MONITOR_SETUP.md`, `docs/ops/UPTIMEROBOT_SETUP_STEPS.md`) - **DOCUMENTED**, needs external service setup. See `docs/ops/UPTIMEROBOT_SETUP_STEPS.md` for step-by-step UptimeRobot guide.
   - ⚠️ Verify suite (`npm run verify`) - **PARTIAL**: Static checks pass (lint, scan:prices, verify:pricing, verify:icons ✅). API checks (`verify:api:prices`, `verify:api:analytics`) fail against staging (expected - price/analytics services may not be fully configured in staging). Can test against staging with `VERIFY_BASE_URL=https://staging.liquilab.io npm run verify:api:*`.
 
 ### 7.8 Sentry test (S0-OPS01)
