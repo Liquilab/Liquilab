@@ -137,7 +137,13 @@
   - `PROJECT_STATE.md`: Added sections 7.9 (DB seed), 7.10 (Stripe TEST), 7.11 (Uptime monitor), updated 7.7 (merge gates), 7.8 (Sentry test)
 - **Files Modified:** `Dockerfile`, `railway.toml`, `package.json`, `PROJECT_STATE.md`, `src/lib/observability/sentry.ts`, created `pages/api/sentry-test.ts`, `src/lib/observability/withSentryApiHandler.ts`, `scripts/verify-db/staging-seed.mjs`, `scripts/verify-billing/stripe-test.mjs`, `docs/ops/UPTIME_MONITOR.md`
 - **Verification:** Scripts tested locally - correct error handling when env vars missing. Changes committed and pushed to staging branch (commit `508b18cc`). Railway auto-deploy triggered.
-- **Status:** S0-OPS01 repo/config side complete and deployed to staging; ready for Railway environment validation (Sentry events, DB seed checks, Stripe TEST keys, uptime monitor).
+- **Staging Validation (2025-11-17):**
+  - ✅ Health endpoint: `GET /api/health` returns `{ ok: true, ts: ... }` (uptime monitor ready)
+  - ⚠️ Sentry test: Endpoint functional but `SENTRY_DSN` not set in Railway staging (returns `sentryConfigured: false`)
+  - ⚠️ Environment: Railway staging shows `env: "production"` - should set `SENTRY_ENVIRONMENT=staging` or `NODE_ENV=staging`
+  - ⏳ DB seed verify: Requires `DATABASE_URL` from Railway staging environment (not tested yet)
+  - ⏳ Stripe TEST verify: Requires `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` from Railway staging (not tested yet)
+- **Status:** S0-OPS01 repo/config side complete and deployed to staging. Railway environment variables need configuration: `SENTRY_DSN`, `SENTRY_ENVIRONMENT=staging`, `DATABASE_URL`, Stripe TEST keys.
 
 ## 4. Environments & Env Keys (Web = Flare-only)
 
@@ -408,6 +414,10 @@ type AlertRecord = {
   ```
 - **Verification:** Check Sentry dashboard for "Sentry staging test event" with environment tag "staging"
 - **Helper:** `withSentryApiHandler()` wrapper available in `src/lib/observability/withSentryApiHandler.ts` for API route error capture
+- **Railway Setup Required:**
+  - Set `SENTRY_DSN` environment variable in Railway staging service (get from Sentry project settings)
+  - Set `SENTRY_ENVIRONMENT=staging` to ensure correct environment tagging (or ensure `NODE_ENV=staging`)
+  - Current status (2025-11-17): Endpoint functional but `SENTRY_DSN` not configured in Railway staging
 
 ### 7.9 DB Seed Validation (S0-OPS01)
 - **Script:** `npm run verify:db:staging`
