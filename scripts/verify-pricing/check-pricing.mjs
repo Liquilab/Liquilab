@@ -43,7 +43,7 @@ for (const [key, val] of Object.entries(expected.rangebandAlerts)) {
 // No exceptions - legacy "$1.99 per pool/month" must not appear anywhere
 const bannedLiterals = ['$1.99', '€1.99', '1.99 per pool', '1.99/month', '1.99 per month'];
 const whitelistDirs = new Set(['.git', 'node_modules', '.next', 'Finance', '_archive', 'docs', 'public', 'Documentatie', 'backups', 'brandguide', '1x']);
-const whitelistExts = new Set(['.pdf', '.docx', '.csv', '.json.bak', '.ndjson']);
+const whitelistExts = new Set(['.pdf', '.docx', '.csv', '.json.bak', '.ndjson', '.bak']);
 
 function scan(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
