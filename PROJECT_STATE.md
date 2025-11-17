@@ -434,7 +434,7 @@ type AlertRecord = {
 - **Action:** Retrieves Stripe account info to verify TEST keys are valid
 - **Safety:** Only runs against TEST keys (exits if production key detected)
 - **Usage:** Run locally before staging deploy to verify Stripe TEST configuration
-- **Status (2025-11-17):** Stripe TEST keys set in Railway staging (`STRIPE_SECRET_KEY` = `sk_test_...`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` = `pk_test_...`). Script requires `stripe` package (`npm install stripe`). Key validation fails with "Invalid API Key" - may need Stripe dashboard verification, key permissions check, or account activation. Verify key is active in Striry Dashboard → Developers → API keys (Test mode).
+- **Status (2025-11-17):** Stripe TEST keys set in Railway staging (`STRIPE_SECRET_KEY` = `sk_test_...`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` = `pk_test_...`). Script requires `stripe` package (`npm install stripe`). Key validation fails with "Invalid API Key" - may need Stripe dashboard verification, key permissions check, or account activation. Verify key is active in Stripe Dashboard → Developers → API keys (Test mode).
 
 ### 7.11 Uptime Monitor (S0-OPS01, SP4-B05)
 - **Endpoint:** `GET /api/health`
