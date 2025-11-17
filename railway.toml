@@ -1,5 +1,7 @@
 [build]
 builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["**"]
 
 [deploy]
 # Use Dockerfile CMD (start.sh)
