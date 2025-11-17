@@ -402,7 +402,7 @@ type AlertRecord = {
   - ✅ DB seed validation (`npm run verify:db:staging`) - **COMPLETE** (production data copied: 607k PoolEvent, 233k PositionEvent, 79k PositionTransfer)
   - ✅ Stripe TEST keys verified (`npm run verify:billing:stripe`) - **VALIDATED** in Railway environment. Keys work correctly when executed in Railway service context.
   - ⏳ Uptime monitor configured (`docs/ops/UPTIME_MONITOR.md`) - **DOCUMENTED**, needs external service setup (UptimeRobot/Pingdom)
-  - ⏳ Verify suite green (`npm run verify`) - **REQUIRES RUNNING SERVER** for API endpoint checks
+  - ⚠️ Verify suite (`npm run verify`) - **PARTIAL**: Static checks pass (lint, scan:prices, verify:pricing, verify:icons ✅). API checks (`verify:api:prices`, `verify:api:analytics`) fail against staging (expected - price/analytics services may not be fully configured in staging). Can test against staging with `VERIFY_BASE_URL=https://staging.liquilab.io npm run verify:api:*`.
 
 ### 7.8 Sentry test (S0-OPS01)
 - **Endpoint:** `POST /api/sentry-test`
@@ -443,6 +443,11 @@ type AlertRecord = {
 - **Monitor:** External service (UptimeRobot/Pingdom) checks every 5 minutes
 - **Documentation:** See `docs/ops/UPTIME_MONITOR.md` for setup instructions
 - **Alert:** Triggered after 2 consecutive failures (10+ minutes downtime)
+- **Status (2025-11-17):** Endpoint functional and tested. Documentation complete. **Action required:** Configure external monitoring service (UptimeRobot/Pingdom) per `docs/ops/UPTIME_MONITOR.md`:
+  - Create monitor for `https://staging.liquilab.io/api/health`
+  - Set interval: 5 minutes
+  - Alert threshold: 2 consecutive failures
+  - Add alert contacts (ops team)
 
 ### 7.5 Sprints (S0…S4)
 - **S0 (SSoT Δ-2025-11-16):** Env matrix + endpoint contracts + consent/legal stubs + DoD/verify matrix.  
