@@ -1,5 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
+import { pricingConfig } from '@/lib/billing/pricing';
 
 type PricePillProps = {
   className?: string;
@@ -14,7 +15,7 @@ export function PricePill({ className }: PricePillProps) {
         className,
       )}
     >
-      $1.99 per pool / month · First pool is free
+      ${pricingConfig.premium.priceMonthlyUsd}/month for 5 pools · Bundles of 5
     </span>
   );
 }

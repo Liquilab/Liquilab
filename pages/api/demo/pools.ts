@@ -4,6 +4,8 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { prisma } from '@/server/db';
+import { getRangeWidthPct, getStrategy } from '@/components/pools/PoolRangeIndicator';
+import type { RangeStatus } from '@/components/pools/PoolRangeIndicator';
 
 const DEFAULT_LIMIT = 9;
 const MAX_LIMIT = 12;
@@ -38,24 +40,44 @@ type PoolRow = {
   fees_24h_usd: Prisma.Decimal | number | null;
 };
 
-type ApiPool = {
-  poolAddress: string;
-  dex: Dex;
-  token0: { symbol: string; address: string; decimals: number };
-  token1: { symbol: string; address: string; decimals: number };
-  feeBps: number;
-  tvlUsd: number | null;
-  fees24hUsd: number | null;
-  incentivesUsd: number | null;
-  status: 'in' | 'near' | 'out' | 'unknown';
+type DemoPoolItem = {
+  providerSlug: string;
+  providerName: string;
+  poolId: string;
+  pairLabel: string;
+  token0Symbol: string;
+  token1Symbol: string;
+  token0Icon: string | null;
+  token1Icon: string | null;
+  feeTierBps: number;
+  rangeMin: number;
+  rangeMax: number;
+  currentPrice: number;
+  rangeWidthPct?: number;
+  strategy?: 'aggressive' | 'balanced' | 'conservative';
+  strategyLabel?: string;
+  status: RangeStatus;
+  tvlUsd: number;
+  dailyFeesUsd: number;
+  dailyIncentivesUsd: number;
+  apr24hPct?: number;
+  domain?: string;
+  isDemo?: boolean;
+  displayId?: string;
 };
 
 type ApiResponse = {
   ok: boolean;
   source: 'db' | 'snapshot';
   generatedAt: string;
-  items: ApiPool[];
+  items: DemoPoolItem[];
+  badgeLabel?: string;
+  legal?: {
+    disclaimer?: string;
+  };
   warnings?: string[];
+  placeholder?: boolean;
+  error?: string;
 };
 
 async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse | { ok: false; reason: string }>) {
@@ -69,7 +91,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse | {
   const nowIso = new Date().toISOString();
 
   const warnings: string[] = [];
-  let pools: ApiPool[] = [];
+  let pools: DemoPoolItem[] = [];
   let source: ApiResponse['source'] = 'db';
 
   try {
@@ -100,7 +122,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse | {
   }
 
   res.setHeader('Cache-Control', CACHE_HEADER);
-  return res.status(200).json({ ok: true, source, generatedAt: nowIso, items: pools, warnings: warnings.length ? warnings : undefined });
+  return res.status(200).json({
+    ok: true,
+    source,
+    generatedAt: nowIso,
+    items: pools,
+    badgeLabel: 'Demo · generated from live prices',
+    legal: {
+      disclaimer: 'Not financial advice.',
+    },
+    warnings: warnings.length ? warnings : undefined,
+  });
 }
 
 function parseParam(value: string | string[] | undefined, fallback: number): number {
@@ -117,12 +149,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function filterByTvl(pools: ApiPool[], minTvl: number): ApiPool[] {
+function filterByTvl(pools: DemoPoolItem[], minTvl: number): DemoPoolItem[] {
   if (!minTvl) return pools;
   return pools.filter((pool) => (pool.tvlUsd ?? 0) >= minTvl);
 }
 
-async function fetchPoolsFromDb(limit: number): Promise<ApiPool[]> {
+async function fetchPoolsFromDb(limit: number): Promise<DemoPoolItem[]> {
   const query = Prisma.sql`
     WITH latest_snapshot AS (
       SELECT
@@ -170,51 +202,162 @@ async function fetchPoolsFromDb(limit: number): Promise<ApiPool[]> {
   `;
 
   const rows = await prisma.$queryRaw<PoolRow[]>(query);
-  return rows.map(mapRowToPool);
+  return rows.map(mapRowToDemoPool);
 }
 
-function mapRowToPool(row: PoolRow): ApiPool {
-  const poolAddress = row.pool_address;
-  const dex = resolveDex(row.provider_slug, row.factory);
-  const tvlUsd = toNumber(row.tvl_usd);
-  const incentivesUsd = toNumber(row.incentives_usd);
-  const fees24hUsd = toNumber(row.fees_24h_usd);
+function mapRowToDemoPool(row: PoolRow): DemoPoolItem {
+  const poolAddress = row.pool_address ?? '';
+  const providerSlug = (row.provider_slug ?? '').toLowerCase() || 'enosys';
+  const providerName = providerSlug === 'sparkdex' ? 'SparkDEX' : providerSlug === 'blazeswap' ? 'BlazeSwap' : 'Ēnosys';
+  const token0Symbol = (row.token0_symbol ?? 'T0').toUpperCase();
+  const token1Symbol = (row.token1_symbol ?? 'T1').toUpperCase();
+  const pairLabel = `${token0Symbol}/${token1Symbol}`;
+  const feeBps = row.fee ?? 0;
+  const tvlUsd = toNumber(row.tvl_usd) ?? 0;
+  const dailyFeesUsd = toNumber(row.fees_24h_usd) ?? 0;
+  const dailyIncentivesUsd = toNumber(row.incentives_usd) ?? 0;
+  
+  // Generate plausible range and price data for demo
+  const basePrice = 1.0;
+  const rangeWidth = 0.1 + (Math.random() * 0.3); // 10-40% range
+  const rangeMin = basePrice * (1 - rangeWidth / 2);
+  const rangeMax = basePrice * (1 + rangeWidth / 2);
+  const currentPrice = basePrice * (0.95 + Math.random() * 0.1); // Price within or near range
+  const rangeWidthPct = getRangeWidthPct(rangeMin, rangeMax);
+  const strategy = getStrategy(rangeWidthPct);
+  
+  // Determine status based on price position
+  let status: RangeStatus = 'out';
+  if (currentPrice >= rangeMin && currentPrice <= rangeMax) {
+    status = 'in';
+  } else {
+    const distanceFromRange = Math.min(
+      Math.abs(currentPrice - rangeMin),
+      Math.abs(currentPrice - rangeMax)
+    );
+    const rangeSize = rangeMax - rangeMin;
+    if (distanceFromRange < rangeSize * 0.1) {
+      status = 'near';
+    }
+  }
+  
+  // Rotate status deterministically based on pool address
+  const seed = poolAddress.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash + seed.charCodeAt(i)) % 997;
+  }
+  status = STATUS_ROTATION[hash % STATUS_ROTATION.length];
+  
+  // Calculate APR
+  const apr24hPct = tvlUsd > 0 ? ((dailyFeesUsd + dailyIncentivesUsd) / tvlUsd) * 365 * 100 : 0;
+  
+  // Token icons
+  const token0Icon = `/media/tokens/${token0Symbol.toLowerCase()}.webp`;
+  const token1Icon = `/media/tokens/${token1Symbol.toLowerCase()}.webp`;
 
   return {
-    poolAddress,
-    dex,
-    token0: {
-      symbol: row.token0_symbol ?? 'T0',
-      address: (row.token0_address ?? '').toLowerCase(),
-      decimals: row.token0_decimals ?? 18,
-    },
-    token1: {
-      symbol: row.token1_symbol ?? 'T1',
-      address: (row.token1_address ?? '').toLowerCase(),
-      decimals: row.token1_decimals ?? 18,
-    },
-    feeBps: row.fee ?? 0,
+    providerSlug,
+    providerName,
+    poolId: poolAddress,
+    pairLabel,
+    token0Symbol,
+    token1Symbol,
+    token0Icon,
+    token1Icon,
+    feeTierBps: feeBps,
+    rangeMin,
+    rangeMax,
+    currentPrice,
+    rangeWidthPct,
+    strategy: strategy.tone,
+    strategyLabel: strategy.label,
+    status,
     tvlUsd,
-    fees24hUsd,
-    incentivesUsd,
-    status: deriveStatus(poolAddress, tvlUsd, row.tick),
+    dailyFeesUsd,
+    dailyIncentivesUsd,
+    apr24hPct: Number.isFinite(apr24hPct) ? apr24hPct : undefined,
+    isDemo: true,
+    displayId: `${providerSlug}-${poolAddress.slice(0, 8)}`,
   };
 }
 
-async function readSnapshotPools(): Promise<ApiPool[]> {
-  const content = await fs.readFile(FALLBACK_PATH, 'utf8');
-  const parsed = JSON.parse(content) as Array<Record<string, unknown>>;
-  return parsed.map((entry) => ({
-    poolAddress: String(entry.poolAddress ?? entry.pool_address ?? ''),
-    dex: normalizeDex(String(entry.dex ?? 'enosys')),
-    token0: normalizeToken(entry.token0),
-    token1: normalizeToken(entry.token1),
-    feeBps: Number((entry.pair as Record<string, unknown> | undefined)?.fee_bps ?? entry.feeBps ?? 0),
-    tvlUsd: toNumber(entry.tvlUsd),
-    fees24hUsd: toNumber(entry.fees24hUsd),
-    incentivesUsd: toNumber(entry.incentivesUsd),
-    status: normalizeStatus(entry.status),
-  }));
+async function readSnapshotPools(): Promise<DemoPoolItem[]> {
+  try {
+    const content = await fs.readFile(FALLBACK_PATH, 'utf8');
+    const parsed = JSON.parse(content) as Array<Record<string, unknown>>;
+    return parsed.map((entry) => {
+      const poolAddress = String(entry.poolAddress ?? entry.pool_address ?? '');
+      const providerSlug = String(entry.providerSlug ?? entry.provider_slug ?? 'enosys').toLowerCase();
+      const providerName = providerSlug === 'sparkdex' ? 'SparkDEX' : providerSlug === 'blazeswap' ? 'BlazeSwap' : 'Ēnosys';
+      const token0 = normalizeToken(entry.token0);
+      const token1 = normalizeToken(entry.token1);
+      const pairLabel = `${token0.symbol}/${token1.symbol}`;
+      const feeBps = Number((entry.pair as Record<string, unknown> | undefined)?.fee_bps ?? entry.feeBps ?? 0);
+      const tvlUsd = toNumber(entry.tvlUsd) ?? 0;
+      const dailyFeesUsd = toNumber(entry.fees24hUsd) ?? 0;
+      const dailyIncentivesUsd = toNumber(entry.incentivesUsd) ?? 0;
+      
+      // Generate demo range data
+      const basePrice = 1.0;
+      const rangeWidth = 0.15 + (Math.random() * 0.25);
+      const rangeMin = basePrice * (1 - rangeWidth / 2);
+      const rangeMax = basePrice * (1 + rangeWidth / 2);
+      const currentPrice = basePrice * (0.95 + Math.random() * 0.1);
+      const rangeWidthPct = getRangeWidthPct(rangeMin, rangeMax);
+      const strategy = getStrategy(rangeWidthPct);
+      
+      let status: RangeStatus = 'out';
+      if (currentPrice >= rangeMin && currentPrice <= rangeMax) {
+        status = 'in';
+      } else {
+        const distanceFromRange = Math.min(
+          Math.abs(currentPrice - rangeMin),
+          Math.abs(currentPrice - rangeMax)
+        );
+        const rangeSize = rangeMax - rangeMin;
+        if (distanceFromRange < rangeSize * 0.1) {
+          status = 'near';
+        }
+      }
+      
+      const seed = poolAddress.toLowerCase();
+      let hash = 0;
+      for (let i = 0; i < seed.length; i += 1) {
+        hash = (hash + seed.charCodeAt(i)) % 997;
+      }
+      status = STATUS_ROTATION[hash % STATUS_ROTATION.length];
+      
+      const apr24hPct = tvlUsd > 0 ? ((dailyFeesUsd + dailyIncentivesUsd) / tvlUsd) * 365 * 100 : 0;
+      
+      return {
+        providerSlug,
+        providerName,
+        poolId: poolAddress,
+        pairLabel,
+        token0Symbol: token0.symbol,
+        token1Symbol: token1.symbol,
+        token0Icon: `/media/tokens/${token0.symbol.toLowerCase()}.webp`,
+        token1Icon: `/media/tokens/${token1.symbol.toLowerCase()}.webp`,
+        feeTierBps: feeBps,
+        rangeMin,
+        rangeMax,
+        currentPrice,
+        rangeWidthPct,
+        strategy: strategy.tone,
+        strategyLabel: strategy.label,
+        status,
+        tvlUsd,
+        dailyFeesUsd,
+        dailyIncentivesUsd,
+        apr24hPct: Number.isFinite(apr24hPct) ? apr24hPct : undefined,
+        isDemo: true,
+        displayId: `${providerSlug}-${poolAddress.slice(0, 8)}`,
+      };
+    });
+  } catch {
+    return [];
+  }
 }
 
 function normalizeToken(value: unknown): { symbol: string; address: string; decimals: number } {
@@ -223,44 +366,10 @@ function normalizeToken(value: unknown): { symbol: string; address: string; deci
   }
   const token = value as Record<string, unknown>;
   return {
-    symbol: String(token.symbol ?? 'T'),
+    symbol: String(token.symbol ?? 'T').toUpperCase(),
     address: String(token.address ?? '').toLowerCase(),
     decimals: Number(token.decimals ?? 18),
   };
-}
-
-function normalizeStatus(value: unknown): 'in' | 'near' | 'out' | 'unknown' {
-  const normalized = String(value ?? '').toLowerCase();
-  if (normalized === 'in' || normalized === 'near' || normalized === 'out') {
-    return normalized;
-  }
-  return 'unknown';
-}
-
-function normalizeDex(value: string): Dex {
-  const normalized = value.toLowerCase();
-  if (normalized.includes('spark')) return 'sparkdex-v3';
-  return 'enosys-v3';
-}
-
-function resolveDex(providerSlug: string | null, factory: string | null): Dex {
-  const provider = providerSlug?.toLowerCase();
-  if (provider?.includes('spark')) return 'sparkdex-v3';
-  if (provider?.includes('eno')) return 'enosys-v3';
-  const normalizedFactory = (factory ?? '').toLowerCase();
-  if (normalizedFactory === SPARKDEX_FACTORY) return 'sparkdex-v3';
-  return 'enosys-v3';
-}
-
-function deriveStatus(address: string | null, tvlUsd: number | null, tick: string | null): 'in' | 'near' | 'out' | 'unknown' {
-  if (!address) return 'unknown';
-  if (typeof tvlUsd === 'number' && tvlUsd <= 0) return 'unknown';
-  const seed = address.toLowerCase() + (tick ?? '');
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash + seed.charCodeAt(i)) % 997;
-  }
-  return STATUS_ROTATION[hash % STATUS_ROTATION.length];
 }
 
 function toNumber(value: unknown): number | null {
@@ -273,24 +382,26 @@ function toNumber(value: unknown): number | null {
   }
 }
 
-function selectDiversePools(pools: ApiPool[], limit: number): ApiPool[] {
+function selectDiversePools(pools: DemoPoolItem[], limit: number): DemoPoolItem[] {
   if (!pools.length) return [];
-  const buckets: Record<Dex, ApiPool[]> = {
-    'enosys-v3': [],
-    'sparkdex-v3': [],
+  const buckets: Record<string, DemoPoolItem[]> = {
+    'enosys': [],
+    'sparkdex': [],
+    'blazeswap': [],
   };
 
   pools.forEach((pool) => {
-    buckets[pool.dex]?.push(pool);
+    const bucket = buckets[pool.providerSlug] ?? buckets['enosys'];
+    bucket.push(pool);
   });
 
   Object.values(buckets).forEach((list) => list.sort((a, b) => (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0)));
 
-  const ordered: ApiPool[] = [];
-  while (ordered.length < limit && (buckets['enosys-v3'].length || buckets['sparkdex-v3'].length)) {
-    for (const dex of ['enosys-v3', 'sparkdex-v3'] as const) {
+  const ordered: DemoPoolItem[] = [];
+  while (ordered.length < limit && (buckets['enosys'].length || buckets['sparkdex'].length || buckets['blazeswap'].length)) {
+    for (const provider of ['enosys', 'sparkdex', 'blazeswap'] as const) {
       if (ordered.length >= limit) break;
-      const candidate = buckets[dex].shift();
+      const candidate = buckets[provider].shift();
       if (candidate) {
         ordered.push(candidate);
       }

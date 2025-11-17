@@ -1,0 +1,30 @@
+name: CI — Verify Suite
+
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run verify suite
+        run: npm run verify:ci
+
+      - name: Success summary
+        if: success()
+        run: echo "✓ All verifications passed"

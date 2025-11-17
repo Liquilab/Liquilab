@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 import { useAccount } from 'wagmi';
 import Header from '@/components/Header';
 import { formatEUR, calcPoolsCost, calcNotifCost, calcTotal, nextTierFor } from '@/lib/pricing';
+import { pricingConfig, formatUSD } from '@/lib/billing/pricing';
 import { TokenIcon } from '@/components/TokenIcon';
 import WalletConnect from '@/components/WalletConnect';
 import { fetchPositions, computeSummary as computeClientSummary } from '@/lib/positions/client';
@@ -94,6 +95,7 @@ function hydratePositionForUi(position: PositionRow): PositionRow {
 export default function PricingPage() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
+  const premiumPlan = pricingConfig.premium;
 
   const [positions, setPositions] = React.useState<PositionRow[] | null>(null);
   const [summary, setSummary] = React.useState<PositionSummary | null>(null);
@@ -317,7 +319,7 @@ export default function PricingPage() {
         <title>Pricing · LiquiLab</title>
         <meta
           name="description"
-          content="€1.99 per pool/month. Keep effortless overview of all your Flare LPs in one place."
+          content="Premium at $14.95/month for 5 pools; extra bundles $9.95/5 pools; RangeBand Alerts $2.49/5."
         />
       </Head>
 
@@ -430,7 +432,12 @@ export default function PricingPage() {
                     How it works
                   </h3>
                   <p className="font-ui text-base leading-relaxed text-white/80">
-                    First 5 pools: <strong className="tabular-nums">$1.99/mo</strong> (one bundle). Add more in packs of 5.
+                    Premium: <strong className="tabular-nums">{formatUSD(premiumPlan.priceMonthlyUsd)}</strong> for{' '}
+                    <strong className="tabular-nums">{premiumPlan.includedPools}</strong> pools. Extra bundles:{' '}
+                    <strong className="tabular-nums">{formatUSD(premiumPlan.extraBundlePriceUsd)}</strong> per{' '}
+                    <strong className="tabular-nums">{premiumPlan.extraBundlePools}</strong> pools. Alerts add-on:{' '}
+                    <strong className="tabular-nums">{formatUSD(pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle)}</strong> per{' '}
+                    <strong className="tabular-nums">{pricingConfig.rangebandAlerts.bundlePools}</strong>.
                   </p>
                   <ul className="space-y-2.5 font-ui text-sm leading-relaxed text-white/70">
                     <li className="flex items-start gap-2">
@@ -939,23 +946,30 @@ export default function PricingPage() {
                         </div>
                       </div>
 
-                      {/* Total */}
-                      <div className="rounded-xl bg-white/[0.06] p-6" aria-live="polite" aria-atomic="true">
-                        <div className="space-y-3">
-                          <div className="flex items-baseline justify-between gap-4 font-ui text-sm text-white/70">
-                            <span>Pools: <span className="tabular-nums">{paidPools}</span> × €<span className="tabular-nums">1.99</span> / month</span>
-                            <span className="tabular-nums font-semibold text-white">
-                              {formatEUR(poolsCost)}
-                            </span>
-                          </div>
-                          {notificationsEnabled && (
-                            <div className="flex items-baseline justify-between gap-4 font-ui text-sm text-white/70">
-                              <span>Notifications: €<span className="tabular-nums">2.50</span> per 5 pools</span>
-                              <span className="tabular-nums font-semibold text-white">
-                                {formatEUR(notifCost)}
-                              </span>
-                            </div>
-                          )}
+                          {/* Total */}
+                          <div className="rounded-xl bg-white/[0.06] p-6" aria-live="polite" aria-atomic="true">
+                            <div className="space-y-3">
+                              <div className="flex items-baseline justify-between gap-4 font-ui text-sm text-white/70">
+                                <span>
+                                  Pools: <span className="tabular-nums">{paidPools}</span> (base {premiumPlan.includedPools} pools at{' '}
+                                  <span className="tabular-nums">{formatUSD(premiumPlan.priceMonthlyUsd)}</span>, extras in{' '}
+                                  {premiumPlan.extraBundlePools} bundles at <span className="tabular-nums">{formatUSD(premiumPlan.extraBundlePriceUsd)}</span>)
+                                </span>
+                                <span className="tabular-nums font-semibold text-white">
+                                  {formatEUR(poolsCost)}
+                                </span>
+                              </div>
+                              {notificationsEnabled && (
+                                <div className="flex items-baseline justify-between gap-4 font-ui text-sm text-white/70">
+                                  <span>
+                                    Alerts: <span className="tabular-nums">{formatUSD(pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle)}</span> per{' '}
+                                    <span className="tabular-nums">{pricingConfig.rangebandAlerts.bundlePools}</span> pools
+                                  </span>
+                                  <span className="tabular-nums font-semibold text-white">
+                                    {formatEUR(notifCost)}
+                                  </span>
+                                </div>
+                              )}
                           <div className="pt-3">
                             <div className="flex items-baseline justify-between gap-4">
                               <span className="font-brand text-base font-semibold text-white">

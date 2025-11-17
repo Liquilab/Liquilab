@@ -1,7 +1,13 @@
 // Single source of truth for LiquiLab pricing
+// Uses bundle-based pricing from config/pricing.json
 
-export const PRICE_PER_POOL_USD = 1.99;
-export const BUNDLE_SIZE = 5 as const;
+import { pricingConfig, calcPoolsCost, calcAlertsCost } from '@/lib/billing/pricing';
+
+export const BUNDLE_SIZE = pricingConfig.premium.extraBundlePools as const; // 5
+
+// DEPRECATED: Use calcPoolsCost from @/lib/billing/pricing instead
+// This is kept for backward compatibility only
+export const PRICE_PER_POOL_USD = pricingConfig.premium.priceMonthlyUsd / pricingConfig.premium.includedPools; // ~2.99, but use bundle pricing instead
 
 export type BillingCycle = 'month' | 'year';
 
@@ -50,9 +56,10 @@ export function bundlesForActivePools(activePoolsInput: number): number {
   return paid / BUNDLE_SIZE;
 }
 
-export function monthlyAmountUsdForPaidCapacity(paidCapacityInput: number): number {
+export function monthlyAmountUsdForPaidCapacity(paidCapacityInput: number, plan: 'premium' | 'pro' = 'premium'): number {
   const paidCapacity = normalizePaidCapacity(paidCapacityInput);
-  return Number((paidCapacity * PRICE_PER_POOL_USD).toFixed(2));
+  // Use bundle-based pricing calculation
+  return calcPoolsCost(paidCapacity, plan);
 }
 
 export function yearlyAmountUsdForPaidCapacity(paidCapacityInput: number): number {
@@ -71,17 +78,21 @@ export function quote(activePoolsInput: number, billing: BillingCycle = 'month')
   const monthlyAmount = monthlyAmountUsdForPaidCapacity(paidPools);
   const amountUsd = billing === 'year' ? yearlyAmountUsdForPaidCapacity(paidPools) : monthlyAmount;
 
+  // Calculate using bundle-based pricing
+  const monthlyAmountBundle = calcPoolsCost(paidPools, 'premium');
+  const amountUsdBundle = billing === 'year' ? monthlyAmountBundle * ANNUAL_MULTIPLIER : monthlyAmountBundle;
+
   return {
     ok: true,
     pricing: {
       billingCycle: billing,
-      pricePerPoolUsd: PRICE_PER_POOL_USD,
+      pricePerPoolUsd: PRICE_PER_POOL_USD, // DEPRECATED - kept for compatibility
       bundles,
       paidPools,
       freeBonus: bonus,
       totalCapacity,
-      amountUsd,
-      monthlyEquivalentUsd: monthlyAmount,
+      amountUsd: amountUsdBundle, // Use bundle-based pricing
+      monthlyEquivalentUsd: monthlyAmountBundle, // Use bundle-based pricing
     },
     suggestion: {
       activePools,

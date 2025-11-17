@@ -13,7 +13,7 @@ if ! grep -q "Pricing Model \[$(date +%Y-%m-%d)\]" "$PS" 2>/dev/null; then
   cat >> "$PS" <<'MD'
 
 ### Pricing Model [2025-10-27]
-- Price per pool: **$1.99 / month**.
+- Bundle-based pricing: **$14.95/month** for 5 pools included, **$9.95/month** per extra bundle of 5 pools.
 - Sold in bundles of **5 paid pools** per tier.
 - **Free capacity rule:** free bonus pools = **ceil(paidCapacity/10)**  
   Examples: paid 5 → +1 free (5+1), paid 10 → +1 free (10+1), paid 20 → +2 free (20+2), paid 30 → +3 free.
@@ -60,7 +60,8 @@ fi
 cat > src/data/pricing.ts <<'TS'
 // Single source of truth for LiquiLab pricing
 
-export const PRICE_PER_POOL_USD = 1.99
+# DEPRECATED: Use bundle-based pricing from config/pricing.json instead
+# export const PRICE_PER_POOL_USD = 1.99
 export const BUNDLE_SIZE = 5 as const
 
 export type BillingCycle = 'month' | 'year'

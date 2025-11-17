@@ -30,7 +30,7 @@
 - TTFB < 600ms; SSR zonder warnings
 - Verifier: `curl localhost:3000/ | grep -q "RangeBand"`
 
-**GECOVERED:** visueel (hero + demo tabel/grid), RangeBand interactie, wallet connect flow.
+**GECOVERED:** ✅ Hero with water-wave background (fully visible), demo table/grid toggle, RangeBand demo cells, `/api/demo/pools` endpoint. SP1-T11 complete.
 
 <!-- DELTA 2025-11-16 START -->
 

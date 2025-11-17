@@ -12,6 +12,7 @@ import { PoolsGrid } from '@/components/pools/PoolsGrid';
 import WalletConnect from '@/components/WalletConnect';
 import { useAccount, useDisconnect } from 'wagmi';
 import type { PositionData } from '@/components/PositionsTable';
+import { pricingConfig, formatUSD } from '@/lib/billing/pricing';
 
 type ViewMode = 'table' | 'grid';
 
@@ -20,6 +21,8 @@ export default function Homepage() {
   const [demoPositions, setDemoPositions] = React.useState<PositionData[]>([]);
   const { address } = useAccount();
   const { disconnect } = useDisconnect();
+  const premium = pricingConfig.premium;
+  const alerts = pricingConfig.rangebandAlerts;
 
   async function handleDisconnect() {
     try {
@@ -47,7 +50,7 @@ export default function Homepage() {
       </Head>
 
       <div className="relative min-h-screen overflow-hidden text-white">
-        <div className="page-bg" aria-hidden="true" />
+        <div className="page-bg hero-wave" aria-hidden="true" />
         <div className="relative z-10 mx-auto flex min-h-screen w-[94vw] max-w-[1200px] flex-col pb-20 pt-6 lg:w-[75vw]">
           <header className="flex items-center justify-between">
             <LiquiLabLogo variant="full" size="sm" theme="dark" />
@@ -77,12 +80,12 @@ export default function Homepage() {
           </header>
 
           <main className="mt-14 space-y-24 sm:mt-20 sm:space-y-32">
-            {/* HERO WITH RANGEBAND EXPLAINER */}
+            {/* HERO WITH WATER-WAVE BACKGROUND */}
             <section
               aria-label="Hero"
-              className="mx-auto w-[75vw] max-w-[1200px] rounded-3xl border border-white/5 p-10 text-center backdrop-blur-xl sm:p-14"
+              className="hero-section mx-auto w-[75vw] max-w-[1200px] rounded-3xl border border-white/5 p-10 text-center backdrop-blur-xl sm:p-14"
               style={{
-                background: 'rgba(10, 15, 26, 0.88)',
+                background: 'rgba(11, 21, 48, 0.88)',
               }}
             >
               <p className="font-brand text-sm uppercase tracking-[0.4em] text-[#1BE8D2]">
@@ -108,7 +111,24 @@ export default function Homepage() {
                 </li>
                 <li className="flex items-start gap-3 font-ui text-sm text-white/90 sm:inline-flex sm:text-base">
                   <span className="flex-shrink-0 text-[#1BE8D2]" aria-hidden="true">✓</span>
-                  <span>Start free with one pool — upgrade in bundles of 5 at <span className="font-num font-semibold">$1.99</span> per pool/month.</span>
+                  <span>
+                    Start with Premium at <span className="font-num font-semibold">{formatUSD(premium.priceMonthlyUsd)}</span> for{' '}
+                    <span className="font-num font-semibold">{premium.includedPools}</span> pools.
+                  </span>
+                </li>
+                <li className="flex items-start gap-3 font-ui text-sm text-white/90 sm:inline-flex sm:text-base">
+                  <span className="flex-shrink-0 text-[#1BE8D2]" aria-hidden="true">✓</span>
+                  <span>
+                    Add extra bundles of <span className="font-num font-semibold">{premium.extraBundlePools}</span> pools for{' '}
+                    <span className="font-num font-semibold">{formatUSD(premium.extraBundlePriceUsd)}</span>.
+                  </span>
+                </li>
+                <li className="flex items-start gap-3 font-ui text-sm text-white/90 sm:inline-flex sm:text-base">
+                  <span className="flex-shrink-0 text-[#1BE8D2]" aria-hidden="true">✓</span>
+                  <span>
+                    RangeBand™ Alerts from <span className="font-num font-semibold">{formatUSD(alerts.priceMonthlyUsdPerBundle)}</span> per{' '}
+                    <span className="font-num font-semibold">{alerts.bundlePools}</span> alerts.
+                  </span>
                 </li>
               </ul>
 
@@ -118,6 +138,12 @@ export default function Homepage() {
               </div>
 
               <div className="mt-12 flex flex-col items-center gap-4">
+                <Button
+                  onClick={scrollToDemo}
+                  className="bg-[#3B82F6] px-6 py-3 font-semibold text-white hover:bg-[#2563EB] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B82F6]"
+                >
+                  Explore pools
+                </Button>
                 <WalletConnect className="shadow-[0_0_40px_rgba(27,232,210,0.25)]" />
                 <span className="text-xs uppercase tracking-[0.3em] text-white/40">
                   Read-only. No approvals.
@@ -130,7 +156,7 @@ export default function Homepage() {
               <div
                 className="mx-auto w-[75vw] max-w-[1200px] rounded-3xl border border-white/5 p-10 backdrop-blur-xl sm:p-14"
                 style={{
-                  background: 'rgba(10, 15, 26, 0.88)',
+                  background: 'rgba(11, 21, 48, 0.88)',
                 }}
               >
                 <div className="mx-auto max-w-3xl text-center">
