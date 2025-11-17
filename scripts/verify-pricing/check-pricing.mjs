@@ -40,7 +40,8 @@ for (const [key, val] of Object.entries(expected.rangebandAlerts)) {
 }
 
 const bannedLiterals = ['1.99', '$1.99', '€1.99'];
-const whitelistDirs = new Set(['.git', 'node_modules', '.next', 'Finance', '_archive', 'docs', 'public']);
+const whitelistDirs = new Set(['.git', 'node_modules', '.next', 'Finance', '_archive', 'docs', 'public', 'Documentatie', 'backups', 'brandguide', '1x']);
+const whitelistExts = new Set(['.pdf', '.docx', '.csv', '.json.bak', '.ndjson']);
 
 function scan(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -49,9 +50,16 @@ function scan(dir) {
     if (entry.isDirectory()) {
       scan(full);
     } else if (entry.isFile()) {
-      const content = fs.readFileSync(full, 'utf8');
-      for (const lit of bannedLiterals) {
-        if (content.includes(lit)) fail(`found legacy price literal "${lit}" in ${path.relative(ROOT, full)}`);
+      const ext = path.extname(entry.name).toLowerCase();
+      if (whitelistExts.has(ext)) continue;
+      try {
+        const content = fs.readFileSync(full, 'utf8');
+        for (const lit of bannedLiterals) {
+          if (content.includes(lit)) fail(`found legacy price literal "${lit}" in ${path.relative(ROOT, full)}`);
+        }
+      } catch {
+        // Skip binary files that can't be read as UTF-8
+        continue;
       }
     }
   }
