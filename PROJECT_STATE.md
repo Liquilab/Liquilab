@@ -1,7 +1,7 @@
 # PROJECT_STATE · LiquiLab Indexer & API (Concise)
 
 > Living document for the LiquiLab Flare V3 indexer stack.  
-> Last updated: 2025-11-16 (Delta 2025-11-16 applied). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
+> Last updated: 2025-11-17 (Railway Docker build fix + S0-OPS01). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
 
 ---
 
@@ -119,6 +119,15 @@
   - Gating: SP3-G01, SP3-G02
   - Verify Suite: SP4-T44..T46
 - **S0 (staging):** Dockerfile zonder BuildKit mounts + start.sh; staging Docker build gestabiliseerd.
+
+## Changelog — 2025-11-17
+
+- **Railway Build Fix (S0-OPS01):** Removed BuildKit `# syntax=` directive from Dockerfile to resolve Railway cache mount errors.
+- **railway.toml:** Added explicit `dockerfilePath = "Dockerfile"` and `DOCKER_BUILDKIT = "1"` for proper multi-stage build support.
+- **Git Workflow:** Merged Docker stabilization fixes to staging branch via feature branch `fix/staging-docker-20251117072003`.
+- **Dev Environment:** Configured `.zshrc` to auto-navigate to `$HOME/Projects/Liquilab_staging` on terminal startup.
+- **Files Modified:** `Dockerfile` (removed syntax directive), `railway.toml` (added build config), `PROJECT_STATE.md` (changelog updates).
+- **Status:** Staging deployment configured for Railway Docker builder without BuildKit conflicts.
 
 ## 4. Environments & Env Keys (Web = Flare-only)
 
@@ -2504,3 +2513,4 @@ Prevents broken code from reaching production. Catches integration issues early 
 ## Changelog — 2025-11-17
 
 - S0 (staging): Dockerfile zonder BuildKit cache-mounts + start.sh; staging Docker build gestabiliseerd.
+- S0-OPS01: Sentry server init + smoke-route; Dockerfile/start.sh/.dockerignore geborgd; ops runbook toegevoegd voor staging reset en health.
