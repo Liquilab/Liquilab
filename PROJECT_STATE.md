@@ -1,7 +1,7 @@
 # PROJECT_STATE · LiquiLab Indexer & API (Concise)
 
 > Living document for the LiquiLab Flare V3 indexer stack.  
-> Last updated: 2025-11-17 (Railway Docker build fix + S0-OPS01). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
+> Last updated: 2025-11-17 (S0-OPS01 complete and deployed to staging). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
 
 ---
 
@@ -136,7 +136,8 @@
   - `package.json`: Added `verify:db:staging` and `verify:billing:stripe` scripts
   - `PROJECT_STATE.md`: Added sections 7.9 (DB seed), 7.10 (Stripe TEST), 7.11 (Uptime monitor), updated 7.7 (merge gates), 7.8 (Sentry test)
 - **Files Modified:** `Dockerfile`, `railway.toml`, `package.json`, `PROJECT_STATE.md`, `src/lib/observability/sentry.ts`, created `pages/api/sentry-test.ts`, `src/lib/observability/withSentryApiHandler.ts`, `scripts/verify-db/staging-seed.mjs`, `scripts/verify-billing/stripe-test.mjs`, `docs/ops/UPTIME_MONITOR.md`
-- **Status:** S0-OPS01 repo/config side complete; staging ready for Railway deploy with Sentry, DB seed verify, Stripe TEST, and uptime monitor support.
+- **Verification:** Scripts tested locally - correct error handling when env vars missing. Changes committed and pushed to staging branch (commit `508b18cc`). Railway auto-deploy triggered.
+- **Status:** S0-OPS01 repo/config side complete and deployed to staging; ready for Railway environment validation (Sentry events, DB seed checks, Stripe TEST keys, uptime monitor).
 
 ## 4. Environments & Env Keys (Web = Flare-only)
 
