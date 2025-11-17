@@ -141,8 +141,8 @@
   - ✅ Health endpoint: `GET /api/health` returns `{ ok: true, ts: ... }` (uptime monitor ready)
   - ✅ Sentry test: `POST /api/sentry-test` returns `{ ok: true, sentry: true, sentryConfigured: true, env: "staging", eventId: "..." }` - Sentry events successfully logged to dashboard
   - ✅ DB seed verify: Script functional - connects to staging DB, checks table row counts. Production database successfully copied to staging (607k PoolEvent, 233k PositionEvent, 79k PositionTransfer rows). `analytics_market_metrics_daily` marked as optional (non-blocking) since it may be empty in production.
-  - ⚠️ Stripe TEST verify: TEST key (`sk_test_`) now set in Railway staging but validation still fails (Invalid API Key). May need Stripe dashboard verification or key permissions check. Script functional - requires `stripe` package installed.
-- **Status:** S0-OPS01 repo/config side complete and deployed to staging. Sentry configured and operational. DB verify script functional - staging DB seeded with production data. Stripe keys present but need validation/refresh.
+  - ✅ Stripe TEST verify: TEST keys validated successfully when run in Railway environment (`railway run npm run verify:billing:stripe`). Keys are correct and functional in staging deployment.
+- **Status:** S0-OPS01 repo/config side complete and deployed to staging. Sentry configured and operational. DB verify script functional - staging DB seeded with production data. Stripe TEST keys validated and working in Railway environment.
 
 ## 4. Environments & Env Keys (Web = Flare-only)
 
@@ -400,7 +400,7 @@ type AlertRecord = {
 - **S0-OPS01 DoD:** Staging environment must pass:
   - ✅ Sentry test event logged (`POST /api/sentry-test`) - **COMPLETE**
   - ✅ DB seed validation (`npm run verify:db:staging`) - **COMPLETE** (production data copied: 607k PoolEvent, 233k PositionEvent, 79k PositionTransfer)
-  - ⚠️ Stripe TEST keys verified (`npm run verify:billing:stripe`) - **TEST KEY SET** (`sk_test_`) in Railway but validation fails (may need Stripe dashboard verification or permissions check)
+  - ✅ Stripe TEST keys verified (`npm run verify:billing:stripe`) - **VALIDATED** in Railway environment. Keys work correctly when executed in Railway service context.
   - ⏳ Uptime monitor configured (`docs/ops/UPTIME_MONITOR.md`) - **DOCUMENTED**, needs external service setup (UptimeRobot/Pingdom)
   - ⏳ Verify suite green (`npm run verify`) - **REQUIRES RUNNING SERVER** for API endpoint checks
 
@@ -434,7 +434,7 @@ type AlertRecord = {
 - **Action:** Retrieves Stripe account info to verify TEST keys are valid
 - **Safety:** Only runs against TEST keys (exits if production key detected)
 - **Usage:** Run locally before staging deploy to verify Stripe TEST configuration
-- **Status (2025-11-17):** Stripe TEST keys set in Railway staging (`STRIPE_SECRET_KEY` = `sk_test_...`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` = `pk_test_...`). Script requires `stripe` package (`npm install stripe`). Key validation fails with "Invalid API Key" - may need Stripe dashboard verification, key permissions check, or account activation. Verify key is active in Stripe Dashboard → Developers → API keys (Test mode).
+- **Status (2025-11-17):** Stripe TEST keys validated successfully in Railway staging environment. Keys work correctly when script runs in Railway service (`railway run npm run verify:billing:stripe`). Script requires `stripe` package (`npm install stripe`). For local testing, ensure environment variables match Railway staging values.
 
 ### 7.11 Uptime Monitor (S0-OPS01, SP4-B05)
 - **Endpoint:** `GET /api/health`
