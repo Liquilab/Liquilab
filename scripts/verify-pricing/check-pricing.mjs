@@ -53,7 +53,8 @@ function scan(dir) {
       scan(full);
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase();
-      if (whitelistExts.has(ext)) continue;
+      const basename = entry.name.toLowerCase();
+      if (whitelistExts.has(ext) || basename.endsWith('.bak')) continue;
       try {
         const content = fs.readFileSync(full, 'utf8');
         for (const lit of bannedLiterals) {
