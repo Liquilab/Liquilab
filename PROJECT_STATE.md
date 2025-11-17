@@ -211,7 +211,7 @@
 
 **Legacy Pricing — REMOVED:**
 
-- The previous "$1.99 per pool/month" pricing model has been completely replaced by the bundle-based model above. All legacy pricing references have been removed from code and documentation.
+- The previous per-pool pricing model has been completely replaced by the bundle-based model above. All legacy pricing references have been removed from code and documentation.
 
 **Enforcement:**
 
