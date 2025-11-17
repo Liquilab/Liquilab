@@ -436,7 +436,7 @@ type AlertRecord = {
 - **Ops checks:** cron guarded by `CRON_SECRET`; rate-limit active on `/api/*` (60 req/min per IP, skipped on localhost); CORS restricted to localhost/staging/prod.
 
 ### 7.7 Environments & Merge Gates
-- **Staging deploy:** via GitHub Actions workflow `Staging Deploy` (trigger: PR base `staging` or label `staging`; runs `npm run verify` then Railway deploy to "Liquilab (staging project)").  
+- **Staging deploy:** Railway automatically deploys from GitHub when code is pushed to `staging` branch (via Railway's GitHub integration). No separate GitHub Actions workflow needed.  
 - **Branch protection:** Configured for `staging` and `main` branches requiring "verify" status check (from `CI — Verify Suite` workflow) to pass before merging. PRs are blocked until the verify suite completes successfully.
 - **Status check:** `CI — Verify Suite / verify` must be green before merge (enforced by branch protection rules).  
 - **S0-OPS01 DoD:** Staging environment must pass:
