@@ -140,9 +140,9 @@
 - **Staging Validation (2025-11-17):**
   - ✅ Health endpoint: `GET /api/health` returns `{ ok: true, ts: ... }` (uptime monitor ready)
   - ✅ Sentry test: `POST /api/sentry-test` returns `{ ok: true, sentry: true, sentryConfigured: true, env: "staging", eventId: "..." }` - Sentry events successfully logged to dashboard
-  - ⏳ DB seed verify: Requires `DATABASE_URL` from Railway staging environment (not tested yet)
+  - ✅ DB seed verify: Script functional - connects to staging DB, checks table row counts. Current status: Database schema migrated but empty (0 rows) - requires data seeding/indexing before validation passes. Script correctly identifies missing data.
   - ⏳ Stripe TEST verify: Requires `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` from Railway staging (not tested yet)
-- **Status:** S0-OPS01 repo/config side complete and deployed to staging. Sentry configured and operational. Remaining: DB seed verify and Stripe TEST keys verification.
+- **Status:** S0-OPS01 repo/config side complete and deployed to staging. Sentry configured and operational. DB verify script functional - staging DB needs data seeding. Remaining: Stripe TEST keys verification.
 
 ## 4. Environments & Env Keys (Web = Flare-only)
 
@@ -420,10 +420,11 @@ type AlertRecord = {
 
 ### 7.9 DB Seed Validation (S0-OPS01)
 - **Script:** `npm run verify:db:staging`
-- **Checks:** Row counts for `pool_events`, `position_events`, `position_transfers`, `analytics_pool_daily`
-- **Minimums:** pool_events ≥100, position_events ≥50, position_transfers ≥50, analytics_pool_daily ≥10
-- **Usage:** Run locally against staging DATABASE_URL or in CI before deploy
+- **Checks:** Row counts for `PoolEvent`, `PositionEvent`, `PositionTransfer`, `analytics_market_metrics_daily`
+- **Minimums:** PoolEvent ≥100, PositionEvent ≥50, PositionTransfer ≥50, analytics_market_metrics_daily ≥10
+- **Usage:** Run locally against staging DATABASE_URL (use proxy URL: `*.proxy.rlwy.net`, not `railway.internal`)
 - **Exit:** Non-zero if any table below minimum threshold
+- **Status (2025-11-17):** Script functional - correctly connects to staging DB and validates table counts. Staging database schema migrated but empty (requires data seeding via indexer).
 
 ### 7.10 Stripe TEST Verification (S0-OPS01)
 - **Script:** `npm run verify:billing:stripe`

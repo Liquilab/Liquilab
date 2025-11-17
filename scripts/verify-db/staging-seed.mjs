@@ -12,10 +12,10 @@ if (!DATABASE_URL) {
 const client = new Client({ connectionString: DATABASE_URL });
 
 const MIN_COUNTS = {
-  pool_events: 100,
-  position_events: 50,
-  position_transfers: 50,
-  analytics_pool_daily: 10,
+  'PoolEvent': 100,
+  'PositionEvent': 50,
+  'PositionTransfer': 50,
+  'analytics_market_metrics_daily': 10,
 };
 
 async function verifyStagingSeed() {
@@ -26,7 +26,9 @@ async function verifyStagingSeed() {
     const checks = [];
     for (const [table, minCount] of Object.entries(MIN_COUNTS)) {
       try {
-        const result = await client.query(`SELECT COUNT(*) as count FROM ${table}`);
+        // Use quoted identifiers for PascalCase table names
+        const quotedTable = table.match(/^[A-Z]/) ? `"${table}"` : table;
+        const result = await client.query(`SELECT COUNT(*) as count FROM ${quotedTable}`);
         const count = parseInt(result.rows[0].count, 10);
         const passed = count >= minCount;
         checks.push({ table, count, minCount, passed });
