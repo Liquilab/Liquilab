@@ -23,7 +23,7 @@ jobs:
         run: npm ci
 
       - name: Run verify suite
-        run: npm run verify
+        run: npm run verify:ci
 
       - name: Success summary
         if: success()
