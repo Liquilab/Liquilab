@@ -15,7 +15,7 @@ if ! grep -q '^## Pricing & Entitlements$' "$PS" 2>/dev/null; then
   cat >> "$PS" <<'MD'
 
 ## Pricing & Entitlements
-- Unit price: **$1.99** per pool per **30 days**, billed in **bundles of 5** (5, 10, 15, …).
+- Bundle-based pricing: **$14.95/month** for 5 pools included, **$9.95/month** per extra bundle of 5 pools.
 - **Allowed slots** (capacity bonus, no price reduction):
   - Let **U** = number of **paid** pools (multiple of 5).
   - If **U = 0** → **1 free slot** (trial).

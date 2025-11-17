@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
 const ROOT = process.cwd();
 const pricingPath = path.join(ROOT, 'config', 'pricing.json');
 const expected = {
@@ -39,8 +41,8 @@ for (const [key, val] of Object.entries(expected.rangebandAlerts)) {
   if (config.rangebandAlerts?.[key] !== val) fail(`rangebandAlerts.${key} expected ${val} but found ${config.rangebandAlerts?.[key]}`);
 }
 
-// Block ALL legacy pricing references - new bundle-based pricing only ($14.95/$24.95 for 5 pools + bundles)
-// No exceptions - legacy "$1.99 per pool/month" must not appear anywhere
+// Block ALL legacy pricing references - new bundle-based pricing only (14.95/24.95 USD for 5 pools + bundles)
+// No exceptions - legacy per-pool pricing must not appear anywhere
 const bannedLiterals = ['$1.99', '€1.99', '1.99 per pool', '1.99/month', '1.99 per month'];
 const whitelistDirs = new Set(['.git', 'node_modules', '.next', 'Finance', '_archive', 'docs', 'public', 'Documentatie', 'backups', 'brandguide', '1x']);
 const whitelistExts = new Set(['.pdf', '.docx', '.csv', '.json.bak', '.ndjson', '.bak']);
@@ -49,6 +51,8 @@ function scan(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (whitelistDirs.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
+    // Skip this script itself (contains banned literals in comments/arrays)
+    if (full === __filename) continue;
     if (entry.isDirectory()) {
       scan(full);
     } else if (entry.isFile()) {

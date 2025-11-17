@@ -5,7 +5,8 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Header from '@/components/Header';
-import { formatEUR, calcPoolsCost, calcNotifCost, calcTotal } from '@/lib/pricing';
+import { formatEUR } from '@/lib/pricing';
+import { calcPoolsCost, calcAlertsCost, calcTotalCost, formatUSD } from '@/lib/billing/pricing';
 
 export default function SalesPage() {
   const router = useRouter();
@@ -14,9 +15,9 @@ export default function SalesPage() {
   const pools = Number(paidPools) || 5;
   const notifications = addNotifications === '1';
 
-  const poolsCost = calcPoolsCost(pools);
-  const notifCost = calcNotifCost(pools, notifications);
-  const totalCost = calcTotal(pools, notifications);
+  const poolsCost = calcPoolsCost(pools, 'premium');
+  const notifCost = calcAlertsCost(pools, notifications);
+  const totalCost = calcTotalCost(pools, notifications, 'premium');
 
   return (
     <>
@@ -51,7 +52,7 @@ export default function SalesPage() {
 
               <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.04] p-6 font-ui text-sm">
                 <div className="flex items-baseline justify-between gap-4 text-white/70">
-                  <span>Pools: {pools} × €1.99 / month</span>
+                  <span>Pools: {pools} pools (bundle-based pricing)</span>
                   <span className="tnum font-semibold text-white" style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {formatEUR(poolsCost)}
                   </span>

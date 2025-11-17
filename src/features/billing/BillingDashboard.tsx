@@ -7,15 +7,13 @@ import { Button } from '@/components/ui/Button';
 import {
   ANNUAL_MULTIPLIER,
   FREE_POOLS,
-  PRICE_PER_POOL_USD,
 } from '@/data/subscriptionPlans';
+import { calcPoolsCost, formatUSD } from '@/lib/billing/pricing';
 
 interface BillingDashboardProps {
   walletId?: number;
   detectedPools?: number | null;
 }
-
-const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
 
 const clampCapacity = (value: number | null | undefined): number => {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
@@ -27,10 +25,8 @@ const clampCapacity = (value: number | null | undefined): number => {
 export function BillingDashboard({ walletId, detectedPools = null }: BillingDashboardProps) {
   const totalCapacity = clampCapacity(detectedPools);
   const paidPools = Math.max(0, totalCapacity - FREE_POOLS);
-  const monthlyAmount = Number((paidPools * PRICE_PER_POOL_USD).toFixed(2));
-  const annualAmount = Number(
-    (paidPools * PRICE_PER_POOL_USD * ANNUAL_MULTIPLIER).toFixed(2),
-  );
+  const monthlyAmount = calcPoolsCost(paidPools, 'premium');
+  const annualAmount = Number((monthlyAmount * ANNUAL_MULTIPLIER).toFixed(2));
 
   const checkoutParams = new URLSearchParams({
     desiredCapacity: String(totalCapacity),
@@ -43,8 +39,7 @@ export function BillingDashboard({ walletId, detectedPools = null }: BillingDash
           Subscription preview
         </h2>
         <p className="font-ui text-sm text-white/70">
-          Your first pool is always free. Each additional pool adds $
-          {PRICE_PER_POOL_USD.toFixed(2)} per month, or 10× for an annual plan.
+          Bundle-based pricing: $14.95/month for 5 pools included. Add bundles of 5 pools for $9.95/month each. Annual billing: pay 10 months.
         </p>
         {walletId ? (
           <p className="font-ui text-xs uppercase tracking-[0.2em] text-white/40">
@@ -64,8 +59,8 @@ export function BillingDashboard({ walletId, detectedPools = null }: BillingDash
           <span className="tnum text-white">{paidPools}</span>
         </span>
         <span className="text-xs text-white/50">
-          Monthly: {formatCurrency(monthlyAmount)} · Annual:{' '}
-          {formatCurrency(annualAmount)}
+          Monthly: {formatUSD(monthlyAmount)} · Annual:{' '}
+          {formatUSD(annualAmount)}
         </span>
       </div>
 
@@ -90,11 +85,11 @@ export function BillingDashboard({ walletId, detectedPools = null }: BillingDash
                 ? 'No paid pools detected yet'
                 : `Activate ${paidPools} paid pool${
                     paidPools === 1 ? '' : 's'
-                  } for ${formatCurrency(monthlyAmount)}/month`
+                  } for ${formatUSD(monthlyAmount)}/month`
             }
           >
             Activate {paidPools}{' '}
-            {paidPools === 1 ? 'pool' : 'pools'} for {formatCurrency(monthlyAmount)}
+            {paidPools === 1 ? 'pool' : 'pools'} for {formatUSD(monthlyAmount)}
             /month
           </Button>
           <Link
@@ -102,9 +97,9 @@ export function BillingDashboard({ walletId, detectedPools = null }: BillingDash
             className="tnum text-xs font-semibold text-white/60 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
             aria-label={`Pay annually for ${paidPools} paid pool${
               paidPools === 1 ? '' : 's'
-            } at ${formatCurrency(annualAmount)}/year`}
+            } at ${formatUSD(annualAmount)}/year`}
           >
-            Pay annually ({formatCurrency(annualAmount)}/year)
+            Pay annually ({formatUSD(annualAmount)}/year)
           </Link>
         </div>
       </div>

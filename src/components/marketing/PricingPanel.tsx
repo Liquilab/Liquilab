@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/Button';
 import {
   ANNUAL_MULTIPLIER,
   FREE_POOLS,
-  PRICE_PER_POOL_USD,
 } from '@/data/subscriptionPlans';
+
+import { pricingConfig, calcPoolsCost, formatUSD } from '@/lib/billing/pricing';
 
 interface PricingPanelProps {
   highlight?: never;
@@ -16,12 +17,12 @@ interface PricingPanelProps {
 }
 
 const COPY = {
-  title: 'First pool is free. Every additional pool is $1.99/month.',
-  body: 'Your first pool is free. Each additional pool costs $1.99/month. Prefer annual? Pay 10 months.',
+  title: `Bundle-based pricing: $${pricingConfig.premium.priceMonthlyUsd}/month for 5 pools`,
+  body: `Start with ${pricingConfig.premium.includedPools} pools included. Add bundles of ${pricingConfig.premium.extraBundlePools} pools for $${pricingConfig.premium.extraBundlePriceUsd}/month each. Prefer annual? Pay 10 months.`,
   startFreeCta: 'Start free',
 } as const;
 
-const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
+// Use formatUSD from billing/pricing for consistency
 
 const clampCapacity = (value: number | null | undefined): number => {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
@@ -33,10 +34,8 @@ const clampCapacity = (value: number | null | undefined): number => {
 export function PricingPanel({ detectedPools = null }: PricingPanelProps) {
   const totalCapacity = clampCapacity(detectedPools);
   const paidPools = Math.max(0, totalCapacity - FREE_POOLS);
-  const monthlyAmount = Number((paidPools * PRICE_PER_POOL_USD).toFixed(2));
-  const annualAmount = Number(
-    (paidPools * PRICE_PER_POOL_USD * ANNUAL_MULTIPLIER).toFixed(2),
-  );
+  const monthlyAmount = calcPoolsCost(paidPools, 'premium');
+  const annualAmount = Number((monthlyAmount * ANNUAL_MULTIPLIER).toFixed(2));
 
   const checkoutParams = new URLSearchParams({
     desiredCapacity: String(totalCapacity),
@@ -64,8 +63,8 @@ export function PricingPanel({ detectedPools = null }: PricingPanelProps) {
               <span className="tnum text-white">{paidPools}</span>
             </span>
             <span className="text-xs text-white/50">
-              Monthly: {formatCurrency(monthlyAmount)} · Annual:{' '}
-              {formatCurrency(annualAmount)}
+              Monthly: {formatUSD(monthlyAmount)} · Annual:{' '}
+              {formatUSD(annualAmount)}
             </span>
           </div>
         ) : (
@@ -94,12 +93,12 @@ export function PricingPanel({ detectedPools = null }: PricingPanelProps) {
                   ? 'No paid pools detected yet'
                   : `Activate ${paidPools} paid pool${
                       paidPools === 1 ? '' : 's'
-                    } for ${formatCurrency(monthlyAmount)}/month`
+                    } for ${formatUSD(monthlyAmount)}/month`
               }
               className="tnum"
             >
               Activate {paidPools}{' '}
-              {paidPools === 1 ? 'pool' : 'pools'} for {formatCurrency(monthlyAmount)}
+              {paidPools === 1 ? 'pool' : 'pools'} for {formatUSD(monthlyAmount)}
               /month
             </Button>
             <Link
@@ -107,9 +106,9 @@ export function PricingPanel({ detectedPools = null }: PricingPanelProps) {
               className="tnum text-xs font-semibold text-white/60 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
               aria-label={`Pay annually for ${paidPools} paid pool${
                 paidPools === 1 ? '' : 's'
-              } at ${formatCurrency(annualAmount)}/year`}
+              } at ${formatUSD(annualAmount)}/year`}
             >
-              Pay annually ({formatCurrency(annualAmount)}/year)
+              Pay annually ({formatUSD(annualAmount)}/year)
             </Link>
           </div>
         </div>

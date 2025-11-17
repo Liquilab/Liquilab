@@ -4,12 +4,12 @@ import React from 'react';
 
 import {
   BUNDLE_SIZE,
-  PRICE_PER_POOL_USD,
   includedCapacity,
   freeBonus,
   monthlyAmountUsdForPaidCapacity,
   yearlyAmountUsdForPaidCapacity,
 } from '@/data/pricing';
+import { pricingConfig } from '@/lib/billing/pricing';
 import {
   ALERTS_PRICE_PER_BUNDLE_USD,
   ANNUAL_MULTIPLIER,
@@ -313,7 +313,8 @@ export default function PricingCalculator({ address: initialAddress }: PricingCa
   }, [alertsEnabled, paidPoolsForAlerts]);
 
   const previewForCycle = billingCycle === 'month' ? previewMonth : previewYear;
-  const monthlyPerPool = PRICE_PER_POOL_USD.toFixed(2);
+  // Bundle-based pricing: $14.95/month for 5 pools, $9.95/month per extra bundle
+  const monthlyPerPool = (pricingConfig.premium.priceMonthlyUsd / pricingConfig.premium.includedPools).toFixed(2);
 
   const recommended = previewForCycle?.pricing?.paidPools ?? 0;
   const suggestedCapacity = previewForCycle?.pricing?.totalCapacity ?? includedCapacity(0);

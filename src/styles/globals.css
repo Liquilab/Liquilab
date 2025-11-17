@@ -91,6 +91,19 @@
   background-size:cover;
   /* Ensure the background image remains crisp and bright site-wide */
   opacity:1;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+.hero-wave {
+  /* Ensure water-wave is fully visible in hero section */
+  min-height: 50vh;
+}
+
+.hero-section {
+  /* Hero section with visible water-wave background */
+  position: relative;
+  z-index: 1;
 }
 
 /* Custom styles for the Enosys LP Manager */

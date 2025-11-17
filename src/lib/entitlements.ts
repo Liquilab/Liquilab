@@ -50,7 +50,7 @@ const ROLE_CAPS: Record<Role, Omit<Entitlements, 'role' | 'remainingSlots' | 'al
   PREMIUM: {
     maxPools: Infinity,
     basePools: 5,
-    slotPrice: 1.99,
+    slotPrice: pricingConfig.premium.priceMonthlyUsd / pricingConfig.premium.includedPools, // DEPRECATED - use bundle pricing
     fields: {
       pair: true,
       tvl: true,
@@ -66,7 +66,7 @@ const ROLE_CAPS: Record<Role, Omit<Entitlements, 'role' | 'remainingSlots' | 'al
   PRO: {
     maxPools: Infinity,
     basePools: 5,
-    slotPrice: 1.99,
+    slotPrice: pricingConfig.premium.priceMonthlyUsd / pricingConfig.premium.includedPools, // DEPRECATED - use bundle pricing
     fields: {
       pair: true,
       tvl: true,

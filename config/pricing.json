@@ -1,9 +1,28 @@
 {
-  "base5": 14.95,
-  "extraSlot": 1.99,
-  "extraBundle5": 9.95,
-  "alertsPack5": 2.49,
-  "uiPackCopy": "+5 pools = +$9.95",
-  "planId": "A"
+  "visitor": {
+    "label": "Visitor",
+    "priceMonthlyUsd": 0,
+    "includedPools": 0
+  },
+  "premium": {
+    "label": "Premium",
+    "priceMonthlyUsd": 14.95,
+    "includedPools": 5,
+    "extraBundlePriceUsd": 9.95,
+    "extraBundlePools": 5,
+    "trialDays": 14
+  },
+  "pro": {
+    "label": "Pro",
+    "priceMonthlyUsd": 24.95,
+    "includedPools": 5,
+    "extraBundlePriceUsd": 14.95,
+    "extraBundlePools": 5,
+    "trialDays": 14
+  },
+  "rangebandAlerts": {
+    "label": "RangeBand™ Alerts",
+    "priceMonthlyUsdPerBundle": 2.49,
+    "bundlePools": 5
+  }
 }
-
