@@ -4,8 +4,8 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 
-# Disable BuildKit to avoid cache mount errors
+# Enable BuildKit for multi-stage builds
 [[env]]
-DOCKER_BUILDKIT = "0"
+DOCKER_BUILDKIT = "1"
 
 
