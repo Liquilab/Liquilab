@@ -401,7 +401,7 @@ type AlertRecord = {
   - ✅ Sentry test event logged (`POST /api/sentry-test`) - **COMPLETE**
   - ✅ DB seed validation (`npm run verify:db:staging`) - **COMPLETE** (production data copied: 607k PoolEvent, 233k PositionEvent, 79k PositionTransfer)
   - ✅ Stripe TEST keys verified (`npm run verify:billing:stripe`) - **VALIDATED** in Railway environment. Keys work correctly when executed in Railway service context.
-  - ⏳ Uptime monitor configured (`docs/ops/UPTIME_MONITOR.md`, `docs/ops/UPTIME_MONITOR_SETUP.md`, `docs/ops/UPTIMEROBOT_SETUP_STEPS.md`) - **DOCUMENTED**, needs external service setup. See `docs/ops/UPTIMEROBOT_SETUP_STEPS.md` for step-by-step UptimeRobot guide.
+  - ✅ Uptime monitor configured (`docs/ops/UPTIME_MONITOR.md`, `docs/ops/UPTIME_MONITOR_SETUP.md`, `docs/ops/UPTIMEROBOT_SETUP_STEPS.md`) - **ACTIVE**. UptimeRobot monitor configured and operational for `https://staging.liquilab.io/api/health` (5 min interval, alerts on 2 consecutive failures).
   - ⚠️ Verify suite (`npm run verify`) - **PARTIAL**: Static checks pass (lint, scan:prices, verify:pricing, verify:icons ✅). API checks (`verify:api:prices`, `verify:api:analytics`) fail against staging (expected - price/analytics services may not be fully configured in staging). Can test against staging with `VERIFY_BASE_URL=https://staging.liquilab.io npm run verify:api:*`.
 
 ### 7.8 Sentry test (S0-OPS01)
@@ -443,11 +443,12 @@ type AlertRecord = {
 - **Monitor:** External service (UptimeRobot/Pingdom) checks every 5 minutes
 - **Documentation:** See `docs/ops/UPTIME_MONITOR.md` for setup instructions
 - **Alert:** Triggered after 2 consecutive failures (10+ minutes downtime)
-- **Status (2025-11-17):** Endpoint functional and tested. Documentation complete. **Action required:** Configure external monitoring service (UptimeRobot/Pingdom) per `docs/ops/UPTIME_MONITOR.md`:
-  - Create monitor for `https://staging.liquilab.io/api/health`
-  - Set interval: 5 minutes
-  - Alert threshold: 2 consecutive failures
-  - Add alert contacts (ops team)
+- **Status (2025-11-17):** ✅ **ACTIVE** - UptimeRobot monitor configured and operational:
+  - Monitor: `https://staging.liquilab.io/api/health`
+  - Interval: 5 minutes
+  - Alert threshold: 2 consecutive failures (10 minutes)
+  - Alert contacts: Configured
+  - Current status: Up (green)
 
 ### 7.5 Sprints (S0…S4)
 - **S0 (SSoT Δ-2025-11-16):** Env matrix + endpoint contracts + consent/legal stubs + DoD/verify matrix.  
