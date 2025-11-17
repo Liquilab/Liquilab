@@ -424,7 +424,8 @@ type AlertRecord = {
 - **Minimums:** PoolEvent ≥100, PositionEvent ≥50, PositionTransfer ≥50, analytics_market_metrics_daily ≥10
 - **Usage:** Run locally against staging DATABASE_URL (use proxy URL: `*.proxy.rlwy.net`, not `railway.internal`)
 - **Exit:** Non-zero if any table below minimum threshold
-- **Status (2025-11-17):** Script functional - correctly connects to staging DB and validates table counts. Staging database schema migrated but empty (requires data seeding via indexer).
+- **Status (2025-11-17):** Script functional - correctly connects to staging DB and validates table counts. Staging database schema migrated but empty.
+- **Data Seeding Strategy:** Staging does not require a separate indexer. Recommended approach: periodic database copy from production to staging (via `pg_dump`/`pg_restore` or Railway backup restore). This provides realistic test data without the overhead of running a separate indexer worker for staging.
 
 ### 7.10 Stripe TEST Verification (S0-OPS01)
 - **Script:** `npm run verify:billing:stripe`
