@@ -60,6 +60,8 @@
     "verify:pricing": "node scripts/verify-pricing/drift.mjs",
     "verify:api:prices": "node scripts/verify-api/prices-current.mjs",
     "verify:api:analytics": "node scripts/verify-api/analytics.mjs",
+    "verify:db:staging": "node scripts/verify-db/staging-seed.mjs",
+    "verify:billing:stripe": "node scripts/verify-billing/stripe-test.mjs",
     "scan:prices": "node scripts/scan/prices-sources.mjs",
     "verify": "npm run -s lint:ci && npm run -s scan:prices && npm run -s verify:api:prices && npm run -s verify:pricing && npm run -s verify:icons && npm run -s verify:api:analytics",
     "icons:collect": "node scripts/icons/collect-flare-dex-tokens.mjs",
@@ -68,6 +70,7 @@
     "icons:test:topic": "node scripts/verify-icons/topic-matches.mjs --rpc=$FLARE_RPC_PRIMARY --factory=$FACT --from=$FROM --to=$TO"
   },
   "dependencies": {
+    "@sentry/node": "7.120.4",
     "@ankr.com/ankr.js": "^0.6.1",
     "@perplexity-ai/perplexity_ai": "^0.16.0",
     "@prisma/client": "6.19.0",

@@ -126,8 +126,17 @@
 - **railway.toml:** Added explicit `dockerfilePath = "Dockerfile"` and `DOCKER_BUILDKIT = "1"` for proper multi-stage build support.
 - **Git Workflow:** Merged Docker stabilization fixes to staging branch via feature branch `fix/staging-docker-20251117072003`.
 - **Dev Environment:** Configured `.zshrc` to auto-navigate to `$HOME/Projects/Liquilab_staging` on terminal startup.
-- **Files Modified:** `Dockerfile` (removed syntax directive), `railway.toml` (added build config), `PROJECT_STATE.md` (changelog updates).
-- **Status:** Staging deployment configured for Railway Docker builder without BuildKit conflicts.
+- **S0-OPS01 Completion:**
+  - `pages/api/sentry-test.ts`: Sentry staging test endpoint with eventId return
+  - `src/lib/observability/withSentryApiHandler.ts`: API route error wrapper for Sentry capture
+  - `src/lib/observability/sentry.ts`: Enhanced environment detection (staging/production/development)
+  - `scripts/verify-db/staging-seed.mjs`: DB seed validation script with minimum row count checks
+  - `scripts/verify-billing/stripe-test.mjs`: Stripe TEST key verification script
+  - `docs/ops/UPTIME_MONITOR.md`: Uptime monitor configuration guide
+  - `package.json`: Added `verify:db:staging` and `verify:billing:stripe` scripts
+  - `PROJECT_STATE.md`: Added sections 7.9 (DB seed), 7.10 (Stripe TEST), 7.11 (Uptime monitor), updated 7.7 (merge gates), 7.8 (Sentry test)
+- **Files Modified:** `Dockerfile`, `railway.toml`, `package.json`, `PROJECT_STATE.md`, `src/lib/observability/sentry.ts`, created `pages/api/sentry-test.ts`, `src/lib/observability/withSentryApiHandler.ts`, `scripts/verify-db/staging-seed.mjs`, `scripts/verify-billing/stripe-test.mjs`, `docs/ops/UPTIME_MONITOR.md`
+- **Status:** S0-OPS01 repo/config side complete; staging ready for Railway deploy with Sentry, DB seed verify, Stripe TEST, and uptime monitor support.
 
 ## 4. Environments & Env Keys (Web = Flare-only)
 
@@ -382,13 +391,44 @@ type AlertRecord = {
 ### 7.7 Environments & Merge Gates
 - **Staging deploy:** via GitHub Actions workflow `Staging Deploy` (trigger: PR base `staging` or label `staging`; runs `npm run verify` then Railway deploy to “Liquilab (staging project)”).  
 - **Status check:** `Staging Deploy` must be green before merge.  
-- **Uptime:** external monitor hits `GET /api/health` on staging every 5 minutes; alert to ops channel.
+- **S0-OPS01 DoD:** Staging environment must pass:
+  - Sentry test event logged (`POST /api/sentry-test`)
+  - DB seed validation (`npm run verify:db:staging`)
+  - Stripe TEST keys verified (`npm run verify:billing:stripe`)
+  - Uptime monitor configured (`docs/ops/UPTIME_MONITOR.md`)
+  - Verify suite green (`npm run verify`)
 
-### 7.8 Sentry test (manual, docs-only)
-- Staging curl to emit test error (once Sentry SDK wired):  
+### 7.8 Sentry test (S0-OPS01)
+- **Endpoint:** `POST /api/sentry-test`
+- **Expected:** HTTP 200 with `{ ok: true, sentry: true, sentryConfigured: true, env: "staging", eventId: "..." }`
+- **Staging test:**
   ```bash
-  curl -X POST https://staging.liquilab.io/api/sentry-test || true
+  curl -X POST https://staging.liquilab.io/api/sentry-test
   ```
+- **Verification:** Check Sentry dashboard for "Sentry staging test event" with environment tag "staging"
+- **Helper:** `withSentryApiHandler()` wrapper available in `src/lib/observability/withSentryApiHandler.ts` for API route error capture
+
+### 7.9 DB Seed Validation (S0-OPS01)
+- **Script:** `npm run verify:db:staging`
+- **Checks:** Row counts for `pool_events`, `position_events`, `position_transfers`, `analytics_pool_daily`
+- **Minimums:** pool_events ≥100, position_events ≥50, position_transfers ≥50, analytics_pool_daily ≥10
+- **Usage:** Run locally against staging DATABASE_URL or in CI before deploy
+- **Exit:** Non-zero if any table below minimum threshold
+
+### 7.10 Stripe TEST Verification (S0-OPS01)
+- **Script:** `npm run verify:billing:stripe`
+- **Requires:** `STRIPE_SECRET_KEY` (must start with `sk_test_`), `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- **Action:** Retrieves Stripe account info to verify TEST keys are valid
+- **Safety:** Only runs against TEST keys (exits if production key detected)
+- **Usage:** Run locally before staging deploy to verify Stripe TEST configuration
+
+### 7.11 Uptime Monitor (S0-OPS01, SP4-B05)
+- **Endpoint:** `GET /api/health`
+- **URL:** `https://staging.liquilab.io/api/health`
+- **Expected:** HTTP 200, `{ ok: true, ts: <timestamp> }`
+- **Monitor:** External service (UptimeRobot/Pingdom) checks every 5 minutes
+- **Documentation:** See `docs/ops/UPTIME_MONITOR.md` for setup instructions
+- **Alert:** Triggered after 2 consecutive failures (10+ minutes downtime)
 
 ### 7.5 Sprints (S0…S4)
 - **S0 (SSoT Δ-2025-11-16):** Env matrix + endpoint contracts + consent/legal stubs + DoD/verify matrix.  
@@ -2514,3 +2554,4 @@ Prevents broken code from reaching production. Catches integration issues early 
 
 - S0 (staging): Dockerfile zonder BuildKit cache-mounts + start.sh; staging Docker build gestabiliseerd.
 - S0-OPS01: Sentry server init + smoke-route; Dockerfile/start.sh/.dockerignore geborgd; ops runbook toegevoegd voor staging reset en health.
+- Changelog — 2025-11-17: Added Sentry STAGING test endpoint /api/sentry-test using @sentry/node helper and documented env vars.
