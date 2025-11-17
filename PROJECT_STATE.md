@@ -118,6 +118,7 @@
   - Observability: SP4-B04..B06
   - Gating: SP3-G01, SP3-G02
   - Verify Suite: SP4-T44..T46
+- **S0 (staging):** Dockerfile zonder BuildKit mounts + start.sh; staging Docker build gestabiliseerd.
 
 ## 4. Environments & Env Keys (Web = Flare-only)
 
@@ -2499,3 +2500,7 @@ Prevents broken code from reaching production. Catches integration issues early 
 **Post-SP1:** Implement `src/lib/format/currency.ts` met SSoT currency/number helpers (formatUSD, formatEUR, formatNumber, formatPercent) en refactor bestaande inline formattering naar deze centrale helpers. Verifieer met visual regression test op demo pools table (controleer: "0.00" voor zero fees, "—" voor null APR, tabular-nums in numerieke kolommen).
 
 ---
+
+## Changelog — 2025-11-17
+
+- S0 (staging): Dockerfile zonder BuildKit cache-mounts + start.sh; staging Docker build gestabiliseerd.
