@@ -141,8 +141,8 @@
   - ✅ Health endpoint: `GET /api/health` returns `{ ok: true, ts: ... }` (uptime monitor ready)
   - ✅ Sentry test: `POST /api/sentry-test` returns `{ ok: true, sentry: true, sentryConfigured: true, env: "staging", eventId: "..." }` - Sentry events successfully logged to dashboard
   - ✅ DB seed verify: Script functional - connects to staging DB, checks table row counts. Production database successfully copied to staging (607k PoolEvent, 233k PositionEvent, 79k PositionTransfer rows). `analytics_market_metrics_daily` marked as optional (non-blocking) since it may be empty in production.
-  - ⏳ Stripe TEST verify: Requires `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` from Railway staging (not tested yet)
-- **Status:** S0-OPS01 repo/config side complete and deployed to staging. Sentry configured and operational. DB verify script functional - staging DB needs data seeding. Remaining: Stripe TEST keys verification.
+  - ⚠️ Stripe TEST verify: Keys found in Railway staging but validation failed (Invalid API Key). May need key refresh or Stripe dashboard verification. Script functional - requires `stripe` package installed.
+- **Status:** S0-OPS01 repo/config side complete and deployed to staging. Sentry configured and operational. DB verify script functional - staging DB seeded with production data. Stripe keys present but need validation/refresh.
 
 ## 4. Environments & Env Keys (Web = Flare-only)
 
@@ -434,6 +434,7 @@ type AlertRecord = {
 - **Action:** Retrieves Stripe account info to verify TEST keys are valid
 - **Safety:** Only runs against TEST keys (exits if production key detected)
 - **Usage:** Run locally before staging deploy to verify Stripe TEST configuration
+- **Status (2025-11-17):** Stripe keys found in Railway staging (`STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`). Script requires `stripe` package (`npm install stripe`). Key validation may fail if keys are expired or have insufficient permissions - verify in Stripe dashboard.
 
 ### 7.11 Uptime Monitor (S0-OPS01, SP4-B05)
 - **Endpoint:** `GET /api/health`
