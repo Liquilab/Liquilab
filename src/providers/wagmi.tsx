@@ -15,9 +15,6 @@ const queryClient = new QueryClient({
 });
 
 export function WagmiRoot({ children }: { children: React.ReactNode }) {
-  // Avoid SSR pitfalls: don't spin providers on the server
-  if (typeof window === 'undefined') return <>{children}</>;
-  
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

@@ -46,7 +46,8 @@
     "test": "vitest",
     "docs": "pnpm dlx docsify-cli@latest serve docs -p 3030",
     "docs:ui": "open http://localhost:3000/docs",
-    "report:weekly": "node scripts/reports/weekly-liquidity-pool-report.mjs --week auto",
+    "report:weekly": "node scripts/generate-weekly-report.js",
+    "report:weekly:pdf": "node scripts/generate-weekly-report.js --pdf-only",
     "report:social": "node scripts/generate-social-media.js",
     "report:all": "bash scripts/weekly-report-workflow.sh",
     "verify:web": "node -r tsconfig-paths/register scripts/verify-web/port-and-health.mjs",
@@ -73,7 +74,8 @@
     "icons:collect": "node scripts/icons/collect-flare-dex-tokens.mjs",
     "icons:fetch": "node scripts/icons/fetch-dex-icons.mjs",
     "icons:probe": "node scripts/verify-icons/remote-probe.mjs",
-    "icons:test:topic": "node scripts/verify-icons/topic-matches.mjs --rpc=$FLARE_RPC_PRIMARY --factory=$FACT --from=$FROM --to=$TO"
+    "icons:test:topic": "node scripts/verify-icons/topic-matches.mjs --rpc=$FLARE_RPC_PRIMARY --factory=$FACT --from=$FROM --to=$TO",
+    "tokens:build": "node scripts/build-tokens.mjs"
   },
   "dependencies": {
     "@ankr.com/ankr.js": "^0.6.1",
@@ -123,6 +125,7 @@
     "dotenv-expand": "^12.0.3",
     "eslint": "^9",
     "eslint-config-next": "15.5.6",
+    "playwright": "^1.56.1",
     "postcss": "^8.4.32",
     "prisma": "6.19.0",
     "tailwindcss": "^3.4.0",

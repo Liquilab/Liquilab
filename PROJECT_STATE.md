@@ -155,6 +155,12 @@
   - RangeBand demo cells show plausible status/fees using existing RangeBand data contracts
   - HTML includes RangeBand text and token icons sourced via `/media/tokens/*.svg`
 
+## Changelog — 2025-11-21
+
+- **Weekly Report Template IR investigation:** `/admin/weekly-report-template` keeps returning HTTP 500 in development. Cleaned the component down to native inputs/buttons, disabled `lucide-react` icons, and loaded it via `next/dynamic(..., { ssr: false })` to rule out SSR/window issues. Error persists and needs deeper Next.js tracing.
+- **Routing conflict fix:** Next.js refused to compile because the project mixed `[id]` and `[pair]` slugs for the same `/pool/*` dynamic path. Consolidated everything (web + API) to `[tokenId]`, ensuring `pages/pool/[tokenId]/(pro|universe)` and `pages/api/analytics/pool/[tokenId](/**)` share the same param name. Dev server now starts cleanly again.
+- **Status / next steps:** Weekly report page still fails fast with 500 despite component cleanup. Next debugging step is to capture the server stack trace (e.g. `next dev --turbo false` with `LOG_LEVEL=debug`) or inspect middleware/route handlers for unexpected exceptions when the route loads.
+
 ## 4. Environments & Env Keys (Web = Flare-only)
 
 **GECOVERED:** ✅ Environment matrix fully documented and operational.
@@ -221,6 +227,85 @@
 
 ---
 
+## DATA ENRICHMENT & WEEKLY UNIVERSE ANALYTICS — SSoT
+
+### 1. Context & Goal
+- Liquilab levert (1) een SaaS-dienst (Premium/Pro) waar LP’s hun posities, ranges, fees en Universe-context volgen en (2) een wekelijkse Universe report met harde on-chain cijfers voor Flare.
+- Indexer + DB zijn sterk (honderdduizenden events, ~10k wallets). Analytics-lagen (daily metrics, Universe views, RangeBand aggregaties) zijn vrijwel leeg → TVL/volume/fees/APR/wallet buckets/report data ontbreken.
+- Deze SSoT documenteert gap, functionele data-behoeften, 4-layer oplossing en werkpakketten (A–D) + risico’s/mitigaties voor grant/MVP.
+
+### 2. Probleem: sterke indexer, zwakke analytics
+- **Werkt:** volledige PoolEvent/PositionEvent/PositionTransfer-indexing → inzicht in #pools, #posities, #wallets en tijdspanne.
+- **Ontbreekt:** `analytics_market*`, `analytics_wallet*`, `analytics_position*` tabellen zijn leeg; geplande MVs (`mv_wallet_portfolio_latest`, `mv_position_overview_latest`, `mv_position_day_stats`, `mv_position_events_recent`) bestaan niet in productie.
+- **Effect:** geen consistente TVL/volume/fees/APR/bucket/RangeBand/claim/missed-fees metrics → Universe flows + grant narrative missen data → “indexer strong, analytics weak”.
+
+### 3. Functionele Data Needs
+
+**3.1 Wallet (My Portfolio / Pro cockpit)**  
+- KPI’s: tvl_total_usd, positions_active, fees24h/30d, incentives (incl. rFLR), avg_apr_30d_pct.  
+- Universe context (Pro): APR percentile, time-in-range vs median, aandeel posities Late/Very late.  
+- Vereist: `analytics_wallet_metrics_daily` + `mv_wallet_portfolio_latest`.
+
+**3.2 Pool (Pool Detail / Universe)**  
+- KPIs: tvl, volume 24h/7d/30d, fees 24h/7d/30d, positions_active, lp_wallets_active.  
+- Universe-blokken: State, LP-structuur/fairness, RangeBand Barometer, APR distributie, Claim & missed fees, Notable moves.  
+- Vereist: `analytics_market_metrics_daily` + pool-MVs (`mv_pool_latest_state`, `mv_pool_fees_7d`, `mv_pool_volume_7d`, `mv_pool_changes_7d`).
+
+**3.3 Position (Position Detail / RangeBand / alerts)**  
+- Snapshots per ERC-721: tvl_usd_current, unclaimed_fees, apr_7d/30d, RangeBand fields (range_min/range_max/current_price, strategy_code, spreadPct, bandColor, positionRatio), claim fields (`unclaimed_fees_pct_of_tvl`, `late_claim_state`).  
+- Historie: time-in-range %, fees/incentives per dag, recente events.  
+- Vereist: `mv_position_overview_latest`, `mv_position_day_stats`, `mv_position_events_recent`.
+
+**3.4 Universe/report**  
+- Netwerk KPIs, DEX shares, top/growth pools, deep dives (bijv. WFLR/USDT0).  
+- Voedt Universe view + Weekly report generator (grant deliverable).
+
+### 4. Proposed Solution — 4 Layers
+1. **Raw ingestion & storage** — indexer + basistabellen (klaar).  
+2. **Analytics schema (analytics_*)** — daily metrics tabellen voor markets/wallets/positions.  
+3. **Materialized views & Universe aggregaten** — MVs voor wallets, posities, pools en Universe aggregaties.  
+4. **API & Weekly report** — endpoints + report generator gebouwd op deze MVs.
+
+### 5. Work Packages (A–D)
+- **Package A — Populate analytics tables**  
+  A1: `analytics_market_metrics_daily` vullen (TVL/volume/fees per pool per dag).  
+  A2: `analytics_wallet_metrics_daily` (wallet TVL/fees/avg APR per dag).  
+  A3: `analytics_position` + snapshot tabellen.
+- **Package B — Materialized views & refresh**  
+  B1: `mv_wallet_portfolio_latest`.  
+  B2: `mv_position_overview_latest`.  
+  B3: `mv_position_day_stats` + `mv_position_events_recent`.  
+  B4: pool-MVs (`mv_pool_latest_state`, `mv_pool_fees_24h/7d`, `mv_pool_volume_7d`, `mv_pool_changes_7d`).  
+  B5: refresh jobs + health checks (`verify:mv`).
+- **Package C — Universe calculations**  
+  C1: LP size buckets (Retail/Mid/Whale/Super-whale).  
+  C2: 7d volatility regimes (σ₇d).  
+  C3: Crowded ranges (core ±2%).  
+  C4: Late-claim states.  
+  C5: `missed_fees_out_of_range` (trading fees + Reward Flare) per positie/pool/universe.  
+  C6: Universe aggregaties voor de 6 MVP-blokken (State, LP-structuur/fairness, RangeBand Barometer, APR distributie, Claim & missed fees, Notable moves).
+- **Package D — API & Weekly report**  
+  D1: `/api/analytics/*` endpoints laten lezen uit MVs.  
+  D2: `/api/analytics/pool/[pair]/universe` op Universe views bouwen.  
+  D3: Weekly report script hergebruikt analytics/MVs.  
+  D4: Eerste overtuigende Weekly Universe report met echte data opleveren (grant deliverable).
+
+### 6. Risks & Mitigations
+- **Performance:** zware berekeningen via ETL/MVs; UI/report query’t enkel views.  
+- **Metric drift:** Universe SSoT = enige bron; definities in SQL + documentatie.  
+- **Environment drift:** identieke migraties/refresh scripts; MV-health checks (verify:mv) in CI.  
+- **Scope creep:** focus op 6 Universe MVP-blokken; extra metrics expliciet plannen via ROADMAP_DOMAIN_SPECS.
+
+### TODO — Weekly Report Admin Flow
+- **TODO — Weekly Report Admin Flow (DRAFT → APPROVED → SENT)**  
+  - Introduce a `Report` model (weekLabel, year, isoWeek, status enum DRAFT/APPROVED/SENT, htmlPath, pdfPath, generatedAt, sentAt, optional notes).  
+  - Weekly generator writes HTML/PDF and upserts the Report for the latest ISO week as DRAFT (no overwrite once APPROVED/SENT).  
+  - Admin UI lets the founder preview HTML/PDF, add notes, and flip status to APPROVED (or back to DRAFT if tweaks are needed).  
+  - Send-script (Mailgun) runs on schedule, finds APPROVED & unsent reports, emails the distribution list, then marks the Report as SENT.  
+  - Railway cron: run the draft generator early Monday, founder approves mid-morning, send-script runs later that morning to mail only approved reports.
+
+---
+
 ## 6. CLI Usage
 
 **GECOVERED:** ✅ CLI commands documented and operational.
@@ -253,6 +338,13 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
   - Structured start JSON → stdout + `data/indexer.progress.json`.  
   - Rolling logs → `logs/indexer-YYYYMMDD.log`.  
   - Database writes → `PoolEvent`, `PositionEvent`, `PositionTransfer`, `PoolStateSnapshot`, `SyncCheckpoint`.
+
+---
+
+### CSP / Dev vs Prod
+- Canonical CSP lives in `middleware.ts` and is applied to all routes via headers.  
+- Production: `script-src 'self'` (no `'unsafe-eval'`).  
+- Development: `script-src 'self' 'unsafe-eval'` to unblock Next.js dev tooling (webpack/HMR) which relies on eval/new Function. All other directives (`style-src`, `font-src`, `img-src`, `connect-src`, `worker-src`, etc.) remain identical between dev/prod.
 
 ---
 
@@ -435,6 +527,12 @@ type AlertRecord = {
 - **Additional verifiers:** `verify:mv` (MV freshness), `verify:ssr` (SSR HTML markers), billing/mailgun scripts remain soft-fail locally but required on staging/prod handoff.  
 - **Ops checks:** cron guarded by `CRON_SECRET`; rate-limit active on `/api/*` (60 req/min per IP, skipped on localhost); CORS restricted to localhost/staging/prod.
 
+- **app.liquilab.io placeholder:** For the public app placeholder, a lightweight Figma Make-based front-end renders:
+  - A full-screen hero wave background via `WaveBackground` (using the exported hero image),
+  - A simple `Logo` component with LiquiLab brand styling,
+  - A short English proposition about non-custodial liquidity analytics for Flare LPs,
+  - A clear `mailto:hello@liquilab.io` CTA for early access / contact.
+
 ### 7.7 Environments & Merge Gates
 - **Staging deploy:** Railway automatically deploys from GitHub when code is pushed to `staging` branch (via Railway's GitHub integration). No separate GitHub Actions workflow needed.  
 - **Branch protection:** Configured for `staging` and `main` branches requiring "verify" status check (from `CI — Verify Suite` workflow) to pass before merging. PRs are blocked until the verify suite completes successfully.
@@ -491,6 +589,44 @@ type AlertRecord = {
   - Alert threshold: 2 consecutive failures (10 minutes)
   - Alert contacts: Configured
   - Current status: Up (green)
+
+### 7.12 Current Snapshot Report (structural)
+- **Script:** `scripts/reports/current-snapshot.mts`
+- **NPM command:** `npm run report:snapshot` (requires `DATABASE_URL`)
+- **Scope:** Uses raw `Pool`, `PoolEvent`, `PositionEvent`, `PositionTransfer` (plus basic schema views) to compute structural metrics:
+  - Pool/position/wallet counts and event timestamp bounds
+  - Active pools + event counts over the last fully closed week
+  - Ēnosys vs SparkDEX breakdown via `Pool.factory`
+  - Optional 7D notional USD sum (falls back to “N/A” if `usdValue` isn’t available on `PoolEvent`)
+- **Purpose:** Always-on “Current Snapshot” Markdown report for founders/grants with actual, current production numbers even while full Universe analytics remain incomplete.
+- **Output:** `docs/research/weekly/Current-Snapshot-YYYY-Www.md` (Markdown, ready for Figma/Canva or Markdown→PDF workflows). Script never hard-fails on missing columns/tables; missing metrics are logged and rendered as `N/A` with a short note.
+
+### 7.13 ERC-721 LP Growth (Ēnosys & SparkDEX)
+- **Implemented in:** `scripts/reports/current-snapshot.mts` (also surfaced in Weekly Universe deliverables once the HTML report is regenerated).
+- **Data source:** derives the first-seen timestamp per ERC-721 LP position (`PositionEvent`) and maps each tokenId to a DEX via `Pool.factory` (Ēnosys vs SparkDEX factory addresses per SSoT).
+- **Output:** Monthly (`YYYY-MM`) growth table listing:
+  - New LP positions per month for Ēnosys and SparkDEX
+  - Monthly total new positions
+  - Cumulative ERC-721 position count since factory deployment
+- **Purpose:** Grants the founder a provable adoption curve of concentrated-liquidity LPs on Flare V3, even before the full analytics layer is complete. Falls back to “data not available” if factories or PositionEvent rows are missing.
+
+#### LP Wallet Growth (Ēnosys & SparkDEX V3)
+- **Included in:** `scripts/reports/current-snapshot.mts` output.
+- **Data source:** `PositionEvent.recipient` (first-time LP creator) joined to `Pool.factory` to classify wallets by Ēnosys vs SparkDEX.
+- **Output:** Monthly (`YYYY-MM`) table showing:
+  - New LP wallets per month for Ēnosys and SparkDEX (based on first-ever ERC-721 LP position)
+  - Total new LP wallets per month (combined)
+  - Cumulative LP wallet count across both DEXes since V3 factory deployment
+- **Purpose:** Exposes an adoption curve at the wallet level (distinct LPs) to complement tokenId growth, suitable as a stand-alone grant slide/table.
+
+#### Monthly Growth since V3 Factory Deployment
+- **Included in:** both `scripts/reports/current-snapshot.mts` (Markdown) and `scripts/generate-weekly-report.js` (HTML/PDF Weekly Universe report).
+- **Data sources:** `PoolEvent` (PoolCreated + `Pool.factory` for Enosys/SparkDEX V3 pools), `PositionEvent.recipient` (first-ever LP creators in V3 pools), and `analytics_market_metrics_daily` for daily TVL when populated.
+- **Output:** Monthly (`YYYY-MM`) growth table with:
+  - `New pools` — count of V3 pools whose first PoolCreated event falls in the month
+  - `New LP wallets` — wallets whose first-ever ERC-721 LP position in V3 pools is in that month
+  - `Avg TVL (USD)` — average daily total TVL across all V3 pools in that month (or `N/A` if analytics views are empty)
+- **Purpose:** Gives a long-horizon view of ecosystem expansion (pool creation, LP onboarding, and TVL trajectory) suitable as a fixed chapter in universe/snapshot reports and grant evidence.
 
 ### 7.5 Sprints (S0…S4)
 - **S0 (SSoT Δ-2025-11-16):** Env matrix + endpoint contracts + consent/legal stubs + DoD/verify matrix.  
@@ -2644,6 +2780,8 @@ Prevents broken code from reaching production. Catches integration issues early 
 - S0-OPS01: Sentry server init + smoke-route; Dockerfile/start.sh/.dockerignore geborgd; ops runbook toegevoegd voor staging reset en health.
 - Changelog — 2025-11-17: Added Sentry STAGING test endpoint /api/sentry-test using @sentry/node helper and documented env vars.
 - Changelog — 2025-11-17: Aligned pricing SSoT (config/pricing.json + billing helper), refreshed hero/pricing UI, added pricing/rangeband verify checks, and introduced canonical RangeBand DS component.
-- S0-OPS02: CI — Verify Suite added (fail-hard: env/pricing/icons/brand; soft: billing/a11y); workflow `CI — Verify Suite` runs `npm run verify:ci` on PRs to staging/main (excludes API checks that require running server). Branch protection configured for staging and main branches requiring "verify" status check to pass before merging. Test PR #12 created to validate protection rules. PR #13 merged: fixes CI workflow to skip API checks, replaces all legacy pricing ($1.99) with bundle-based pricing ($14.95/$24.95), removes broken Staging Deploy workflow. **COMPLETE**.
+  - S0-OPS02: CI — Verify Suite added (fail-hard: env/pricing/icons/brand; soft: billing/a11y); workflow `CI — Verify Suite` runs `npm run verify:ci` on PRs to staging/main (excludes API checks that require running server). Branch protection configured for staging and main branches requiring "verify" status check to pass before merging. Test PR #12 created to validate protection rules. PR #13 merged: fixes CI workflow to skip API checks, replaces all legacy per-pool pricing references with the current Premium/Pro bundle-based pricing ($14.95/$24.95 plus add-on bundles), removes broken Staging Deploy workflow. **COMPLETE**.
+  - Changelog — 2025-11-21: Fixed 500 Internal Server Error on `/` in dev mode by removing SSR bypass in `src/providers/wagmi.tsx` that caused hydration mismatch. Providers now render consistently on both server and client.
 - SP1-T11: Home hero + demo table/grid implemented. Hero renders with water-wave background (fully visible), RangeBand demo, table/grid toggle working with `/api/demo/pools` endpoint. RangeBand demo cells show plausible status/fees using existing data contracts. Files: `pages/index.tsx`, `pages/api/demo/pools.ts`, `src/styles/globals.css`.
 - **Canonical Pricing & RangeBand SSoT (2025-11-17):** Documented canonical pricing model (Visitor/Premium/Pro/RangeBand Alerts) with `config/pricing.json` and `src/lib/billing/pricing.ts` as single source of truth. Codified RangeBand DS component (`src/components/pools/PoolRangeIndicator.tsx`) as canonical implementation with explicit "no FE RangeBand logic" rule — `bandColor` and `positionRatio` must come from backend/analytics layer only. Files: `PROJECT_STATE.md`.
+- SP1-T37: Added tokens pipeline (config/tokens.config.js + scripts/build-tokens.mjs) generating `src/styles/tokens.css` with brand colors, fonts (Quicksand/Inter), and tabular-nums numeric style; `npm run tokens:build` produces the CSS vars from Figma export at `figma/exports/tokens.json`.

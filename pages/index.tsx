@@ -1,214 +1,201 @@
-'use client';
+import type { NextPage } from "next";
+import Image from "next/image";
 
-import React from 'react';
-import Head from 'next/head';
-import Link from 'next/link';
-
-import { LiquiLabLogo } from '@/components/LiquiLabLogo';
-import { Button } from '@/components/ui/Button';
-import { InlineReal } from '@/components/rangeband/InlineReal';
-import DemoPoolsTable from '@/components/demo/DemoPoolsTable';
-import { PoolsGrid } from '@/components/pools/PoolsGrid';
-import WalletConnect from '@/components/WalletConnect';
-import { useAccount, useDisconnect } from 'wagmi';
-import type { PositionData } from '@/components/PositionsTable';
-import { pricingConfig, formatUSD } from '@/lib/billing/pricing';
-
-type ViewMode = 'table' | 'grid';
-
-export default function Homepage() {
-  const [viewMode, setViewMode] = React.useState<ViewMode>('table');
-  const [demoPositions, setDemoPositions] = React.useState<PositionData[]>([]);
-  const { address } = useAccount();
-  const { disconnect } = useDisconnect();
-  const premium = pricingConfig.premium;
-  const alerts = pricingConfig.rangebandAlerts;
-
-  async function handleDisconnect() {
-    try {
-      await disconnect();
-    } catch (error) {
-      console.error('[Homepage] Disconnect failed', error);
-    }
-  }
-
-  function scrollToDemo() {
-    const demoSection = document.getElementById('demo');
-    if (demoSection) {
-      demoSection.scrollIntoView({ behavior: 'smooth' });
-    }
-  }
-
+const HomePage: NextPage = () => {
   return (
-    <>
-      <Head>
-        <title>LiquiLab · The Liquidity Pool Intelligence Platform</title>
-        <meta
-          name="description"
-          content="The easy way to manage your liquidity pools. Monitor cross-DEX positions with live RangeBand™ insights."
+    <div
+      style={{
+        position: "relative",
+        minHeight: "100vh",
+        overflow: "hidden",
+        fontFamily:
+          "'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      }}
+    >
+      {/* Dark base layer */}
+      <div
+        style={{
+          position: "fixed",
+          inset: "0",
+          backgroundColor: "#0B1530",
+          zIndex: 0,
+        }}
+      />
+
+      {/* Background image - water wave at bottom */}
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: "70vh",
+          zIndex: 1,
+          pointerEvents: "none",
+        }}
+      >
+        <Image
+          src="/water-splash.jpg"
+          alt=""
+          fill
+          style={{
+            objectFit: "cover",
+            objectPosition: "bottom center",
+          }}
+          priority
+          quality={95}
         />
-      </Head>
+      </div>
 
-      <div className="relative min-h-screen overflow-hidden text-white">
-        <div className="page-bg hero-wave" aria-hidden="true" />
-        <div className="relative z-10 mx-auto flex min-h-screen w-[94vw] max-w-[1200px] flex-col pb-20 pt-6 lg:w-[75vw]">
-          <header className="flex items-center justify-between">
-            <LiquiLabLogo variant="full" size="sm" theme="dark" />
-            <div className="flex items-center gap-4">
-              {address ? (
-                <div className="flex items-center gap-3">
-                  <span className="font-ui text-sm text-white/80">
-                    {address.slice(0, 6)}...{address.slice(-4)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleDisconnect}
-                    className="rounded-lg border border-white/20 bg-white/[0.05] px-3 py-1.5 font-ui text-xs font-semibold text-white/80 transition hover:border-[#3B82F6] hover:bg-[#3B82F6]/10 hover:text-white"
-                  >
-                    Disconnect
-                  </button>
-                </div>
-              ) : (
-                <Link
-                  href="/login"
-                  className="text-sm font-semibold text-white/80 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
-                >
-                  Sign in
-                </Link>
-              )}
-            </div>
-          </header>
+      {/* Smooth gradient overlay - from dark navy to transparent */}
+      <div
+        style={{
+          position: "fixed",
+          inset: "0",
+          zIndex: 2,
+          pointerEvents: "none",
+          background:
+            "linear-gradient(to bottom, #0B1530 0%, #0B1530 15%, rgba(11, 21, 48, 0.95) 25%, rgba(11, 21, 48, 0.85) 35%, rgba(11, 21, 48, 0.65) 45%, rgba(11, 21, 48, 0.4) 55%, rgba(11, 21, 48, 0.2) 65%, rgba(11, 21, 48, 0.05) 75%, transparent 85%)",
+        }}
+      />
 
-          <main className="mt-14 space-y-24 sm:mt-20 sm:space-y-32">
-            {/* HERO WITH WATER-WAVE BACKGROUND */}
-            <section
-              aria-label="Hero"
-              className="hero-section mx-auto w-[75vw] max-w-[1200px] rounded-3xl border border-white/5 p-10 text-center backdrop-blur-xl sm:p-14"
+      {/* Content */}
+      <main
+        style={{
+          position: "relative",
+          zIndex: 3,
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "1.5rem",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: "42rem",
+            textAlign: "center",
+          }}
+        >
+          {/* Logo */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "0.75rem",
+              marginBottom: "2.5rem",
+            }}
+          >
+            <svg
+              width="36"
+              height="43"
+              viewBox="0 0 40 48"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              style={{ flexShrink: 0 }}
+            >
+              <path
+                d="M20 0C20 0 0 18 0 30C0 40.4934 8.95431 48 20 48C31.0457 48 40 40.4934 40 30C40 18 20 0 20 0Z"
+                fill="#3B82F6"
+              />
+            </svg>
+            <span
               style={{
-                background: 'rgba(11, 21, 48, 0.88)',
+                fontSize: "1.75rem",
+                fontWeight: 600,
+                color: "rgba(255, 255, 255, 0.98)",
+                letterSpacing: "-0.02em",
               }}
             >
-              <p className="font-brand text-sm uppercase tracking-[0.4em] text-[#1BE8D2]">
-                Liquidity intelligence
-              </p>
-              
-              <h1 className="mt-4 font-brand text-4xl font-semibold leading-tight text-white sm:text-5xl">
-                The easy way to manage your liquidity pools.
-              </h1>
-              
-              <p className="mt-5 font-ui text-base leading-relaxed text-[#9CA3AF] sm:text-lg">
-                One clean dashboard for all your LPs — powered by live RangeBand™ insights.
-              </p>
+              LiquiLab
+            </span>
+          </div>
 
-              <ul className="mt-10 space-y-4 text-left sm:text-center">
-                <li className="flex items-start gap-3 font-ui text-sm text-white/90 sm:inline-flex sm:text-base">
-                  <span className="flex-shrink-0 text-[#1BE8D2]" aria-hidden="true">✓</span>
-                  <span>See every position in one view — ranges, fees, incentives, and status.</span>
-                </li>
-                <li className="flex items-start gap-3 font-ui text-sm text-white/90 sm:inline-flex sm:text-base">
-                  <span className="flex-shrink-0 text-[#1BE8D2]" aria-hidden="true">✓</span>
-                  <span>Make smarter moves with live RangeBand™ and actionable alerts.</span>
-                </li>
-                <li className="flex items-start gap-3 font-ui text-sm text-white/90 sm:inline-flex sm:text-base">
-                  <span className="flex-shrink-0 text-[#1BE8D2]" aria-hidden="true">✓</span>
-                  <span>
-                    Start with Premium at <span className="font-num font-semibold">{formatUSD(premium.priceMonthlyUsd)}</span> for{' '}
-                    <span className="font-num font-semibold">{premium.includedPools}</span> pools.
-                  </span>
-                </li>
-                <li className="flex items-start gap-3 font-ui text-sm text-white/90 sm:inline-flex sm:text-base">
-                  <span className="flex-shrink-0 text-[#1BE8D2]" aria-hidden="true">✓</span>
-                  <span>
-                    Add extra bundles of <span className="font-num font-semibold">{premium.extraBundlePools}</span> pools for{' '}
-                    <span className="font-num font-semibold">{formatUSD(premium.extraBundlePriceUsd)}</span>.
-                  </span>
-                </li>
-                <li className="flex items-start gap-3 font-ui text-sm text-white/90 sm:inline-flex sm:text-base">
-                  <span className="flex-shrink-0 text-[#1BE8D2]" aria-hidden="true">✓</span>
-                  <span>
-                    RangeBand™ Alerts from <span className="font-num font-semibold">{formatUSD(alerts.priceMonthlyUsdPerBundle)}</span> per{' '}
-                    <span className="font-num font-semibold">{alerts.bundlePools}</span> alerts.
-                  </span>
-                </li>
-              </ul>
+          {/* Heading */}
+          <h1
+            style={{
+              fontSize: "clamp(2rem, 5vw, 3rem)",
+              fontWeight: 700,
+              color: "rgba(255, 255, 255, 0.98)",
+              lineHeight: 1.15,
+              marginBottom: "1.25rem",
+            }}
+          >
+            Non-custodial liquidity analytics for Flare LPs.
+          </h1>
 
-              {/* Integrated RangeBand Interactive Explainer */}
-              <div className="mt-12">
-                <InlineReal defaultStrategy="BAL" />
-              </div>
+          {/* Subheading */}
+          <p
+            style={{
+              fontSize: "clamp(1rem, 2.5vw, 1.125rem)",
+              color: "rgba(255, 255, 255, 0.75)",
+              maxWidth: "38rem",
+              margin: "0 auto 2.5rem",
+              lineHeight: 1.6,
+            }}
+          >
+            LiquiLab is preparing its first public release. Track your
+            concentrated liquidity positions on Flare with RangeBand™ insights
+            and Universe analytics.
+          </p>
 
-              <div className="mt-12 flex flex-col items-center gap-4">
-                <Button
-                  onClick={scrollToDemo}
-                  className="bg-[#3B82F6] px-6 py-3 font-semibold text-white hover:bg-[#2563EB] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B82F6]"
-                >
-                  Explore pools
-                </Button>
-                <WalletConnect className="shadow-[0_0_40px_rgba(27,232,210,0.25)]" />
-                <span className="text-xs uppercase tracking-[0.3em] text-white/40">
-                  Read-only. No approvals.
-                </span>
-              </div>
-            </section>
-
-            {/* DEMO POOLS SECTION WITH TABLE/GRID TOGGLE */}
-            <section aria-label="Live demo" id="demo">
-              <div
-                className="mx-auto w-[75vw] max-w-[1200px] rounded-3xl border border-white/5 p-10 backdrop-blur-xl sm:p-14"
-                style={{
-                  background: 'rgba(11, 21, 48, 0.88)',
-                }}
-              >
-                <div className="mx-auto max-w-3xl text-center">
-                  <h2 className="font-brand text-3xl font-semibold text-white sm:text-4xl">
-                    See it live: cross-DEX pools, one dashboard
-                  </h2>
-                  <p className="mt-5 font-ui text-base leading-relaxed text-[#9CA3AF] sm:text-lg">
-                    Real pools from Enosys, BlazeSwap, and SparkDEX — see how LiquiLab tracks liquidity, fees, incentives, and range status.
-                  </p>
-                </div>
-
-                {/* View Mode Toggle */}
-                <div className="mt-8 flex justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('table')}
-                    className={`rounded-lg px-4 py-2 font-ui text-sm font-semibold transition ${
-                      viewMode === 'table'
-                        ? 'bg-[#3B82F6] text-white'
-                        : 'bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-white/80'
-                    }`}
-                    aria-label="Table view"
-                  >
-                    Table
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('grid')}
-                    className={`rounded-lg px-4 py-2 font-ui text-sm font-semibold transition ${
-                      viewMode === 'grid'
-                        ? 'bg-[#3B82F6] text-white'
-                        : 'bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-white/80'
-                    }`}
-                    aria-label="Grid view"
-                  >
-                    Grid
-                  </button>
-                </div>
-
-                {/* Demo Pools Content */}
-                <div className="mt-10">
-                  {viewMode === 'table' ? (
-                    <DemoPoolsTable onPositionsChange={setDemoPositions} />
-                  ) : (
-                    <PoolsGrid positions={demoPositions} />
-                  )}
-                </div>
-              </div>
-            </section>
-          </main>
+          {/* Contact CTA */}
+          <div
+            style={{
+              marginTop: "2.5rem",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "0.75rem",
+            }}
+          >
+            <p
+              style={{
+                fontSize: "0.875rem",
+                color: "rgba(255, 255, 255, 0.65)",
+                fontWeight: 500,
+              }}
+            >
+              Want to know more, or interested in early access?
+            </p>
+            <a
+              href="mailto:hello@liquilab.io"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.75rem 1.5rem",
+                borderRadius: "9999px",
+                backgroundColor: "#3B82F6",
+                color: "#ffffff",
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                textDecoration: "none",
+                boxShadow:
+                  "0 10px 20px -5px rgba(59, 130, 246, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3)",
+                transition: "all 0.2s ease",
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = "#2563EB";
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow =
+                  "0 15px 25px -5px rgba(59, 130, 246, 0.5), 0 6px 8px -2px rgba(0, 0, 0, 0.4)";
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = "#3B82F6";
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow =
+                  "0 10px 20px -5px rgba(59, 130, 246, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3)";
+              }}
+            >
+              hello@liquilab.io
+            </a>
+          </div>
         </div>
-      </div>
-    </>
+      </main>
+    </div>
   );
-}
+};
+
+export default HomePage;
