@@ -1,0 +1,3 @@
+[submodule "figma-screens"]
+	path = figma-screens
+	url = https://github.com/Liquilab/Figma.git
