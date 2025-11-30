@@ -68,3 +68,58 @@ export async function fetchPool(address: string): Promise<AnalyticsPoolResponse>
     };
   }
 }
+
+export type PoolUniverseAnalyticsResponse = import('@/lib/analytics/types').PoolUniverseAnalyticsResponse;
+
+export async function fetchPoolUniverse(poolAddress: string): Promise<PoolUniverseAnalyticsResponse> {
+  try {
+    return await fetchJson<PoolUniverseAnalyticsResponse>(
+      `/api/analytics/pool/${encodeURIComponent(poolAddress)}`,
+    );
+  } catch {
+    return {
+      ok: false,
+      degrade: true,
+      ts: Date.now(),
+      pool: {
+        address: poolAddress,
+        dex: 'OTHER',
+        token0Symbol: null,
+        token1Symbol: null,
+        feeTierBps: null,
+      },
+      tvl: { totalUsd: null, token0: null, token1: null },
+      metrics7d: {
+        volumeUsd: null,
+        feesUsd: null,
+        swapsCount: 0,
+        collectsCount: 0,
+        mintsCount: 0,
+        burnsCount: 0,
+        timePeriod: '7d',
+      },
+      lpPopulation: {
+        totalPositions: 0,
+        uniqueWallets: 0,
+        segments: {
+          retail: { count: 0, tvlShare: null },
+          mid: { count: 0, tvlShare: null },
+          whale: { count: 0, tvlShare: null },
+        },
+      },
+      rangeEfficiency: {
+        inRangePct: null,
+        nearRangePct: null,
+        outOfRangePct: null,
+        timePeriod: '7d',
+      },
+      volatility: { regime: null, timePeriod: '7d' },
+      claimBehavior: {
+        avgClaimIntervalDays: null,
+        medianClaimIntervalDays: null,
+        avgUnclaimedFeesUsd: null,
+        timePeriod: '7d',
+      },
+    };
+  }
+}
