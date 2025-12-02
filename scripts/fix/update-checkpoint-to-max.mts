@@ -42,14 +42,14 @@ async function main() {
   });
 
   if (currentCheckpoint) {
-    console.log(`📍 Current checkpoint: block ${currentCheckpoint.lastBlock.toLocaleString()}`);
-    if (currentCheckpoint.lastBlock >= maxDataBlock) {
-      console.log(`✅ Checkpoint is already up to date (or ahead). No update needed.`);
-      return;
+    console.log(`📍 Current NPM:global checkpoint: block ${currentCheckpoint.lastBlock.toLocaleString()}`);
+    if (currentCheckpoint.lastBlock < maxDataBlock) {
+      console.log(`   Updating to block ${maxDataBlock.toLocaleString()}...\n`);
+    } else {
+      console.log(`   NPM checkpoint is up to date.\n`);
     }
-    console.log(`   Updating to block ${maxDataBlock.toLocaleString()}...\n`);
   } else {
-    console.log(`📍 No checkpoint found. Creating new checkpoint at block ${maxDataBlock.toLocaleString()}...\n`);
+    console.log(`📍 No NPM:global checkpoint found. Creating new checkpoint at block ${maxDataBlock.toLocaleString()}...\n`);
   }
 
   // Count events up to max block
@@ -71,34 +71,50 @@ async function main() {
 
   const timestamp = maxBlockData?.timestamp ?? undefined;
 
-  // Update checkpoint
-  await prisma.syncCheckpoint.upsert({
-    where: { id: 'NPM:global' },
-    create: {
-      id: 'NPM:global',
-      source: 'NPM',
-      key: 'global',
-      lastBlock: maxDataBlock,
-      lastTimestamp: timestamp,
-      eventsCount: transferCount + eventCount,
-    },
-    update: {
-      lastBlock: maxDataBlock,
-      lastTimestamp: timestamp,
-      eventsCount: transferCount + eventCount,
-    },
-  });
-
-  console.log(`✅ NPM:global checkpoint updated successfully!`);
+  // Update NPM:global checkpoint (only if needed)
+  if (!currentCheckpoint || currentCheckpoint.lastBlock < maxDataBlock) {
+    await prisma.syncCheckpoint.upsert({
+      where: { id: 'NPM:global' },
+      create: {
+        id: 'NPM:global',
+        source: 'NPM',
+        key: 'global',
+        lastBlock: maxDataBlock,
+        lastTimestamp: timestamp,
+        eventsCount: transferCount + eventCount,
+      },
+      update: {
+        lastBlock: maxDataBlock,
+        lastTimestamp: timestamp,
+        eventsCount: transferCount + eventCount,
+      },
+    });
+    console.log(`✅ NPM:global checkpoint updated!`);
+  }
   console.log(`   - Block: ${maxDataBlock.toLocaleString()}`);
   console.log(`   - Events: ${(transferCount + eventCount).toLocaleString()}`);
-  console.log(`\n   NFPM indexing will now start from block ${(maxDataBlock + 1).toLocaleString()}\n`);
+  console.log(`   - NFPM indexing will start from block ${(maxDataBlock + 1).toLocaleString()}\n`);
 
-  // Also create/update FACTORY checkpoints for enosys and sparkdex
+  // Always check and create/update FACTORY checkpoints
   // These are used by indexFactories() when --factory=all is used
-  console.log('🏭 Creating FACTORY checkpoints...\n');
+  console.log('🏭 Checking FACTORY checkpoints...\n');
   
   for (const factory of ['enosys', 'sparkdex'] as const) {
+    const factoryCheckpoint = await prisma.syncCheckpoint.findUnique({
+      where: { id: `FACTORY:${factory}` },
+    });
+    
+    if (factoryCheckpoint) {
+      if (factoryCheckpoint.lastBlock < maxDataBlock) {
+        console.log(`   📍 FACTORY:${factory} exists but is behind (${factoryCheckpoint.lastBlock.toLocaleString()} < ${maxDataBlock.toLocaleString()})`);
+        console.log(`      Updating...`);
+      } else {
+        console.log(`   ✅ FACTORY:${factory} is up to date (block ${factoryCheckpoint.lastBlock.toLocaleString()})`);
+      }
+    } else {
+      console.log(`   📍 FACTORY:${factory} missing, creating...`);
+    }
+    
     await prisma.syncCheckpoint.upsert({
       where: { id: `FACTORY:${factory}` },
       create: {
@@ -114,10 +130,12 @@ async function main() {
         lastTimestamp: timestamp,
       },
     });
-    console.log(`   ✅ FACTORY:${factory} checkpoint set to block ${maxDataBlock.toLocaleString()}`);
+    console.log(`      ✅ FACTORY:${factory} checkpoint set to block ${maxDataBlock.toLocaleString()}\n`);
   }
   
-  console.log(`\n✅ All checkpoints updated! Factory indexing will now start from block ${(maxDataBlock + 1).toLocaleString()}`);
+  console.log(`✅ All checkpoints updated!`);
+  console.log(`   - NFPM indexing will start from block ${(maxDataBlock + 1).toLocaleString()}`);
+  console.log(`   - Factory indexing will start from block ${(maxDataBlock + 1).toLocaleString()}`);
 }
 
 main()
