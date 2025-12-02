@@ -52,11 +52,24 @@ async function main() {
     console.log(`📍 No checkpoint found. Creating new checkpoint at block ${maxDataBlock.toLocaleString()}...\n`);
   }
 
-  // Count events
+  // Count events up to max block
   const [transferCount, eventCount] = await Promise.all([
-    prisma.positionTransfer.count(),
-    prisma.positionEvent.count(),
+    prisma.positionTransfer.count({
+      where: { blockNumber: { lte: maxDataBlock } },
+    }),
+    prisma.positionEvent.count({
+      where: { blockNumber: { lte: maxDataBlock } },
+    }),
   ]);
+
+  // Get timestamp from max block (if available)
+  const maxBlockData = await prisma.positionEvent.findFirst({
+    where: { blockNumber: maxDataBlock },
+    select: { timestamp: true },
+    orderBy: { logIndex: 'desc' },
+  });
+
+  const timestamp = maxBlockData?.timestamp ?? undefined;
 
   // Update checkpoint
   await prisma.syncCheckpoint.upsert({
@@ -66,10 +79,12 @@ async function main() {
       source: 'NPM',
       key: 'global',
       lastBlock: maxDataBlock,
+      lastTimestamp: timestamp,
       eventsCount: transferCount + eventCount,
     },
     update: {
       lastBlock: maxDataBlock,
+      lastTimestamp: timestamp,
       eventsCount: transferCount + eventCount,
     },
   });
