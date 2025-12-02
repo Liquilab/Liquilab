@@ -54,13 +54,20 @@ export default async function handler(
         const start = Date.now();
         
         // First check if MV exists, if not create it
-        const mvExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
-          SELECT EXISTS (
-            SELECT 1 FROM pg_matviews WHERE matviewname = ${mv}
-          ) as exists
-        `;
+        let mvExists = false;
+        try {
+          const mvCheck = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+            SELECT EXISTS (
+              SELECT 1 FROM pg_matviews WHERE matviewname = ${mv}
+            ) as exists
+          `;
+          mvExists = mvCheck[0]?.exists ?? false;
+        } catch (checkError) {
+          // If check fails, assume MV doesn't exist and try to create
+          console.log(`[refresh-views] MV existence check failed for ${mv}, attempting creation`);
+        }
         
-        if (!mvExists[0]?.exists) {
+        if (!mvExists) {
           // MV doesn't exist, try to create it from SQL file
           try {
             const fs = await import('fs');
@@ -89,11 +96,20 @@ export default async function handler(
               for (const statement of statements) {
                 if (statement.trim()) {
                   try {
-                    await prisma.$executeRawUnsafe(statement + ';');
+                    // Add semicolon if not present
+                    const sqlStatement = statement.trim().endsWith(';') ? statement.trim() : statement.trim() + ';';
+                    await prisma.$executeRawUnsafe(sqlStatement);
                   } catch (stmtError) {
-                    // If it's a "already exists" error, that's OK
+                    // If it's a "already exists" error, that's OK - continue
                     const errorMsg = stmtError instanceof Error ? stmtError.message : String(stmtError);
-                    if (!errorMsg.includes('already exists') && !errorMsg.includes('duplicate')) {
+                    if (errorMsg.includes('already exists') || errorMsg.includes('duplicate') || errorMsg.includes('relation') && errorMsg.includes('already exists')) {
+                      console.log(`[refresh-views] ${mv} or its index already exists, continuing...`);
+                      continue;
+                    }
+                    // For other errors, log but don't fail completely - might be index creation failing
+                    console.error(`[refresh-views] Error executing statement for ${mv}:`, errorMsg);
+                    // Only throw if it's the CREATE MATERIALIZED VIEW statement (first statement)
+                    if (statement.trim().toUpperCase().startsWith('CREATE MATERIALIZED VIEW')) {
                       throw stmtError;
                     }
                   }
