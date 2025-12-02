@@ -53,6 +53,7 @@
     "verify:web": "node -r tsconfig-paths/register scripts/verify-web/port-and-health.mjs",
     "verify:indexer": "node scripts/verify-indexer/scan.mjs",
     "verify:indexer:plan": "node -r tsconfig-paths/register scripts/verify-indexer/backfill-plan.mjs",
+    "verify:indexer:checkpoint": "tsx scripts/verify-indexer/check-checkpoint.mts",
     "verify:enrichment": "node scripts/verify-enrichment/registry.mjs",
     "verify:icons": "node scripts/verify-enrichment/icons.mjs",
     "verify:icons:local": "node scripts/verify-icons/no-remote-icons.mjs",
