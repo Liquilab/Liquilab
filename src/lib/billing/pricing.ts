@@ -75,3 +75,45 @@ export function calcTotalCost(
   const alerts = calcAlertsCost(paidPools, alertsEnabled);
   return Number((pools + alerts).toFixed(2));
 }
+
+// Legacy exports for compatibility with pricing-lab.tsx, PremiumCard.tsx, brand.tsx, entitlements.ts
+export type PriceInput = {
+  slots: number;
+  alertsSelected: boolean;
+};
+
+export type PriceBreakdownResult = {
+  base5: number;
+  extras: number;
+  alerts: number;
+  alertsPacks: number;
+  total: number;
+};
+
+// Default to 'A' plan (can be overridden via LL_PRICING_PLAN env var)
+export const ACTIVE_PLAN_ID = (process.env.LL_PRICING_PLAN || 'A').trim().toUpperCase() === 'B' ? 'B' : 'A';
+
+/**
+ * Legacy priceBreakdown function for compatibility with existing components.
+ * Maps slots/alertsSelected to the new pricing config structure.
+ */
+export function priceBreakdown({ slots, alertsSelected }: PriceInput): PriceBreakdownResult {
+  const normalizedSlots = Math.max(5, Math.ceil(slots / 5) * 5);
+  const plan = ACTIVE_PLAN_ID === 'B' ? 'pro' : 'premium';
+  const planDef = pricingConfig[plan];
+  
+  // Base cost for first 5 pools
+  const base5 = Number(planDef.priceMonthlyUsd.toFixed(2));
+  
+  // Extra bundles (pools beyond the included amount)
+  const extraBundles = Math.max(0, Math.ceil((normalizedSlots - planDef.includedPools) / planDef.extraBundlePools));
+  const extras = Number((extraBundles * planDef.extraBundlePriceUsd).toFixed(2));
+  
+  // Alerts packs
+  const alertsPacks = alertsSelected ? Math.ceil(normalizedSlots / planDef.extraBundlePools) : 0;
+  const alerts = Number((alertsPacks * pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle).toFixed(2));
+  
+  const total = Number((base5 + extras + alerts).toFixed(2));
+
+  return { base5, extras, alerts, alertsPacks, total };
+}
