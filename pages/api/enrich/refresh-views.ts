@@ -20,6 +20,7 @@ SELECT "pool" AS pool,
 FROM "PoolEvent"
 GROUP BY "pool"
 WITH NO DATA`,
+      indexes: [`CREATE UNIQUE INDEX IF NOT EXISTS mv_pool_latest_state_pool_idx ON "mv_pool_latest_state" ("pool")`],
     },
     'mv_pool_fees_24h': {
       create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_fees_24h" AS
@@ -34,6 +35,7 @@ CROSS JOIN latest_blocks lb
 WHERE p."blockNumber" >= lb.max_block - 7200
 GROUP BY p."pool"
 WITH NO DATA`,
+      indexes: [`CREATE UNIQUE INDEX IF NOT EXISTS mv_pool_fees_24h_pool_idx ON "mv_pool_fees_24h" ("pool")`],
     },
     'mv_position_range_status': {
       create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_position_range_status" AS
@@ -61,6 +63,7 @@ WHERE pe."tickLower" IS NOT NULL
   AND pe."tickUpper" IS NOT NULL
 ORDER BY pe."tokenId", pe."blockNumber" DESC, pe."logIndex" DESC
 WITH NO DATA`,
+      indexes: [`CREATE UNIQUE INDEX IF NOT EXISTS mv_position_range_status_tokenid_idx ON "mv_position_range_status" ("tokenId")`],
     },
     'mv_pool_position_stats': {
       create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_position_stats" AS
@@ -71,6 +74,7 @@ SELECT pe."pool",
 FROM "PositionEvent" pe
 GROUP BY pe."pool"
 WITH NO DATA`,
+      indexes: [`CREATE UNIQUE INDEX IF NOT EXISTS mv_pool_position_stats_pool_idx ON "mv_pool_position_stats" ("pool")`],
     },
     'mv_position_latest_event': {
       create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_position_latest_event" AS
@@ -83,6 +87,7 @@ SELECT DISTINCT ON (pe."tokenId")
 FROM "PositionEvent" pe
 ORDER BY pe."tokenId", pe."blockNumber" DESC
 WITH NO DATA`,
+      indexes: [`CREATE UNIQUE INDEX IF NOT EXISTS mv_position_latest_event_tokenid_idx ON "mv_position_latest_event" ("tokenId")`],
     },
     'mv_pool_volume_7d': {
       create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_volume_7d" AS
