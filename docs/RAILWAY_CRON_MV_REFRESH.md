@@ -6,7 +6,7 @@
 
 1. Open: https://railway.app/dashboard
 2. Selecteer je **LiquiLab** project
-3. Klik op de **"V3 pools Indexer"** service
+3. Klik op de **"Liquilab-staging"** service (web service met Next.js)
 4. Ga naar **"Cron"** tab (of "Add New" → "Cron Job")
 
 ---
@@ -29,14 +29,15 @@
 Zorg dat deze variabelen beschikbaar zijn in de Cron service:
 
 ```bash
-# Required
-DATABASE_URL=${{Postgres.DATABASE_URL}}
+# Required voor HTTP request
+RAILWAY_PUBLIC_DOMAIN=${{Liquilab-staging.RAILWAY_PUBLIC_DOMAIN}}
+CRON_SECRET=your-secret-key-here
 ```
 
-**Link Postgres Database:**
-- In Railway dashboard, klik "Variables"
-- Klik "+ Reference" → Select "Postgres" service
-- Dit linkt automatisch `DATABASE_URL`
+**Setup:**
+- `RAILWAY_PUBLIC_DOMAIN`: Automatisch beschikbaar in Railway (bijv. `liquilab-staging-staging.up.railway.app`)
+- `CRON_SECRET`: Maak een willekeurige secret key aan (bijv. via `openssl rand -hex 32`)
+- Zet dezelfde `CRON_SECRET` in de **Liquilab-staging** service environment variables
 
 ---
 
