@@ -46,11 +46,54 @@ export default async function handler(
       { name: 'positionsActive7d', mv: 'mv_positions_active_7d' },
       { name: 'walletLp7d', mv: 'mv_wallet_lp_7d' },
       { name: 'poolChanges7d', mv: 'mv_pool_changes_7d' },
+      { name: 'positionLifetime', mv: 'mv_position_lifetime_v1' },
     ];
 
     for (const { name, mv } of refreshOrder) {
       try {
         const start = Date.now();
+        
+        // First check if MV exists, if not create it
+        const mvExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+          SELECT EXISTS (
+            SELECT 1 FROM pg_matviews WHERE matviewname = ${mv}
+          ) as exists
+        `;
+        
+        if (!mvExists[0]?.exists) {
+          // MV doesn't exist, try to create it from SQL file
+          try {
+            const fs = await import('fs');
+            const path = await import('path');
+            const sqlFile = path.join(process.cwd(), 'db/views', `${mv}.sql`);
+            
+            if (fs.existsSync(sqlFile)) {
+              const sql = fs.readFileSync(sqlFile, 'utf-8');
+              const statements = sql
+                .split(';')
+                .map(s => s.trim())
+                .filter(s => s.length > 0 && !s.startsWith('--'));
+              
+              for (const statement of statements) {
+                if (statement.trim()) {
+                  await prisma.$executeRawUnsafe(statement);
+                }
+              }
+              console.log(`[refresh-views] Created ${mv}`);
+            } else {
+              throw new Error(`SQL file not found: ${sqlFile}`);
+            }
+          } catch (createError) {
+            results[name] = {
+              success: false,
+              duration: 0,
+              error: `MV does not exist and creation failed: ${createError instanceof Error ? createError.message : String(createError)}`,
+            };
+            continue;
+          }
+        }
+        
+        // Now refresh the MV
         await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW CONCURRENTLY "${mv}"`);
         results[name] = {
           success: true,
