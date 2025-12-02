@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 
 # Cache buster - increment this manually when changes aren't picked up
 # IMPORTANT: Update this value (v0.1.X) whenever Railway doesn't deploy your changes
-ARG CACHE_BUST=v0.1.9
+ARG CACHE_BUST=v0.1.10
 
 WORKDIR /app
 
@@ -40,6 +40,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/db ./db
 COPY --from=builder /app/indexer.config.ts ./indexer.config.ts
 COPY --from=builder /app/start.sh ./start.sh
 
