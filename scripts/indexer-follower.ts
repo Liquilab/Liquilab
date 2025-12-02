@@ -39,6 +39,7 @@ interface StartLogPayload {
   streams: string[];
   chosenChunk: number;
   factoryStarts?: Record<string, number>;
+  poolCount?: number;
   rps: number;
   concurrency: number;
   blockWindow: number;
