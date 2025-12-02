@@ -19,8 +19,13 @@
 |-------|-------|
 | **Name** | `MV Refresh` |
 | **Schedule** | `*/10 * * * *` (elke 10 minuten) |
-| **Command** | `npm run refresh:mvs` |
-| **Service** | Link to `V3 pools Indexer` service |
+| **Command** | `curl -X POST "https://liquilab-staging-staging.up.railway.app/api/enrich/refresh-views" -H "Authorization: Bearer $CRON_SECRET"` |
+| **Service** | Link to **Liquilab-staging** (web service) |
+
+**Let op:** 
+- Vervang `liquilab-staging-staging.up.railway.app` met je eigen Railway public domain URL
+- Je vindt deze in Railway dashboard → Liquilab-staging service → Settings → Domains
+- Of gebruik `$RAILWAY_PUBLIC_DOMAIN` als die environment variable beschikbaar is
 
 ---
 
@@ -132,9 +137,10 @@ Het script refresht deze Materialized Views in volgorde:
 
 **Check:**
 1. Cron schedule correct? (UTC tijd!)
-2. Environment variables linked?
-3. Command correct? (`npm run refresh:mvs`)
-4. Service heeft toegang tot database?
+2. `CRON_SECRET` gelijk in beide services? (Cron job + Liquilab-staging)
+3. Command correct? (curl command met juiste Railway domain URL)
+4. Web service draait? (Liquilab-staging moet online zijn)
+5. Railway domain URL correct? (check in service Settings → Domains)
 
 **Debug:**
 ```bash
