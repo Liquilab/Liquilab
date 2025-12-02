@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+// Refresh order: dependencies first (e.g., poolLatestState before poolVolume7d)
 const VIEWS = [
   'mv_pool_latest_state',
   'mv_pool_fees_24h',
@@ -11,6 +12,7 @@ const VIEWS = [
   'mv_positions_active_7d',
   'mv_wallet_lp_7d',
   'mv_pool_changes_7d',
+  'mv_position_lifetime_v1', // Added for lifetime positions tracking
 ];
 
 const { DATABASE_URL, DB_DISABLE } = process.env;

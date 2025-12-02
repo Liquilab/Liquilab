@@ -54,6 +54,7 @@
     "verify:indexer": "node scripts/verify-indexer/scan.mjs",
     "verify:indexer:plan": "node -r tsconfig-paths/register scripts/verify-indexer/backfill-plan.mjs",
     "verify:indexer:checkpoint": "tsx scripts/verify-indexer/check-checkpoint.mts",
+    "refresh:mvs": "node scripts/enrich/refresh-views.mjs",
     "fix:checkpoint:update": "tsx scripts/fix/update-checkpoint-to-max.mts",
     "verify:enrichment": "node scripts/verify-enrichment/registry.mjs",
     "verify:icons": "node scripts/verify-enrichment/icons.mjs",
