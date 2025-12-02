@@ -244,8 +244,12 @@ async function main() {
   let nextFromBlock: number | undefined =
     startChoice.reason === 'checkpoint' ? undefined : startChoice.start;
   const factoryNextFrom: Record<string, number | undefined> = {};
+  
+  // Use checkpoint start if available, otherwise use factory start blocks
+  const checkpointStart = startChoice.reason === 'checkpoint' ? startChoice.start : undefined;
   for (const target of factoryTargets) {
-    factoryNextFrom[target] = options.fromBlock ?? factoryStartMap[target];
+    // If checkpoint exists, use it; otherwise fall back to factory start or CLI fromBlock
+    factoryNextFrom[target] = options.fromBlock ?? checkpointStart ?? factoryStartMap[target];
   }
 
   process.on('SIGINT', async () => {
