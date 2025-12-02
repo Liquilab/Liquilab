@@ -89,10 +89,35 @@ async function main() {
     },
   });
 
-  console.log(`✅ Checkpoint updated successfully!`);
+  console.log(`✅ NPM:global checkpoint updated successfully!`);
   console.log(`   - Block: ${maxDataBlock.toLocaleString()}`);
   console.log(`   - Events: ${(transferCount + eventCount).toLocaleString()}`);
-  console.log(`\n   Follower will now start from block ${(maxDataBlock + 1).toLocaleString()}`);
+  console.log(`\n   NFPM indexing will now start from block ${(maxDataBlock + 1).toLocaleString()}\n`);
+
+  // Also create/update FACTORY checkpoints for enosys and sparkdex
+  // These are used by indexFactories() when --factory=all is used
+  console.log('🏭 Creating FACTORY checkpoints...\n');
+  
+  for (const factory of ['enosys', 'sparkdex'] as const) {
+    await prisma.syncCheckpoint.upsert({
+      where: { id: `FACTORY:${factory}` },
+      create: {
+        id: `FACTORY:${factory}`,
+        source: 'FACTORY',
+        key: factory,
+        lastBlock: maxDataBlock,
+        lastTimestamp: timestamp,
+        eventsCount: 0, // Factory events are counted separately
+      },
+      update: {
+        lastBlock: maxDataBlock,
+        lastTimestamp: timestamp,
+      },
+    });
+    console.log(`   ✅ FACTORY:${factory} checkpoint set to block ${maxDataBlock.toLocaleString()}`);
+  }
+  
+  console.log(`\n✅ All checkpoints updated! Factory indexing will now start from block ${(maxDataBlock + 1).toLocaleString()}`);
 }
 
 main()
