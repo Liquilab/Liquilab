@@ -1,22 +1,58 @@
-FROM node:20-alpine AS deps
+# Build stage
+FROM node:20-alpine AS builder
+
+# Cache buster - increment this manually when changes aren't picked up
+# IMPORTANT: Update this value (v0.1.X) whenever Railway doesn't deploy your changes
+ARG CACHE_BUST=v0.1.9
+
 WORKDIR /app
-RUN apk add --no-cache python3 make g++
+
+# Copy package files
 COPY package*.json ./
+
+# Copy Prisma schema BEFORE npm install (needed for postinstall hook)
 COPY prisma ./prisma
-RUN npm ci --omit=optional
 
-FROM node:20-alpine AS build
-WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
-COPY --from=deps /app/node_modules ./node_modules
+# Install dependencies (use install instead of ci to handle lock file discrepancies)
+RUN npm install
+
+# Copy rest of source code
 COPY . .
-RUN rm -rf .next && npm run build
 
+# FORCE clean build - remove any cached .next folder
+RUN rm -rf .next
+
+# Build Next.js app (Prisma Client already generated via postinstall hook)
+# Set NODE_OPTIONS to increase memory limit and disable parallelism
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+RUN npm run build
+
+# Production stage
 FROM node:20-alpine AS runner
+
 WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=build /app ./
-COPY start.sh ./start.sh
+
+# Copy necessary files from builder
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/start.sh ./start.sh
+
+# Make start script executable
 RUN chmod +x ./start.sh
+
+# Set production environment
+ENV NODE_ENV=production
+
+# Expose port (Railway sets this dynamically)
 EXPOSE 3000
-CMD ["./start.sh"]
+
+# Start command: check SERVICE_TYPE env var or RAILWAY_SERVICE_NAME
+# If SERVICE_TYPE=indexer or service name contains "indexer"/"worker", start indexer follower
+# Otherwise start Next.js web app
+# Railway Custom Start Command will override this CMD if set
+CMD sh -c 'if [ "$SERVICE_TYPE" = "indexer" ] || ([ -n "$RAILWAY_SERVICE_NAME" ] && echo "$RAILWAY_SERVICE_NAME" | grep -qiE "(indexer|worker)"); then npm run indexer:flare:follow; else ./start.sh; fi'
