@@ -16,7 +16,7 @@ import { indexerConfig } from '../../indexer.config';
 import { FactoryScanner } from './factoryScanner';
 import { PoolScanner, type PoolScanResult } from './poolScanner';
 import { PoolRegistry } from './poolRegistry';
-import { normalizeScanResult } from '@/lib/indexer/scan';
+import { normalizeScanResult } from '../lib/indexer/scan';
 
 export interface IndexOptions {
   fromBlock?: number;
