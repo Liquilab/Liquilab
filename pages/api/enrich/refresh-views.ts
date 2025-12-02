@@ -28,7 +28,7 @@ WITH latest_blocks AS (
 )
 SELECT p."pool",
        SUM(COALESCE(p."amount0", '0')) AS "amount0",
-       SUM(COALESCE(p."amount1", '0') AS "amount1")
+       SUM(COALESCE(p."amount1", '0')) AS "amount1"
 FROM "PoolEvent" p
 CROSS JOIN latest_blocks lb
 WHERE p."blockNumber" >= lb.max_block - 7200
@@ -219,7 +219,8 @@ export default async function handler(
       { name: 'positionsActive7d', mv: 'mv_positions_active_7d' },
       { name: 'walletLp7d', mv: 'mv_wallet_lp_7d' },
       { name: 'poolChanges7d', mv: 'mv_pool_changes_7d' },
-      { name: 'positionLifetime', mv: 'mv_position_lifetime_v1' },
+      // Note: mv_position_lifetime_v1 is not defined yet, skipping
+      // { name: 'positionLifetime', mv: 'mv_position_lifetime_v1' },
     ];
 
     for (const { name, mv } of refreshOrder) {
@@ -282,7 +283,20 @@ export default async function handler(
         }
         
         // Now refresh the MV
-        await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW CONCURRENTLY "${mv}"`);
+        // First try CONCURRENTLY, if that fails (not populated), try without CONCURRENTLY
+        try {
+          await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW CONCURRENTLY "${mv}"`);
+        } catch (concurrentError) {
+          const errorMsg = concurrentError instanceof Error ? concurrentError.message : String(concurrentError);
+          // If CONCURRENTLY fails because MV is not populated, try without CONCURRENTLY
+          if (errorMsg.includes('not populated') || errorMsg.includes('CONCURRENTLY')) {
+            console.log(`[refresh-views] ${mv} not populated, refreshing without CONCURRENTLY...`);
+            await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW "${mv}"`);
+          } else {
+            throw concurrentError;
+          }
+        }
+        
         results[name] = {
           success: true,
           duration: Date.now() - start,
