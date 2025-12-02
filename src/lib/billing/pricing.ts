@@ -1,4 +1,4 @@
-import pricing from '@/config/pricing.json';
+import pricing from '../../config/pricing.json';
 
 export type PricingVisitor = {
   label: string;
