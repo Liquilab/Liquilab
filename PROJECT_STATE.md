@@ -12,6 +12,44 @@
 - **Run modes:** Backfill (deterministic windows, stream-selectable) + follower tailer (12 s cadence, confirmation depth=2). Data lifecycle: raw NDJSON (180 d) → enriched JSON → Postgres (authoritative) → dashboards/APIs.
 - **Routing:** Pure Pages Router (Next.js 15). Mixed App Router conflicts were resolved by removing `app/` directory and consolidating all API routes under `pages/api/`.
 
+### 1.1 Railway Indexer Follower Service
+- **Service name:** `flare-indexer-follower` (proposed Railway service name).
+- **Purpose:** Continuously updates the database with new Flare blockchain events (NFPM, Factory, PoolEvent) using free Flare RPC endpoints, keeping the DB in sync after initial backfills complete.
+- **Entrypoint script:** `scripts/indexer-follower.ts` (TypeScript, runs via `tsx`).
+- **Start command (Railway):**
+  ```bash
+  tsx scripts/indexer-follower.ts --factory=all
+  ```
+  Or via npm script:
+  ```bash
+  npm run indexer:flare:follow
+  ```
+- **Required environment variables:**
+  - `DATABASE_URL` or `DATABASE_PUBLIC_URL` — PostgreSQL connection string (Railway Postgres service).
+  - `FLARE_RPC_URL` (optional) — Flare RPC endpoint. Defaults to `https://flare-api.flare.network/ext/bc/C/rpc` (free public endpoint) if not set. **Follower uses ONLY this env var; ANKR RPC is ignored in follower mode.**
+  - `ENOSYS_NFPM` (optional) — Default: `0xD9770b1C7A6ccd33C75b5bcB1c0078f46bE46657`.
+  - `SPARKDEX_NFPM` (optional) — Default: `0xEE5FF5Bc5F852764b5584d92A4d592A53DC527da`.
+  - `ENOSYS_V3_FACTORY` (optional) — Default: `0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de`.
+  - `SPARKDEX_V3_FACTORY` (optional) — Default: `0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652`.
+  - `DB_DISABLE` (optional) — Set to `false` for the follower service (web app should have `DB_DISABLE=true` to prevent conflicts).
+  - **Note:** `ANKR_NODE_URL` is reserved for backfill scripts only. The follower explicitly ignores `ANKR_NODE_URL` and uses only `FLARE_RPC_URL` (free Flare API).
+- **Configuration:**
+  - Poll interval: 12 seconds (`indexer.config.ts` → `follower.pollIntervalMs: 12000`).
+  - Confirmation blocks: 32 blocks behind chain head for safety (`follower.confirmationBlocks: 32`).
+  - Streams indexed: NFPM (default), Factory events (if `--factory=all`), PoolEvent (if `--factory=all`).
+  - Checkpoints: Uses `SyncCheckpoint` table for idempotent resume (`NPM:global`, `FACTORY:enosys`, `FACTORY:sparkdex`, `POOLS:all`).
+- **Relationship to backfills:**
+  - **Backfills (SP2-D10, SP2-INC1):** One-off historical data ingestion jobs that populate initial data sets (e.g., PoolEvent backfill from block 29,989,866 → 51,459,673, rFLR/APS incentives from start blocks).
+  - **Follower:** Continuous tail indexing that keeps the database updated with new events after backfills complete. The follower resumes from checkpoints set by backfills, so it only processes new blocks.
+  - **Deployment timing:** The follower should be deployed after SP2-D11 (7d-MVs refresh) and SP2-T60 (Weekly report) are complete, so that the database is fully populated before continuous updates begin.
+- **Local testing:**
+  ```bash
+  npm run indexer:flare:follow
+  # Or with explicit factory selection:
+  npm run indexer:follow -- --factory=all
+  ```
+- **Monitoring:** Check `data/indexer.progress.json` for current checkpoint and lag status. Railway logs show sync progress and error counts (max 5 consecutive errors before exit).
+
 ---
 
 ## Decisions (D#)
@@ -166,6 +204,9 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
   - Pool-contract events (initial ingest): ~1.8 M Swap/Mint/Burn/Collect rows.  
 - **Checkpoints:** `NPM:global`, `FACTORY:enosys`, `FACTORY:sparkdex`, `POOLS:all`, `POOL_STATE:enosys|sparkdex`, `POSITION_READS:global`.  
 - **Block coverage:** min block ≈ 29,937,200 (Ēnosys launch) → max ≈ 50,180,000 (current head − confirmations).  
+- **SP2-D10 PoolEvent tail backfill (2025-11-30):** Staging coverage confirmed via `check-backfill-progress` — block range 29,989,866 → 51,459,673 with ~10.5M PoolEvent rows (Swap≈9.69M, Mint≈181K, Burn≈372K, Collect≈260K). Latest checkpoints: Enosys 51,459,698 (≈4.43M events) and SparkDEX 51,459,648 (≈6.08M events). Health scripts (`check-pending-backfills`, `verify-pool-events-data`) show no gaps; data ready for SP2-D11 (7d-MVs) + SP2-T60 (Weekly).
+- **SP2-INC1 rFLR incentives (2025-11-30):** Staging run filled raw + decoded tables and `mv_incentives_rflr_daily` (date range 2025-08-01 → 2025-11-30) with 8,043 daily rows across ~1,271 wallets, 6 tokens, 122 days. Decode coverage: raw claims 8,051 vs MV aggregated 8,051 (100%). Current limitation: `pool_address` column is NULL for all rows (no pool attribution yet). APS incentives backfill/verify is still TODO.
+- **SP2-INC1 APS incentives (2025-12-01):** Raw APS backfill executed on staging (~3,268 rows; default config window). APS decode script is a skeleton awaiting RewardManager implementation ABI (`src/indexer/abis/aps/RewardManager.json`); no decoded APS rows yet. `mv_incentives_aps_daily.sql` exists but has not been created/populated. APS incentives remain raw-only (no emissions APR) until ABI + decode wiring lands.
 - **Verification commands:**  
   ```bash
   # Smoke tests
@@ -1326,7 +1367,226 @@ See archives in /docs/changelog/.
   - Ensures `verify:api:analytics` passes even when MVs are missing, DB queries timeout, or backfills are running.
 - **Result**: `/api/analytics/summary` now always returns HTTP 200 with valid JSON response shape expected by verify script, gracefully degrading during backfills or DB contention (SP2-T13/SP2-T70).
 
+## Changelog — 2025-11-30
+- SP2-D10: Completed PoolEvent tail backfill for Enosys and SparkDEX (block range 29,989,866 → 51,459,673; total ≈10.5M events). Latest checkpoints — Enosys: 51,459,698 (≈4.43M events), SparkDEX: 51,459,648 (≈6.08M events). Coverage verified via `check-pending-backfills`, `check-backfill-progress`, `verify-pool-events-data`.
+- SP2-D10: PoolEvent backfill + data-quality checks are green; SP2-D11 (7d-MVs refresh) and SP2-T60 (Weekly) may now proceed on staging once scheduled.
+- SP2-INC1: rFLR incentives backfill + decode + mv_incentives_rflr_daily populated on staging (2025-08-01 → 2025-11-30; 8,043 daily rows, ~1,271 wallets, 6 tokens, 122 days; decode coverage 100%). Pool attribution still missing (pool_address=NULL) and APS incentives remain pending.
+- SP2-INC1: Documented rFLR & APS incentives indexer and verify scripts, normalized npm script names (`incentives:rflr:backfill`, `incentives:rflr:decode`, `verify:incentives:rflr:*`, `incentives:aps:*`, `verify:incentives:aps:*`), and added staging backfill runbook to `docs/SSoT_DATA_ENRICHMENT.md` §7.9. No backfill executed yet; runbook ready for Koen to execute on staging after SP2-D10 completion.
+- SP2-INC1: Fixed incentives schema setup (`create-incentives-raw-tables.mts`/`create-incentives-raw.sql`) to be idempotent and safe on empty DBs. Simplified SQL to use `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` (PostgreSQL 9.5+ supports this). Removed DO/IF blocks that caused syntax errors when statements were split. Script handles errors gracefully and can be run multiple times without 42P01/42601 errors. Added Prisma models (`RflrIncentiveEvent`, `ApsIncentiveEvent`, `SpxIncentiveEvent`) to `prisma/schema.prisma` and regenerated Prisma client.
+
+## Data Enrichment — 7d Materialized Views (SP2-D11)
+
+- **Purpose:** 7-day rolling aggregates for pool volume, fees, and liquidity changes, feeding Weekly Universe reports and Pool Pro/Universe analytics. These MVs depend on completed PoolEvent backfill (SP2-D10) and must be refreshed after backfill completes.
+
+- **Enabled MVs (SP2-D11):**
+  - **Pool analytics (7d):**
+    - `mv_pool_volume_7d` — Rolling 7-day trading volume per pool (from Swap events in PoolEvent). Fields: `pool`, `swaps_count`, `volume0_7d`, `volume1_7d`, `period_start`, `period_end` (token-native).
+    - `mv_pool_fees_7d` — Rolling 7-day fee aggregates per pool (from Collect events in PoolEvent). Fields: `pool`, `collect_events_count`, `fees0_7d`, `fees1_7d`, `period_start`, `period_end` (token-native).
+    - `mv_pool_changes_7d` — Pool liquidity changes in last 7 days (from Mint/Burn events in PoolEvent). Fields: `pool`, `mints_count`, `burns_count`, `liquidity_net_raw_7d`, `net_amount0_7d`, `net_amount1_7d`, `period_start`, `period_end`.
+  - **Pool analytics (24h):**
+    - `mv_pool_fees_24h` — Rolling 24-hour fee aggregates per pool (from Collect events in PoolEvent). Fields: `pool`, `collect_events_count_24h`, `fees0_24h_raw`, `fees1_24h_raw` (token-native). Used for Premium/Pro analytics.
+  - **Pool state:**
+    - `mv_pool_latest_state` — Latest block and tick per pool (from PoolEvent). Fields: `pool`, `blockNumber`, `tick`. Required dependency for `mv_position_range_status`.
+    - `mv_pool_position_stats` — Aggregated stats per pool (positions count, avg range width). Fields: `pool`, `positions_count`, `avg_tick_width`, `last_block`. Used for Premium/Pro pool analytics.
+  - **Position analytics (Advanced MVs for Premium/Pro):**
+    - `mv_position_latest_event` — Most recent event per positionId for quick enrichment lookups. Fields: `tokenId`, `pool`, `eventType`, `blockNumber`, `logIndex`, `timestamp`, `liquidityDelta`, `amount0`, `amount1`.
+    - `mv_position_range_status` — Precomputed in-range/out-of-range markers for LP positions. Fields: `tokenId`, `pool`, `tickLower`, `tickUpper`, `current_tick`, `in_range_flag` (boolean). Depends on `mv_pool_latest_state`. Used for Premium/Pro position analytics.
+    - `mv_positions_active_7d` — Active positions in last 7 days (from PositionEvent). Fields: `tokenId`, `pool`, `event_types_count_7d`, `events_count_7d`, `last_event_block`, `last_event_timestamp`. Used for Premium/Pro position activity analytics.
+    - `mv_wallet_lp_7d` — Wallet LP activity summary for last 7 days (from PositionEvent). Fields: `wallet_address`, `positions_count_7d`, `pools_count_7d`, `net_amount0_7d_raw`, `net_amount1_7d_raw`, `days_active_7d`. Used for Premium/Pro wallet analytics.
+  - **Lifetime positions (W3-equivalent scope):**
+    - `mv_position_lifetime_v1` — Lifetime v3 LP positions (all positions that have ever existed on Enosys + SparkDEX v3 pools). Fields: `token_id`, `pool_address`, `nfpm_address`, `dex`, `first_event_block`, `last_event_block`, `first_event_ts`, `last_event_ts`, `event_count`, `owner_address`. Matches W3 Cross-DEX scope (74,857 positions reference). Used by `verify:data:lifetime-vs-w3` to compare lifetime universe vs W3 and distinguish from active SP2 state positions.
+  - **Incentives:**
+    - `mv_incentives_rflr_daily` — Daily rFLR incentive aggregates (from RflrIncentiveEvent). Fields: `date`, `wallet`, `token`, `amount_raw`, `pool_address` (may be NULL).
+
+- **Deferred to SP3 (not created/used in SP2):**
+  - `mv_position_state_v2` — LEGACY position state MV. Retained in `db/views/` for historical reference only. Production uses `mv_position_state_v3_candidate` (or canonical alias via `POSITION_STATE_SOURCE` env var). Excluded from `create-materialized-views.mts` and `refresh-materialized-views.mts` to prevent creation errors.
+
+- **Dependencies:**
+  - **SP2-D10 (PoolEvent backfill):** Must be complete before refreshing 7d-MVs. PoolEvent data covers block range 29,989,866 → 51,459,673 (~10.5M events) for both Enosys and SparkDEX.
+
+- **Creation requirement:**
+  - `npm run db:mvs:create` (or `npx tsx scripts/db/create-materialized-views.mts`) must be run once per environment to create all MVs before refresh scripts are used.
+  - Creates all MVs from `db/views/*.sql` files using `CREATE MATERIALIZED VIEW IF NOT EXISTS`.
+  - **Note:** Each MV SQL file in `db/views` now defines a single materialized view (comments + `CREATE MATERIALIZED VIEW ... AS SELECT ...`). Index creation for MVs is not handled in these files and may be added later via separate scripts for performance tuning.
+
+- **Refresh process (staging):**
+  ```bash
+  # Option 1: Use TypeScript refresh script (refreshes all MVs including 7d)
+  npm run db:mvs:refresh:7d
+  
+  # Option 2: Direct psql refresh (7d-MVs only)
+  psql "$DATABASE_URL" <<'SQL'
+  REFRESH MATERIALIZED VIEW "mv_pool_volume_7d";
+  REFRESH MATERIALIZED VIEW "mv_pool_fees_7d";
+  REFRESH MATERIALIZED VIEW "mv_pool_changes_7d";
+  REFRESH MATERIALIZED VIEW "mv_wallet_lp_7d";
+  REFRESH MATERIALIZED VIEW "mv_positions_active_7d";
+  SQL
+  ```
+  Note: For SP2, MV refresh uses simple `REFRESH MATERIALIZED VIEW` (no `CONCURRENTLY`) for robustness; MV indexing and concurrent refresh will be revisited in a later performance-tuning sprint.
+
+- **Verification (before SP2-T60):**
+  ```bash
+  # Verify all 7d pool MVs
+  npm run verify:enrichment:7d
+  
+  # Or verify individually:
+  npm run verify:enrichment:pool-volume-7d
+  npm run verify:enrichment:pool-fees-7d
+  npm run verify:enrichment:pool-changes-7d
+  ```
+  Verification scripts check row counts, period ranges, DEX breakdowns, and top pools. All verifiers must pass before SP2-T60 (Weekly report) is resumed.
+
+- **Relationship to SP2-T60:**
+  - Weekly report generator uses 7d-MVs for "Top pools by 7D swap activity", "Top pools by 7D fees", and "Pools with highest net mints (7D)" sections.
+  - If 7d-MVs are empty or incomplete, Weekly report will show degraded/empty states for these sections.
+  - SP2-T60 remains HALT until 7d-MV refresh + verify are complete.
+
+- **View definitions:** Located in `db/views/mv_pool_volume_7d.sql`, `db/views/mv_pool_fees_7d.sql`, `db/views/mv_pool_changes_7d.sql`, `db/views/mv_wallet_lp_7d.sql`, `db/views/mv_positions_active_7d.sql`. All views use `WITH NO DATA` initially and must be refreshed after PoolEvent backfill.
+
+## Data Enrichment — Incentives / Emissions
+
+- **rFLR Incentives (SP2-INC1):**
+  - Indexed from TokenDistributor contract (`0xc2DF11C68f86910B99EAf8acEd7F5189915Ba24F`) via `scripts/indexer/incentives/backfill-rflr-node.mts`.
+  - Raw table: `rflr_incentive_event` (stores raw logs with `metadata` JSONB).
+  - Decode script: `scripts/indexer/incentives/decode-rflr-v1.mts` (populates `wallet_address`, `reward_token`, `amount_raw` from `HasClaimed`/`HasClaimedWithTimestamp` events).
+  - Daily MV: `mv_incentives_rflr_daily` (grain: `wallet_address × pool_address × reward_token × day`).
+  - Backfill commands: `npm run incentives:rflr:backfill` (raw), `npm run incentives:rflr:decode` (decode).
+  - Verify commands: `npm run verify:incentives:rflr:backfill`, `npm run verify:incentives:rflr:decode`, `npm run verify:incentives:rflr:daily`.
+  - Start block: `45379614` (configurable via `RFLR_BACKFILL_FROM_BLOCK`).
+  - Used by: Portfolio Pro (wallet-level rewards), Pool Universe/Pro (pool-level APR), Weekly report (aggregates).
+
+- **APS Incentives (SP2-INC1):**
+  - Indexed from APS Reward Manager proxy (`0x02e55904F4bbB4ef6CF036bd203Dd2B0D4B86e16`) via `scripts/indexer/incentives/backfill-aps-node.mts`.
+  - Raw table: `aps_incentive_event` (stores raw logs with `metadata` JSONB).
+  - Decode script: `scripts/indexer/incentives/decode-aps-v1.mts` (populates `wallet_address`, `reward_token`, `amount_raw`, `pool_address` from `RewardClaimed` events using RewardManager implementation ABI).
+  - Daily MV: `mv_incentives_aps_daily` (grain: `wallet_address × pool_address × reward_token × day`).
+  - Backfill commands: `npm run incentives:aps:backfill` (raw), `npm run incentives:aps:decode` (decode).
+  - Verify commands: `npm run verify:incentives:aps:daily`.
+  - Start block: `50716060` (configurable via `APS_BACKFILL_FROM_BLOCK`).
+  - Used by: Portfolio Pro, Pool Universe/Pro, Weekly report (same pipeline as rFLR).
+  - **Note:** APS `RewardClaimed` event does not include `wallet_address` directly; `wallet_address` may be null initially. Pool mapping via `nftId` → `TokenPoolMap` is supported. APS reward token is always `0xfF56Eb5b1a7FAa972291117E5E9565dA29bc808d`.
+
+- **Relationship to analytics:**
+  - Incentive MVs feed into `mv_wallet_portfolio_performance.rewardsEarnedUsd` and `mv_wallet_value_timeseries.rewardsCumUsd` for Portfolio Pro.
+  - Pool-level incentive APR computed in analytics layer: `(rewards per day / pool TVL) × 365 × 100`.
+  - Combined fees+emissions APR displayed in Universe/Pool Pro and Weekly reports.
+  - See `docs/SSoT_DATA_ENRICHMENT.md` §7.9 for full backfill runbook.
+
+- **Schema setup:**
+  - Canonical setup script: `scripts/db/create-incentives-raw-tables.mts` (runs `scripts/db/create-incentives-raw.sql`).
+  - Idempotent: safe to run multiple times on empty or existing databases; uses `CREATE TABLE IF NOT EXISTS` and `DO $$ ... END $$` blocks for index creation with existence checks.
+  - Usage: Run `npx tsx scripts/db/create-incentives-raw-tables.mts` before executing incentives backfills on a fresh environment (including staging).
+
+## Reports / Weekly (SP2-T60)
+
+- **Purpose:** Weekly liquidity pools report summarizing 7-day metrics (volume, fees, TVL, APR) for the Flare DEX ecosystem (Enosys + SparkDEX).
+
+- **Data sources (Weekly v1):**
+  - **7d Materialized Views:**
+    - `mv_pool_volume_7d` — 7-day trading volume per pool (Swap events).
+    - `mv_pool_fees_7d` — 7-day fee aggregates per pool (Collect events).
+    - `mv_pool_changes_7d` — Net liquidity changes (Mint/Burn events) over 7 days.
+    - `mv_pool_metrics_daily_v2` — Daily pool metrics (if used for historical context).
+  - **Universe/TVL endpoints:**
+    - `/api/analytics/summary` — Universe overview (TVL, pools, LP wallets, positions).
+    - Analytics functions (`getUniverseOverview`, `getTopPoolsByVolume7dUsd`, `getTopPoolsByFeeApr7d`) — Pool rankings with USD conversions.
+  - **Pricing:**
+    - FTSO-first pricing layer (`getTokenPriceUsd` from `tokenPriceService`); CoinGecko only as fallback where defined.
+    - Pricing stats logged at end of report generation.
+  - **Incentives:**
+    - rFLR incentives from `mv_incentives_rflr_daily` for high-level network totals (if included in Universe overview).
+    - **APS incentives:** Raw present, decode/MV under validation; APS is **not yet included in Weekly v1** pending ABI/log verification and MV population.
+
+- **How to run Weekly on staging:**
+  ```bash
+  # Generate report for current week (auto-detect ISO week)
+  npm run report:weekly
+
+  # Generate report for specific week
+  npm run report:weekly -- --week 2025-W48
+
+  # Verify report generation
+  npm run verify:report:weekly
+  ```
+  - Report output: `data/reports/YYYY-WW/report.md` (Markdown) + CSV files (`top-pools.csv`, `pool-changes.csv`, `top-wallets.csv`).
+  - Environment variables: `DATABASE_URL` (required), optional `WEEK_ID` if script supports it.
+
+- **How to verify Weekly:**
+  ```bash
+  # Run verifier (checks report generation, file existence, content structure)
+  npm run verify:report:weekly
+
+  # Ensure 7d MVs are refreshed before trusting Weekly output
+  npm run db:mvs:refresh:7d
+  npm run verify:enrichment:7d
+  ```
+  - Verifier checks: report.md exists and contains required sections, CSV files are non-empty, coverage warnings or tables present in top-pools sections.
+
+- **Dependencies:**
+  - **SP2-D10 (PoolEvent backfill):** Must be complete (block range 29,989,866 → 51,459,673, ~10.5M events).
+  - **SP2-D11 (7d-MVs refresh):** MVs must be refreshed (`npm run db:mvs:refresh:7d`) before Weekly generation.
+  - **SP2-T61 (FTSO-first pricing):** Pricing layer must be operational (FTSO primary, CoinGecko fallback).
+
+- **Weekly v1 scope:**
+  - ✅ Included: 7d volume/fees/TVL, top pools by volume/fees/APR, net mints, Universe overview, rFLR incentives (if available).
+  - ❌ Excluded: APS incentives (pending decode/MV validation), delegation rewards, advanced position analytics.
+
+- **Data normalization (raw → token-native → USD):**
+  - Raw amounts (e.g., in PoolEvent and raw MVs like `mv_pool_volume_7d`) are stored as integers scaled by token decimals (e.g., 1 FLR = 10^18 raw units).
+  - Analytics layer normalizes them to token-native amounts before computing USD metrics: `token_native = raw / 10^decimals`, then `usd = token_native * price_usd`.
+  - Weekly relies on analytics helpers (`computePool7dUsdMetrics`, `getTopPoolsByVolume7dUsd`, `getTopPoolsByFeeApr7d`) that handle this normalization internally.
+  - The verify script (`verify:report:weekly`) includes a sanity check to flag USD values >$1T, which would indicate a raw * price bug.
+
+- **Relationship to analytics:**
+  - Weekly report uses the same data layer as the app (7d MVs + FTSO pricing + analytics endpoints).
+  - Ensures consistency between Weekly reports and Universe/Pool Pro screens.
+  - Report generator is headless (no interactive prompts) and produces stable Markdown/CSV output.
+
+- **verify:data:w49-vs-w3:**
+  - Compares current dataset metrics (TVL, pools, positions, wallets) against the historical W3 Cross-DEX snapshot (Nov 2025).
+  - Helps identify coverage gaps due to SP2 filters or missing enrichment.
+  - Run: `npm run verify:data:w49-vs-w3`.
+
+- **verify:data:coverage-gaps:**
+  - Diagnoses coverage loss (TVL/positions/wallets) by breaking down metrics into Raw Ingestion, Canonical State, and Priced Universe layers.
+  - Helps pinpoint whether gaps are due to ingestion, filters, or missing prices.
+  - Run: `npm run verify:data:coverage-gaps`.
+
+- **verify:data:defillama:flare:**
+  - Compares LiquiLab W3/W49 v3 TVL against DeFiLlama's SparkDEX + Enosys AMM V3 TVL on Flare for corresponding dates.
+  - Serves as external SSoT check to validate LiquiLab v3 TVL calculations (narrowed to v3 DEXs only, not chain-level Flare TVL).
+  - Fetches protocol-level TVL from DeFiLlama API for SparkDEX and Enosys V3, extracts Flare chain TVL, and sums them for comparison.
+  - Run: `npm run verify:data:defillama:flare`.
+
+- **verify:data:lifetime-vs-w3:**
+  - Compares LiquiLab lifetime positions (mv_position_lifetime_v1) against W3 Cross-DEX reference (74,857 positions, 8,594 wallets).
+  - Separates lifetime universe (all positions that have ever existed) from active SP2 state positions.
+  - Helps distinguish coverage gaps: lifetime vs active, and state vs priced.
+  - Run: `npm run verify:data:lifetime-vs-w3`.
+
+## Changelog — 2025-12-02
+  - SP2: Fixed pricing helpers (ACTIVE_PLAN_ID/priceBreakdown exports) to unbreak /pricing-lab, /brand and /api/entitlements after billing refactor; Next.js build now passes. Updated priceBreakdown to use plan config values (EXTRA_PER_SLOT_USD, ALERTS_PACK5_USD) instead of hardcoded prices.
+
 ## Changelog — 2025-12-01
+  - SP2: Fixed verify:data:coverage-gaps to use mv_position_state_v3_candidate column names (token_id/owner_address/pool_address) so coverage diagnostics run cleanly on staging.
+  - SP2: Adjusted Universe/Weekly wallet metrics to use canonical PositionState v3 owners for coverage, and re-labeled mv_wallet_lp_v2 as active-wallet snapshot.
+  - SP2: Relaxed mv_position_state_v3_candidate filters to align with W3 Cross-DEX scope; switched to a smart decimals-aware sanity filter (Strict < 12, Loose >= 12) to include legitimate high-supply meme token positions while still excluding corrupt low-decimal pool events.
+  - SP2: UniverseOverview extended to report priced vs unpriced TVL; W49-vs-W3 and coverage-gaps now show how much TVL is omitted from USD metrics due to missing price feeds. Weekly/W49 use only tvlPricedUsd for USD metrics; unpriced pools are tracked separately.
+  - SP2-D11: Documented 7d-MVs (`mv_pool_volume_7d`, `mv_pool_fees_7d`, `mv_pool_changes_7d`, `mv_wallet_lp_7d`, `mv_positions_active_7d`) and their refresh/verify process on staging. Added npm scripts (`verify:enrichment:pool-volume-7d`, `verify:enrichment:pool-fees-7d`, `verify:enrichment:pool-changes-7d`, `verify:enrichment:7d`, `db:mvs:refresh:7d`). 7d-MVs depend on completed PoolEvent backfill (SP2-D10) and must be refreshed before SP2-T60 (Weekly) can be resumed. Refresh commands documented in PROJECT_STATE.md; verification scripts must pass before Weekly is enabled.
+- SP2-D11: Polished 7d-MV definitions (pool volume/fees/changes/wallet/positions) and aligned verify-enrichment scripts so 7d summaries produce meaningful metrics instead of undefined placeholders. Updated MV SQL files to include `period_start`/`period_end` columns and renamed columns to match verify script expectations (`volume0_7d`, `volume1_7d`, `swaps_count`, `fees0_7d`, `fees1_7d`, `collect_events_count`, `liquidity_net_raw_7d`, `net_amount0_7d`, `net_amount1_7d`). Fixed missing MV definitions (`mv_pool_latest_state`, `mv_pool_fees_24h`, `mv_pool_position_stats`, `mv_position_latest_event`, `mv_position_range_status`) to ensure all MVs referenced in refresh scripts have SQL definitions.
+- SP2-D11: Cleaned up MV creation/refresh scripts by excluding legacy `mv_position_state_v2` (marked as LEGACY in SQL comments; production uses `mv_position_state_v3_candidate`). Added dependency ordering in `create-materialized-views.mts` to ensure `mv_pool_latest_state` is created before `mv_position_range_status`. Documented enabled vs deferred MVs in PROJECT_STATE.md (11 enabled MVs for SP2-D11; `mv_position_state_v2` explicitly deferred to SP3).
+- SP2-D11: Implemented working definitions for advanced MVs (mv_pool_fees_24h, mv_pool_position_stats, mv_position_latest_event, mv_position_range_status, mv_positions_active_7d, mv_wallet_lp_7d); all 11 SP2 MVs now create and refresh cleanly. Fixed SQL syntax, column naming, and dependency ordering. Advanced MVs are designed as minimal but correct building blocks for Premium/Pro analytics (range status, wallet/position activity, pool stats).
+- SP2-D11: Normalised MV SQL files to single CREATE MATERIALIZED VIEW statements (no inline index DDL), ensuring compatibility with create-materialized-views.mts; MV indexing is deferred to future performance tuning.
+- SP2-D11: Simplified MV refresh script to always use regular REFRESH MATERIALIZED VIEW (no CONCURRENTLY), avoiding 55000 errors on mv_incentives_rflr_daily and preferring robustness over concurrent refresh for now.
+- SP2: Documented Flare indexer follower service for Railway (service name `flare-indexer-follower`, start command `tsx scripts/indexer-follower.ts --factory=all`, env vars, responsibilities) based on existing `scripts/indexer-follower.ts` script. Added `indexer:flare:follow` npm script alias. No deployment yet; follower should be deployed after SP2-D11/SP2-T60 complete.
+- SP2-INC1: APS incentives raw backfill completed on staging (~3,268 events); decode + mv_incentives_aps_daily wired using RewardManager implementation ABI (`RewardClaimed` event); APS decode now populates `amount_raw`, `reward_token`, `pool_address` (via nftId mapping), with `wallet_address` potentially null (RewardClaimed doesn't include recipient field).
+- SP2-T60: Re-enabled and aligned Weekly report with SP2 data SSoT (7d MVs + FTSO-first pricing + rFLR incentives), APS incentives explicitly excluded from v1 pending decode/MV validation. Weekly generator uses `mv_pool_volume_7d`, `mv_pool_fees_7d`, `mv_pool_changes_7d` directly and analytics endpoints (`getUniverseOverview`, `getTopPoolsByVolume7dUsd`, `getTopPoolsByFeeApr7d`) for USD conversions. Report generation: `npm run report:weekly`, verification: `npm run verify:report:weekly`. Requires SP2-D11 (7d-MVs refresh) and SP2-D10 (PoolEvent backfill) to be complete.
+- SP2-T60: Fixed 7d USD and fee-APR calculations to use token-native amounts (raw / 10^decimals) before applying FTSO USD prices; Weekly report no longer multiplies raw amounts by USD prices directly, aligning with the W3 Cross-DEX methodology. Updated `computePool7dUsdMetrics` to normalize raw MV values (divide by 10^decimals) before USD conversion. Added USD magnitude sanity check to `verify:report:weekly` to catch future regressions.
+- SP2: Added W49-vs-W3 dataset coverage verifier (verify:data:w49-vs-w3) to compare current SP2 dataset against historical W3 Cross-DEX snapshot (TVL, pools, positions, wallets).
+- SP2: Added coverage-gaps verifier (verify:data:coverage-gaps) to diagnose where current SP2 dataset loses coverage versus W3 (Raw NFPM vs PositionState vs Priced TVL).
+- SP2: Added DeFiLlama-based Flare TVL verifier (verify:data:defillama:flare) that compares LiquiLab W3/W49 v3 TVL against DeFiLlama SparkDEX + Enosys AMM V3 TVL on Flare for the same dates; narrowed to v3 DEXs only (not chain-level Flare TVL).
+- SP2: Added mv_position_lifetime_v1 MV and lifetime-vs-W3 verifier (verify:data:lifetime-vs-w3) to measure lifetime v3 LP positions vs W3 Cross-DEX reference (74,857 positions, 8,594 wallets); separates lifetime universe from active SP2 state positions.
 - Run log timezone convention documented: Europe/Amsterdam; AI entries use YYYY-MM-DDT.. placeholders (precise times added manually by Koen).
 - SP2-T61: documented FTSO-first pricing SSoT (FTSO primary for Flare assets; CoinGecko fallback only when needed; shared helper for TVL/APR/Weekly).
 - SP2-D10 marked Done in sprint list; SP2-D11/SP2-T60 explicitly on hold until PoolEvent backfill completes and SP2-D10 checks are green.
@@ -1349,3 +1609,11 @@ See archives in /docs/changelog/.
   - All metrics now show explicit time windows (e.g., "Volume (7D)", "Fees Generated (24H)", "Range Efficiency (30D)") as right-aligned labels in card headers.
   - UI accurately reflects backend data states without implying full data when still warming; no backend or backfill changes (SP2-T70/T71).
   - Documentation: Added `STRATEGY_C_DATA_STATES_OVERVIEW.md` (master overview) and `POSITION_PRO_DATA_STATES_TEST_GUIDE.md` (testing guide with screenshot instructions).
+- **SP2-T70/T71: Pool route slug standardisation**:
+  - Fixed Next.js dynamic route slug conflict (`'id' !== 'poolAddress'`) by standardising all `/pool/*` routes to use `poolAddress` as the dynamic parameter.
+  - Migrated Pool Detail Pro page from `pages/pool/[tokenId].tsx` to `pages/pool/[poolAddress]/index.tsx`, updating all references from `tokenId` to `poolAddress`.
+  - Updated `src/components/pools/PoolCard.tsx` to link to `/pool/${position.poolAddress}` instead of `/pool/${position.tokenId}`.
+  - Deleted conflicting `pages/pool/[tokenId].tsx` route.
+  - Pool routes now consistent: `/pool/[poolAddress]` (index) and `/pool/[poolAddress]/universe` (universe view).
+  - Merged `/api/analytics/pool/[id].ts` into `/api/analytics/pool/[poolAddress].ts` with `?simple=true` query parameter for simple pool data; deleted conflicting `[id].ts` API route. Updated `fetchPool()` to use `?simple=true` parameter.
+  - Verified all pool routes (pages and API) consistently use `[poolAddress]` as the dynamic segment; no `[id]` routes remain. If Next.js error persists, clear `.next` build cache.

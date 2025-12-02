@@ -46,9 +46,11 @@ export function priceBreakdown({ slots, alertsSelected }: PriceInput): PriceBrea
   const normalizedSlots = Math.max(5, Math.ceil(slots / 5) * 5);
   const base5 = +(BASE5_USD).toFixed(2);
   const extraBundles = Math.max(0, Math.ceil((normalizedSlots - 5) / 5));
-  const extras = +(extraBundles * 9.95).toFixed(2);
+  // Use plan config for extra bundle pricing (5 slots per bundle)
+  const extras = +(extraBundles * EXTRA_PER_SLOT_USD * 5).toFixed(2);
   const alertsPacks = alertsSelected ? Math.ceil(normalizedSlots / 5) : 0;
-  const alerts = +(alertsPacks * 2.49).toFixed(2);
+  // Use plan config for alerts pricing
+  const alerts = +(alertsPacks * ALERTS_PACK5_USD).toFixed(2);
   const total = +(base5 + extras + alerts).toFixed(2);
 
   return { base5, extras, alerts, alertsPacks, total };
