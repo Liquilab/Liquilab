@@ -69,14 +69,34 @@ export default async function handler(
             
             if (fs.existsSync(sqlFile)) {
               const sql = fs.readFileSync(sqlFile, 'utf-8');
-              const statements = sql
+              
+              // Remove comments and split by semicolon, but handle multi-line statements
+              const cleanedSql = sql
+                .split('\n')
+                .map(line => {
+                  const commentIndex = line.indexOf('--');
+                  return commentIndex >= 0 ? line.substring(0, commentIndex) : line;
+                })
+                .join('\n');
+              
+              // Split by semicolon, but keep statements that span multiple lines
+              const statements = cleanedSql
                 .split(';')
                 .map(s => s.trim())
-                .filter(s => s.length > 0 && !s.startsWith('--'));
+                .filter(s => s.length > 0);
               
+              // Execute each statement separately
               for (const statement of statements) {
                 if (statement.trim()) {
-                  await prisma.$executeRawUnsafe(statement);
+                  try {
+                    await prisma.$executeRawUnsafe(statement + ';');
+                  } catch (stmtError) {
+                    // If it's a "already exists" error, that's OK
+                    const errorMsg = stmtError instanceof Error ? stmtError.message : String(stmtError);
+                    if (!errorMsg.includes('already exists') && !errorMsg.includes('duplicate')) {
+                      throw stmtError;
+                    }
+                  }
                 }
               }
               console.log(`[refresh-views] Created ${mv}`);
