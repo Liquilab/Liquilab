@@ -26,18 +26,18 @@
 
 ### Stap 3: Environment Variables
 
-Zorg dat deze variabelen beschikbaar zijn in de Cron service:
-
-```bash
-# Required voor HTTP request
-RAILWAY_PUBLIC_DOMAIN=${{Liquilab-staging.RAILWAY_PUBLIC_DOMAIN}}
-CRON_SECRET=your-secret-key-here
-```
-
-**Setup:**
-- `RAILWAY_PUBLIC_DOMAIN`: Automatisch beschikbaar in Railway (bijv. `liquilab-staging-staging.up.railway.app`)
+**Voor de Cron Job service:**
 - `CRON_SECRET`: Maak een willekeurige secret key aan (bijv. via `openssl rand -hex 32`)
-- Zet dezelfde `CRON_SECRET` in de **Liquilab-staging** service environment variables
+
+**Voor de Liquilab-staging service (web service):**
+- `CRON_SECRET`: Zet dezelfde secret key als hierboven
+- `DATABASE_URL`: Moet al gelinkt zijn aan Postgres
+
+**Setup CRON_SECRET:**
+1. Genereer een secret: `openssl rand -hex 32` (of gebruik een willekeurige string)
+2. Zet deze in beide services:
+   - Cron Job service → Variables → `CRON_SECRET`
+   - Liquilab-staging service → Variables → `CRON_SECRET`
 
 ---
 
@@ -48,14 +48,36 @@ CRON_SECRET=your-secret-key-here
 2. Klik "Run Now" / "Trigger Manually"
 3. Check logs voor output
 
-**Expected Output:**
+**Expected Output in Cron Logs:**
 ```
-[refresh-views] mv_pool_latest_state → refresh
-[refresh-views] mv_pool_latest_state ✓
-[refresh-views] mv_pool_fees_24h → refresh
-[refresh-views] mv_pool_fees_24h ✓
+curl: (0) no error
+```
+
+**Expected Output in Web Service Logs:**
+Check de logs van de **Liquilab-staging** service om de refresh output te zien:
+```
+[refresh-views] Refreshing mv_pool_latest_state...
+[refresh-views] Refreshing mv_pool_fees_24h...
 ...
-[refresh-views] Done
+```
+
+**Of test het endpoint handmatig:**
+```bash
+curl -X POST "https://liquilab-staging-staging.up.railway.app/api/enrich/refresh-views" \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+**Expected JSON Response:**
+```json
+{
+  "success": true,
+  "duration": 12345,
+  "results": {
+    "poolLatestState": { "success": true, "duration": 1234 },
+    "poolFees24h": { "success": true, "duration": 567 },
+    ...
+  }
+}
 ```
 
 ---
