@@ -170,7 +170,7 @@ async function main() {
 
   console.log('');
   console.log('╔════════════════════════════════════════════════════════════════╗');
-  console.log('║         LIQUI BLOCKCHAIN INDEXER - FOLLOWER MODE              ║');
+  console.log('║         LIQUILAB V3 POOLS INDEXER - FOLLOWER MODE              ║');
   console.log('╚════════════════════════════════════════════════════════════════╝');
   console.log('');
   console.log('📡 Following blockchain head...');

@@ -40,6 +40,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/indexer.config.ts ./indexer.config.ts
 COPY --from=builder /app/start.sh ./start.sh
 
 # Make start script executable
