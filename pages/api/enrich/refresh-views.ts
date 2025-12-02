@@ -10,6 +10,179 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Inline SQL definitions for Materialized Views
+function getMVSQL(mvName: string): { create: string; indexes?: string[] } | null {
+  const mvSqlMap: Record<string, { create: string; indexes?: string[] }> = {
+    'mv_pool_latest_state': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_latest_state" AS
+SELECT "pool" AS pool,
+       MAX("blockNumber") AS "blockNumber"
+FROM "PoolEvent"
+GROUP BY "pool"
+WITH NO DATA`,
+    },
+    'mv_pool_fees_24h': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_fees_24h" AS
+WITH latest_blocks AS (
+  SELECT MAX("blockNumber") AS max_block FROM "PoolEvent"
+)
+SELECT p."pool",
+       SUM(COALESCE(p."amount0", '0')) AS "amount0",
+       SUM(COALESCE(p."amount1", '0') AS "amount1")
+FROM "PoolEvent" p
+CROSS JOIN latest_blocks lb
+WHERE p."blockNumber" >= lb.max_block - 7200
+GROUP BY p."pool"
+WITH NO DATA`,
+    },
+    'mv_position_range_status': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_position_range_status" AS
+SELECT DISTINCT ON (pe."tokenId")
+       pe."tokenId",
+       pe."pool",
+       pe."tickLower",
+       pe."tickUpper",
+       (SELECT "tick" FROM "mv_pool_latest_state" WHERE "pool" = pe."pool" LIMIT 1) as current_tick,
+       CASE
+         WHEN pe."tickLower" IS NOT NULL 
+           AND pe."tickUpper" IS NOT NULL 
+           AND EXISTS (SELECT 1 FROM "mv_pool_latest_state" WHERE "pool" = pe."pool")
+           AND (SELECT "tick" FROM "mv_pool_latest_state" WHERE "pool" = pe."pool" LIMIT 1) >= pe."tickLower" 
+           AND (SELECT "tick" FROM "mv_pool_latest_state" WHERE "pool" = pe."pool" LIMIT 1) < pe."tickUpper"
+         THEN 'IN_RANGE'
+         WHEN pe."tickLower" IS NOT NULL 
+           AND pe."tickUpper" IS NOT NULL 
+           AND EXISTS (SELECT 1 FROM "mv_pool_latest_state" WHERE "pool" = pe."pool")
+         THEN 'OUT_OF_RANGE'
+         ELSE NULL
+       END AS range_status
+FROM "PositionEvent" pe
+WHERE pe."tickLower" IS NOT NULL 
+  AND pe."tickUpper" IS NOT NULL
+ORDER BY pe."tokenId", pe."blockNumber" DESC, pe."logIndex" DESC
+WITH NO DATA`,
+    },
+    'mv_pool_position_stats': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_position_stats" AS
+SELECT pe."pool",
+       COUNT(DISTINCT pe."tokenId") AS position_count,
+       AVG(COALESCE(pe."tickUpper", 0) - COALESCE(pe."tickLower", 0)) AS avg_range,
+       MAX(pe."blockNumber") AS last_block
+FROM "PositionEvent" pe
+GROUP BY pe."pool"
+WITH NO DATA`,
+    },
+    'mv_position_latest_event': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_position_latest_event" AS
+SELECT DISTINCT ON (pe."tokenId")
+       pe."tokenId",
+       pe."pool",
+       pe."eventType",
+       pe."blockNumber",
+       pe."timestamp"
+FROM "PositionEvent" pe
+ORDER BY pe."tokenId", pe."blockNumber" DESC
+WITH NO DATA`,
+    },
+    'mv_pool_volume_7d': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_volume_7d" AS
+WITH latest_blocks AS (
+  SELECT MAX("blockNumber") AS max_block FROM "PoolEvent"
+)
+SELECT p."pool",
+       COUNT(*) FILTER (WHERE p."eventName" = 'Swap') AS swap_count,
+       SUM(CAST(COALESCE(p."amount0", '0') AS NUMERIC)) AS volume0,
+       SUM(CAST(COALESCE(p."amount1", '0') AS NUMERIC)) AS volume1
+FROM "PoolEvent" p
+CROSS JOIN latest_blocks lb
+WHERE p."blockNumber" >= lb.max_block - 50400
+  AND p."eventName" = 'Swap'
+GROUP BY p."pool"
+WITH NO DATA`,
+      indexes: [`CREATE UNIQUE INDEX IF NOT EXISTS mv_pool_volume_7d_pool_idx ON "mv_pool_volume_7d" ("pool")`],
+    },
+    'mv_pool_fees_7d': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_fees_7d" AS
+WITH latest_blocks AS (
+  SELECT MAX("blockNumber") AS max_block FROM "PoolEvent"
+)
+SELECT p."pool",
+       SUM(CAST(COALESCE(p."amount0", '0') AS NUMERIC)) AS fees0,
+       SUM(CAST(COALESCE(p."amount1", '0') AS NUMERIC)) AS fees1
+FROM "PoolEvent" p
+CROSS JOIN latest_blocks lb
+WHERE p."blockNumber" >= lb.max_block - 50400
+  AND p."eventName" = 'Collect'
+GROUP BY p."pool"
+WITH NO DATA`,
+      indexes: [`CREATE UNIQUE INDEX IF NOT EXISTS mv_pool_fees_7d_pool_idx ON "mv_pool_fees_7d" ("pool")`],
+    },
+    'mv_positions_active_7d': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_positions_active_7d" AS
+WITH latest_blocks AS (
+  SELECT MAX("blockNumber") AS max_block FROM "PositionEvent"
+)
+SELECT pe."tokenId",
+       pe."pool",
+       COUNT(DISTINCT pe."eventType") AS event_types_count,
+       MAX(pe."blockNumber") AS last_block,
+       MAX(pe."timestamp") AS last_timestamp
+FROM "PositionEvent" pe
+CROSS JOIN latest_blocks lb
+WHERE pe."blockNumber" >= lb.max_block - 50400
+GROUP BY pe."tokenId", pe."pool"
+WITH NO DATA`,
+      indexes: [
+        `CREATE UNIQUE INDEX IF NOT EXISTS mv_positions_active_7d_tokenid_idx ON "mv_positions_active_7d" ("tokenId")`,
+        `CREATE INDEX IF NOT EXISTS mv_positions_active_7d_pool_idx ON "mv_positions_active_7d" ("pool")`,
+      ],
+    },
+    'mv_wallet_lp_7d': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_wallet_lp_7d" AS
+WITH latest_blocks AS (
+  SELECT MAX("blockNumber") AS max_block FROM "PositionEvent"
+)
+SELECT pe."owner" AS wallet,
+       COUNT(DISTINCT pe."tokenId") AS positions_count,
+       COUNT(DISTINCT pe."pool") AS pools_count,
+       SUM(CAST(COALESCE(pe."amount0", '0') AS NUMERIC)) AS total_amount0,
+       SUM(CAST(COALESCE(pe."amount1", '0') AS NUMERIC)) AS total_amount1
+FROM "PositionEvent" pe
+CROSS JOIN latest_blocks lb
+WHERE pe."blockNumber" >= lb.max_block - 50400
+  AND pe."owner" IS NOT NULL
+GROUP BY pe."owner"
+WITH NO DATA`,
+      indexes: [`CREATE UNIQUE INDEX IF NOT EXISTS mv_wallet_lp_7d_wallet_idx ON "mv_wallet_lp_7d" ("wallet")`],
+    },
+    'mv_pool_changes_7d': {
+      create: `CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_changes_7d" AS
+WITH latest_blocks AS (
+  SELECT MAX("blockNumber") AS max_block FROM "PoolEvent"
+),
+pool_first_seen AS (
+  SELECT "pool", MIN("blockNumber") AS first_block
+  FROM "PoolEvent"
+  GROUP BY "pool"
+)
+SELECT p."pool",
+       pfs.first_block,
+       CASE WHEN pfs.first_block >= lb.max_block - 50400 THEN 'NEW' ELSE 'EXISTING' END AS change_type,
+       COUNT(*) FILTER (WHERE p."eventName" = 'Mint') AS mints_7d,
+       COUNT(*) FILTER (WHERE p."eventName" = 'Burn') AS burns_7d
+FROM "PoolEvent" p
+CROSS JOIN latest_blocks lb
+LEFT JOIN pool_first_seen pfs ON pfs."pool" = p."pool"
+WHERE p."blockNumber" >= lb.max_block - 50400
+GROUP BY p."pool", pfs.first_block, lb.max_block
+WITH NO DATA`,
+      indexes: [`CREATE UNIQUE INDEX IF NOT EXISTS mv_pool_changes_7d_pool_idx ON "mv_pool_changes_7d" ("pool")`],
+    },
+  };
+
+  return mvSqlMap[mvName] || null;
+}
+
 /**
  * POST /api/enrich/refresh-views
  * Refresh all materialized views
@@ -68,64 +241,43 @@ export default async function handler(
         }
         
         if (!mvExists) {
-          // MV doesn't exist, try to create it from SQL file
+          // MV doesn't exist, create it using inline SQL definitions
           try {
-            const fs = await import('fs');
-            const path = await import('path');
-            const sqlFile = path.join(process.cwd(), 'db/views', `${mv}.sql`);
-            
-            if (fs.existsSync(sqlFile)) {
-              const sql = fs.readFileSync(sqlFile, 'utf-8');
-              
-              // Remove comments and split by semicolon, but handle multi-line statements
-              const cleanedSql = sql
-                .split('\n')
-                .map(line => {
-                  const commentIndex = line.indexOf('--');
-                  return commentIndex >= 0 ? line.substring(0, commentIndex) : line;
-                })
-                .join('\n');
-              
-              // Split by semicolon, but keep statements that span multiple lines
-              const statements = cleanedSql
-                .split(';')
-                .map(s => s.trim())
-                .filter(s => s.length > 0);
-              
-              // Execute each statement separately
-              for (const statement of statements) {
-                if (statement.trim()) {
-                  try {
-                    // Add semicolon if not present
-                    const sqlStatement = statement.trim().endsWith(';') ? statement.trim() : statement.trim() + ';';
-                    await prisma.$executeRawUnsafe(sqlStatement);
-                  } catch (stmtError) {
-                    // If it's a "already exists" error, that's OK - continue
-                    const errorMsg = stmtError instanceof Error ? stmtError.message : String(stmtError);
-                    if (errorMsg.includes('already exists') || errorMsg.includes('duplicate') || errorMsg.includes('relation') && errorMsg.includes('already exists')) {
-                      console.log(`[refresh-views] ${mv} or its index already exists, continuing...`);
-                      continue;
-                    }
-                    // For other errors, log but don't fail completely - might be index creation failing
-                    console.error(`[refresh-views] Error executing statement for ${mv}:`, errorMsg);
-                    // Only throw if it's the CREATE MATERIALIZED VIEW statement (first statement)
-                    if (statement.trim().toUpperCase().startsWith('CREATE MATERIALIZED VIEW')) {
-                      throw stmtError;
-                    }
+            const mvSql = getMVSQL(mv);
+            if (!mvSql) {
+              throw new Error(`No SQL definition found for ${mv}`);
+            }
+
+            // Create the MV
+            await prisma.$executeRawUnsafe(mvSql.create);
+            console.log(`[refresh-views] Created ${mv}`);
+
+            // Create indexes if defined
+            if (mvSql.indexes) {
+              for (const idxSql of mvSql.indexes) {
+                try {
+                  await prisma.$executeRawUnsafe(idxSql);
+                } catch (idxError) {
+                  const errorMsg = idxError instanceof Error ? idxError.message : String(idxError);
+                  if (!errorMsg.includes('already exists') && !errorMsg.includes('duplicate')) {
+                    console.warn(`[refresh-views] Index creation warning for ${mv}: ${errorMsg}`);
                   }
                 }
               }
-              console.log(`[refresh-views] Created ${mv}`);
-            } else {
-              throw new Error(`SQL file not found: ${sqlFile}`);
             }
           } catch (createError) {
-            results[name] = {
-              success: false,
-              duration: 0,
-              error: `MV does not exist and creation failed: ${createError instanceof Error ? createError.message : String(createError)}`,
-            };
-            continue;
+            const errorMsg = createError instanceof Error ? createError.message : String(createError);
+            // If MV already exists (race condition), that's OK
+            if (errorMsg.includes('already exists') || errorMsg.includes('duplicate')) {
+              console.log(`[refresh-views] ${mv} already exists, continuing...`);
+            } else {
+              results[name] = {
+                success: false,
+                duration: 0,
+                error: `MV does not exist and creation failed: ${errorMsg}`,
+              };
+              continue;
+            }
           }
         }
         

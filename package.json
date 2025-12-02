@@ -65,6 +65,7 @@
     "verify:cron:db": "tsx scripts/verify-cron/check-db-connection.mts",
     "verify:cron:db-url": "tsx scripts/verify-cron/check-db-urls.mts",
     "fix:create-mvs": "tsx scripts/fix/create-all-mvs.mts",
+    "fix:create-mvs-direct": "tsx scripts/fix/create-mvs-direct.mts",
     "verify:enrichment": "node scripts/verify-enrichment/registry.mjs",
     "verify:icons": "node scripts/verify-enrichment/icons.mjs",
     "verify:icons:local": "node scripts/verify-icons/no-remote-icons.mjs",
