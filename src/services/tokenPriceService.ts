@@ -40,16 +40,20 @@ let cgRateLimitLoggedOnce = false;
 function getAnkrMultichainEndpoint(): string | null {
   // First check explicit ANKR_ADVANCED_API_URL
   if (process.env.ANKR_ADVANCED_API_URL) {
+    console.log('[PRICE] Using ANKR_ADVANCED_API_URL for pricing');
     return process.env.ANKR_ADVANCED_API_URL;
   }
   
-  // Try to derive from FLARE_RPC_URL if it's an ANKR URL with API key
+  // Try to derive from FLARE_RPC_URL or FLARE_RPC_URLS if it's an ANKR URL with API key
   // e.g., https://rpc.ankr.com/flare/{API_KEY} → https://rpc.ankr.com/multichain/{API_KEY}
-  const flareRpc = process.env.FLARE_RPC_URL;
+  const flareRpc = (process.env.FLARE_RPC_URL || process.env.FLARE_RPC_URLS)?.trim();
   if (flareRpc) {
-    const ankrMatch = flareRpc.match(/^https:\/\/rpc\.ankr\.com\/flare\/([a-f0-9]+)$/i);
+    // Match ANKR URLs with API key: https://rpc.ankr.com/flare/{hex_key}
+    const ankrMatch = flareRpc.match(/^https?:\/\/rpc\.ankr\.com\/flare\/([a-f0-9]+)\/?$/i);
     if (ankrMatch && ankrMatch[1]) {
-      return `https://rpc.ankr.com/multichain/${ankrMatch[1]}`;
+      const endpoint = `https://rpc.ankr.com/multichain/${ankrMatch[1]}`;
+      console.log('[PRICE] Derived ANKR multichain endpoint from FLARE_RPC_URL(S)');
+      return endpoint;
     }
   }
   

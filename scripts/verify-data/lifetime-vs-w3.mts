@@ -10,6 +10,7 @@
  * Usage: npm run verify:data:lifetime-vs-w3
  */
 
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();

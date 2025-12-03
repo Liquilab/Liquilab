@@ -14,7 +14,9 @@
  * Usage: npm run verify:data:w49-vs-w3
  */
 
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { getUniverseOverview } from '../../src/lib/analytics/db';
 
 const prisma = new PrismaClient();
 
@@ -45,66 +47,15 @@ interface W49Stats {
 }
 
 async function getW49Stats(): Promise<W49Stats> {
-  // TVL: mv_pool_latest_state doesn't have tvl_usd column (TVL computed on-demand via pricing)
-  // For now, report 0 TVL since pricing data isn't stored in MVs
-  // TODO: Compute TVL from positions + pricing service when pricing pipeline is ready
-  const tvlUsd = 0;
+  // Get UniverseOverview (includes TVL, pool counts, positions, wallets)
+  const universe = await getUniverseOverview();
+  const tvlUsd = universe.tvlPricedUsd;
+  const pools = universe.totalPoolsCount;
 
-  // Pools count (in-scope factories)
-  const poolsResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(*)::bigint as count
-    FROM "Pool"
-    WHERE LOWER(factory) IN (${FACTORY_ADDRESSES[0].toLowerCase()}, ${FACTORY_ADDRESSES[1].toLowerCase()})
-  `;
-  const pools = Number(poolsResult[0]?.count ?? 0);
-
-  // Positions from mv_position_lifetime_v1 (or fallback to PositionEvent)
-  let positions = 0;
-  const mvExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
-    SELECT EXISTS (
-      SELECT 1 FROM pg_matviews WHERE matviewname = 'mv_position_lifetime_v1'
-    ) as exists
-  `;
-
-  if (mvExists[0]?.exists) {
-    const posResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*)::bigint as count FROM "mv_position_lifetime_v1"
-    `;
-    positions = Number(posResult[0]?.count ?? 0);
-  }
-
-  if (positions === 0) {
-    const posResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(DISTINCT "tokenId")::bigint as count 
-      FROM "PositionEvent"
-      WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
-    `;
-    positions = Number(posResult[0]?.count ?? 0);
-  }
-
-  // Wallets from PositionTransfer
-  const walletsResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(DISTINCT "to")::bigint as count 
-    FROM "PositionTransfer"
-    WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
-      AND "to" != '0x0000000000000000000000000000000000000000'
-  `;
-  const wallets = Number(walletsResult[0]?.count ?? 0);
-
-  // Active wallets from mv_wallet_lp_7d (if exists)
-  let activeWallets = 0;
-  const mvWalletExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
-    SELECT EXISTS (
-      SELECT 1 FROM pg_matviews WHERE matviewname = 'mv_wallet_lp_7d'
-    ) as exists
-  `;
-
-  if (mvWalletExists[0]?.exists) {
-    const activeResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(DISTINCT wallet)::bigint as count FROM "mv_wallet_lp_7d"
-    `.catch(() => [{ count: 0n }]);
-    activeWallets = Number(activeResult[0]?.count ?? 0);
-  }
+  // Use UniverseOverview for positions, wallets, active wallets
+  const positions = universe.positionsCount;
+  const wallets = universe.walletsCount;
+  const activeWallets = universe.activeWallets7d;
 
   return { tvlUsd, pools, positions, wallets, activeWallets };
 }

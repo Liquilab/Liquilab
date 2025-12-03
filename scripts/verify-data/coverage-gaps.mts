@@ -13,7 +13,9 @@
  * Usage: npm run verify:data:coverage-gaps
  */
 
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { getUniverseOverview } from '../../src/lib/analytics/db';
 
 const prisma = new PrismaClient();
 
@@ -153,37 +155,15 @@ async function getStateStats(): Promise<StateStats> {
 }
 
 async function getPricedStats(): Promise<PricedStats> {
-  // TVL: mv_pool_latest_state doesn't have tvl_usd column (TVL computed on-demand via pricing)
-  // For now, report 0 TVL since pricing data isn't stored in MVs
-  const tvlUsd = 0;
+  // Get UniverseOverview (includes TVL, priced/unpriced pools, active wallets)
+  const universe = await getUniverseOverview();
 
-  // Pool count from mv_pool_latest_state (pools with events)
-  const mvPoolCountResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(*)::bigint as count FROM mv_pool_latest_state
-  `.catch(() => [{ count: 0n }]);
-  const totalPoolsInMV = Number(mvPoolCountResult[0]?.count ?? 0);
-
-  // Priced pools: Since TVL isn't in MV, we can't distinguish priced vs unpriced
-  // Report all pools in MV as "unpriced" until pricing pipeline populates TVL
-  const pricedPools = 0;
-  const unpricedPools = totalPoolsInMV;
-
-  // Active wallets 7d
-  let activeWallets7d = 0;
-  const mvWalletExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
-    SELECT EXISTS (
-      SELECT 1 FROM pg_matviews WHERE matviewname = 'mv_wallet_lp_7d'
-    ) as exists
-  `;
-
-  if (mvWalletExists[0]?.exists) {
-    const activeResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(DISTINCT wallet)::bigint as count FROM "mv_wallet_lp_7d"
-    `.catch(() => [{ count: 0n }]);
-    activeWallets7d = Number(activeResult[0]?.count ?? 0);
-  }
-
-  return { tvlUsd, pricedPools, unpricedPools, activeWallets7d };
+  return {
+    tvlUsd: universe.tvlPricedUsd,
+    pricedPools: universe.pricedPoolsCount,
+    unpricedPools: universe.unpricedPoolsCount,
+    activeWallets7d: universe.activeWallets7d,
+  };
 }
 
 function formatPct(value: number, reference: number): string {
