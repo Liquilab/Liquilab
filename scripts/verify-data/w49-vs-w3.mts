@@ -24,10 +24,10 @@ const W3_POOLS = 238;
 const W3_POSITIONS = 74_857;
 const W3_WALLETS = 8_594;
 
-// Factory addresses for W3 scope
+// Factory addresses for W3 scope (from PROJECT_STATE.md)
 const FACTORY_ADDRESSES = [
-  '0x8bb7b4474a5a1d10d27a046d5cc50b2c203a590c', // Enosys V3 Factory
-  '0xc05a5aa56df0dc97d6b9849a06627a079790014f', // SparkDEX V3 Factory
+  '0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de', // Enosys V3 Factory
+  '0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652', // SparkDEX V3 Factory
 ];
 
 // NFPM addresses for W3 scope
@@ -45,12 +45,10 @@ interface W49Stats {
 }
 
 async function getW49Stats(): Promise<W49Stats> {
-  // TVL from mv_pool_latest_state (priced pools)
-  const tvlResult = await prisma.$queryRaw<Array<{ tvl: number | null }>>`
-    SELECT COALESCE(SUM(tvl_usd), 0)::float as tvl
-    FROM mv_pool_latest_state
-  `.catch(() => [{ tvl: 0 }]);
-  const tvlUsd = Number(tvlResult[0]?.tvl ?? 0);
+  // TVL: mv_pool_latest_state doesn't have tvl_usd column (TVL computed on-demand via pricing)
+  // For now, report 0 TVL since pricing data isn't stored in MVs
+  // TODO: Compute TVL from positions + pricing service when pricing pipeline is ready
+  const tvlUsd = 0;
 
   // Pools count (in-scope factories)
   const poolsResult = await prisma.$queryRaw<Array<{ count: bigint }>>`

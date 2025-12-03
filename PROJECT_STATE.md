@@ -367,6 +367,10 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
     • Fee yield (daily fees / liquidity)  
     • Impermanent loss estimator (IL_est) vs hold baseline.  
   - Pool detail view uses: owner concentration, whale entries/exits, collect cadence, RangeBand strategy buckets (Aggressive/Balanced/Conservative), alerts readiness.
+- **Universe/TVL Analytics (SP2):**  
+  - **Pool count:** SSoT is `Pool` table (filtered by factory addresses: Enosys `0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de`, SparkDEX `0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652`). `mv_pool_latest_state` provides pool count with events but `Pool` table is authoritative for total pools.  
+  - **TVL (USD):** Computed on-demand via pricing service (FTSO-first, CoinGecko fallback). Not stored in MVs (`mv_pool_latest_state` only has `pool` and `blockNumber` columns). Verifiers (`verify:data:w49-vs-w3`, `verify:data:coverage-gaps`) report 0 TVL until pricing pipeline populates TVL data.  
+  - **Coverage verifiers:** Use `Pool` table for pool counts, `mv_position_lifetime_v1` for positions, `PositionTransfer` for wallets. TVL requires pricing data which is computed on-demand and not yet stored in MVs.
 
 <!-- DELTA 2025-11-16 START -->
 

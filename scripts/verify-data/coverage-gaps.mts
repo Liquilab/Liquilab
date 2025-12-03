@@ -21,10 +21,10 @@ const prisma = new PrismaClient();
 const W3_POSITIONS = 74_857;
 const W3_WALLETS = 8_594;
 
-// Factory addresses for W3 scope
+// Factory addresses for W3 scope (from PROJECT_STATE.md)
 const FACTORY_ADDRESSES = [
-  '0x8bb7b4474a5a1d10d27a046d5cc50b2c203a590c', // Enosys V3 Factory
-  '0xc05a5aa56df0dc97d6b9849a06627a079790014f', // SparkDEX V3 Factory
+  '0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de', // Enosys V3 Factory
+  '0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652', // SparkDEX V3 Factory
 ];
 
 // NFPM addresses for W3 scope
@@ -153,28 +153,20 @@ async function getStateStats(): Promise<StateStats> {
 }
 
 async function getPricedStats(): Promise<PricedStats> {
-  // TVL from mv_pool_latest_state
-  const tvlResult = await prisma.$queryRaw<Array<{ tvl: number | null }>>`
-    SELECT COALESCE(SUM(tvl_usd), 0)::float as tvl
-    FROM mv_pool_latest_state
-  `.catch(() => [{ tvl: 0 }]);
-  const tvlUsd = Number(tvlResult[0]?.tvl ?? 0);
+  // TVL: mv_pool_latest_state doesn't have tvl_usd column (TVL computed on-demand via pricing)
+  // For now, report 0 TVL since pricing data isn't stored in MVs
+  const tvlUsd = 0;
 
-  // Priced pools (tvl > 0)
-  const pricedResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(*)::bigint as count
-    FROM mv_pool_latest_state
-    WHERE tvl_usd > 0
+  // Pool count from mv_pool_latest_state (pools with events)
+  const mvPoolCountResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*)::bigint as count FROM mv_pool_latest_state
   `.catch(() => [{ count: 0n }]);
-  const pricedPools = Number(pricedResult[0]?.count ?? 0);
+  const totalPoolsInMV = Number(mvPoolCountResult[0]?.count ?? 0);
 
-  // Unpriced pools
-  const unpricedResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(*)::bigint as count
-    FROM mv_pool_latest_state
-    WHERE tvl_usd = 0 OR tvl_usd IS NULL
-  `.catch(() => [{ count: 0n }]);
-  const unpricedPools = Number(unpricedResult[0]?.count ?? 0);
+  // Priced pools: Since TVL isn't in MV, we can't distinguish priced vs unpriced
+  // Report all pools in MV as "unpriced" until pricing pipeline populates TVL
+  const pricedPools = 0;
+  const unpricedPools = totalPoolsInMV;
 
   // Active wallets 7d
   let activeWallets7d = 0;
