@@ -21,7 +21,7 @@ NOTE 2025-11-27T23:09 getReportPricingSnapshot  (Follow up sprint)
 
 DATABASE
 OK 2025-11-28T00:29 BACKUP GEMAAKT OP 2025-11-27T23:28 (STAGING)
-OK 2025-121-03T08:29 BACKUP GEMAAKT OP 2025-11-27T23:28 (STAGING)
+OK 2025-121-03T08:41 BACKUP GEMAAKT (STAGING)
 
 REPORTS
 HALT 2025-11-27T23:09 npm run report:weekly  (geparkeerd. DB in orde maken)
@@ -70,3 +70,10 @@ OK 2025-12-03T03:05 ✅ LIFETIME COVERAGE VERIFIED:
    - Enosys: 26,471 positions, 1,876 wallets
    - SparkDEX: 50,421 positions, 7,776 wallets
    Verifier: `npm run verify:data:lifetime-vs-w3` (wallets from PositionTransfer, positions from mv_position_lifetime_v1)
+OK 2025-12-03T08:45 ✅ VERIFIER SCRIPTS AANGEMAAKT:
+   - `npm run verify:data:w49-vs-w3` - W49 dataset vs W3 Cross-DEX reference
+   - `npm run verify:data:coverage-gaps` - Raw → State → Priced pipeline breakdown
+   - `npm run verify:data:defillama:flare` - LiquiLab v3 TVL vs DeFiLlama (SparkDEX + Enosys V3)
+   DeFiLlama current (2025-12-03): SparkDEX $62.63M + Enosys V3 $4.44M = $67.08M Flare v3 TVL
+NOTE Pool table is leeg (0 pools) - Factory backfill nodig voor Pool.address entries
+NOTE mv_pool_latest_state TVL = $0 - geen pricing data gekoppeld aan pools
