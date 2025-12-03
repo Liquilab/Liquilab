@@ -12,6 +12,7 @@ const prisma = new PrismaClient();
 
 const MVS_TO_DROP = [
   'mv_pool_latest_state',
+  'mv_pool_fees_24h',
   'mv_position_range_status',
   'mv_pool_position_stats',
   'mv_position_latest_event',
