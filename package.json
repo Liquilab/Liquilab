@@ -68,6 +68,8 @@
     "fix:create-mvs": "tsx scripts/fix/create-all-mvs.mts",
     "fix:create-mvs-direct": "tsx scripts/fix/create-mvs-direct.mts",
     "fix:drop-mvs": "tsx scripts/fix/drop-mvs-without-index.mts",
+    "db:mvs:create": "tsx scripts/db/create-materialized-views.mts",
+    "verify:data:lifetime-vs-w3": "tsx scripts/verify-data/lifetime-vs-w3.mts",
     "verify:enrichment": "node scripts/verify-enrichment/registry.mjs",
     "verify:icons": "node scripts/verify-enrichment/icons.mjs",
     "verify:icons:local": "node scripts/verify-icons/no-remote-icons.mjs",

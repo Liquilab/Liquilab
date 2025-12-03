@@ -1,7 +1,7 @@
 # PROJECT_STATE · LiquiLab Indexer & API (Concise)
 
 > Living document for the LiquiLab Flare V3 indexer stack.  
-> Last updated: 2025-11-17 (S0-OPS01 complete and deployed to staging). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
+> Last updated: 2025-12-02 (Railway Cron Job MV refresh setup complete). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
 
 ---
 
@@ -99,9 +99,11 @@
 - **`mv_position_overview_latest(position_id, wallet_address, pool_id, tvl_usd_current, unclaimed_fees_usd, apr_7d, range_min, range_max, current_price, strategy_code, spread_pct, band_color, position_ratio, unclaimed_fees_pct_of_tvl, claim_signal_state, ts)`** — Position-level analytics with RangeBand™ status. **(SP2-D02)**
 - **`mv_position_day_stats(position_id, date, price_open, price_close, range_lower_price, range_upper_price, tvl_usd_avg, fees_usd_earned, fees_usd_claimed, time_in_range_pct)`** — Daily position performance. **(SP2-D03)**
 - **`mv_position_events_recent(position_id, ts, event_type, token0_delta, token1_delta, fees_usd, incentives_usd, tx_hash)`** — Recent position events (7d window). **(SP2-D04)**
+- **`mv_position_lifetime_v1(token_id, pool_address, nfpm_address, dex, first_event_ts, last_event_ts, event_count, last_known_owner)`** — Lifetime v3 LP positions (Enosys + SparkDEX v3 on Flare), one row per tokenId. Used for W3 Cross-DEX coverage comparison (74,857 positions; 8,594 wallets). Verifier: `npm run verify:data:lifetime-vs-w3`. **(SP2-D11)**
 
 **Indices:** `(wallet_address)` and `(position_id,date)`; refresh ≤60s/MV.  
-**Verifiers:** `npm run verify:mv` checks row counts and column names.
+**Verifiers:** `npm run verify:mv` checks row counts and column names.  
+**Refresh Automation:** Railway Cron Job configured to refresh all MVs every 10 minutes via `/api/enrich/refresh-views` endpoint. Cron job service linked to Liquilab-staging web service with `CRON_SECRET` authentication. See `docs/RAILWAY_CRON_MV_REFRESH.md` for setup details.
 
 <!-- DELTA 2025-11-16 END -->
 
@@ -2785,3 +2787,7 @@ Prevents broken code from reaching production. Catches integration issues early 
 - SP1-T11: Home hero + demo table/grid implemented. Hero renders with water-wave background (fully visible), RangeBand demo, table/grid toggle working with `/api/demo/pools` endpoint. RangeBand demo cells show plausible status/fees using existing data contracts. Files: `pages/index.tsx`, `pages/api/demo/pools.ts`, `src/styles/globals.css`.
 - **Canonical Pricing & RangeBand SSoT (2025-11-17):** Documented canonical pricing model (Visitor/Premium/Pro/RangeBand Alerts) with `config/pricing.json` and `src/lib/billing/pricing.ts` as single source of truth. Codified RangeBand DS component (`src/components/pools/PoolRangeIndicator.tsx`) as canonical implementation with explicit "no FE RangeBand logic" rule — `bandColor` and `positionRatio` must come from backend/analytics layer only. Files: `PROJECT_STATE.md`.
 - SP1-T37: Added tokens pipeline (config/tokens.config.js + scripts/build-tokens.mjs) generating `src/styles/tokens.css` with brand colors, fonts (Quicksand/Inter), and tabular-nums numeric style; `npm run tokens:build` produces the CSS vars from Figma export at `figma/exports/tokens.json`.
+
+## Changelog — 2025-12-02
+
+- **Railway Cron Job MV Refresh Setup:** Configured Railway Cron Scheduler to automatically refresh all Materialized Views every 10 minutes via `/api/enrich/refresh-views` HTTP endpoint. Cron job service linked to Liquilab-staging web service with `CRON_SECRET` authentication. Refresh script (`scripts/enrich/refresh-views.mjs`) refreshes 11 MVs in safe dependency order: `mv_pool_latest_state`, `mv_pool_fees_24h`, `mv_position_range_status`, `mv_pool_position_stats`, `mv_position_latest_event`, `mv_pool_volume_7d`, `mv_pool_fees_7d`, `mv_positions_active_7d`, `mv_wallet_lp_7d`, `mv_pool_changes_7d`, `mv_position_lifetime_v1`. Documentation: `docs/RAILWAY_CRON_MV_REFRESH.md`. Environment variables: `CRON_SECRET` required in both Cron Job service and Liquilab-staging web service. Schedule: `*/10 * * * *` (every 10 minutes, UTC time).
