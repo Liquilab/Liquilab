@@ -21,6 +21,7 @@ NOTE 2025-11-27T23:09 getReportPricingSnapshot  (Follow up sprint)
 
 DATABASE
 OK 2025-11-28T00:29 BACKUP GEMAAKT OP 2025-11-27T23:28 (STAGING)
+OK 2025-121-03T08:29 BACKUP GEMAAKT OP 2025-11-27T23:28 (STAGING)
 
 REPORTS
 HALT 2025-11-27T23:09 npm run report:weekly  (geparkeerd. DB in orde maken)
@@ -62,3 +63,10 @@ OK 2025-12-03T01:45 ANKR backfill compleet: 8.208 blocks, 275 events, 115s, $0.0
 
 DATA ENRICHMENT & ANALYTICS
 NOTE 2025-12-03T02:00 SP2: mv_position_lifetime_v1 MV aangemaakt (db/views/mv_position_lifetime_v1.sql). Lifetime v3 LP positions (Enosys + SparkDEX v3 on Flare), one row per tokenId. Verifier: `npm run verify:data:lifetime-vs-w3` vergelijkt coverage vs W3 Cross-DEX reference (74,857 positions; 8,594 wallets).
+OK 2025-12-03T03:00 ✅ DATABASE URL FIX: V3 pools Indexer en Liquilab-staging gebruikten VERSCHILLENDE databases (yamabiko vs shuttle). Nu beiden op yamabiko.proxy.rlwy.net:37785. Alle 11 MVs (incl. mv_position_lifetime_v1) succesvol gecreëerd met unique indexes.
+OK 2025-12-03T03:05 ✅ LIFETIME COVERAGE VERIFIED:
+   - Positions: 76,892 (102.72% vs W3's 74,857) ✅
+   - Wallets: 8,831 (102.76% vs W3's 8,594) ✅
+   - Enosys: 26,471 positions, 1,876 wallets
+   - SparkDEX: 50,421 positions, 7,776 wallets
+   Verifier: `npm run verify:data:lifetime-vs-w3` (wallets from PositionTransfer, positions from mv_position_lifetime_v1)
