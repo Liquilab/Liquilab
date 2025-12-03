@@ -35,9 +35,14 @@ let coinGeckoRateLimited = false;
 let cgRateLimitLoggedOnce = false;
 
 // ANKR API configuration
-const ANKR_MULTICHAIN_ENDPOINT = process.env.ANKR_ADVANCED_API_URL || 
-  'https://rpc.ankr.com/multichain';
+// ANKR Advanced API requires API key in the URL (e.g., https://rpc.ankr.com/multichain/{API_KEY})
+// If not configured, ANKR pricing is disabled and CoinGecko is used as primary
+const ANKR_MULTICHAIN_ENDPOINT = process.env.ANKR_ADVANCED_API_URL || null;
 const FLARE_BLOCKCHAIN_ID = 'flare';
+
+// Track if ANKR is available (disabled after first 403/401)
+let ankrDisabled = false;
+let ankrDisabledLoggedOnce = false;
 
 // Map FTSO symbols to token addresses for ANKR lookups
 const FTSO_SYMBOL_TO_ADDRESS: Record<string, string | undefined> = {
@@ -71,11 +76,27 @@ export function canonicalSymbol(symbol: string): string {
  * Uses ANKR's ankr_getTokenPrice method which provides real-time
  * prices for Flare Network tokens.
  * 
+ * IMPORTANT: ANKR Advanced API requires an API key in the URL.
+ * If ANKR_ADVANCED_API_URL is not set or returns 403/401, ANKR is disabled
+ * and CoinGecko fallback is used.
+ * 
  * @param config - Token pricing config with ftsoSymbol
  * @returns USD price or null if unavailable
  */
 async function fetchFtsoPrice(config: TokenPricingConfig): Promise<number | null> {
   if (!config.ftsoSymbol) {
+    return null;
+  }
+  
+  // If ANKR is not configured or disabled, skip entirely
+  if (!ANKR_MULTICHAIN_ENDPOINT || ankrDisabled) {
+    if (!ankrDisabledLoggedOnce) {
+      const reason = !ANKR_MULTICHAIN_ENDPOINT 
+        ? 'ANKR_ADVANCED_API_URL not set' 
+        : 'ANKR disabled due to auth error';
+      console.log(`[PRICE] ${reason}; using CoinGecko as primary for FTSO tokens`);
+      ankrDisabledLoggedOnce = true;
+    }
     return null;
   }
   
@@ -100,6 +121,12 @@ async function fetchFtsoPrice(config: TokenPricingConfig): Promise<number | null
     });
     
     if (!response.ok) {
+      // 401/403 = auth error → disable ANKR entirely
+      if (response.status === 401 || response.status === 403) {
+        ankrDisabled = true;
+        console.warn(`[PRICE] ANKR auth error (${response.status}); disabling ANKR and using CoinGecko fallback`);
+        return null;
+      }
       if (!warnedTokens.has(`ftso-error:${config.canonicalSymbol}`)) {
         console.warn(`[PRICE] ANKR API error for ${config.canonicalSymbol}: ${response.status}`);
         warnedTokens.add(`ftso-error:${config.canonicalSymbol}`);
@@ -471,26 +498,29 @@ export async function getTokenPriceWithFallback(
 }
 
 /**
- * Clear the price cache and reset rate-limit guard
+ * Clear the price cache and reset rate-limit guards
  */
 export function clearPriceCache(): void {
   priceCache.flushAll();
   warnedTokens.clear();
   coinGeckoRateLimited = false;
   cgRateLimitLoggedOnce = false;
-  console.log('[PRICE] Cache cleared, rate-limit guard reset');
+  ankrDisabled = false;
+  ankrDisabledLoggedOnce = false;
+  console.log('[PRICE] Cache cleared, rate-limit guards reset');
 }
 
 /**
  * Get cache statistics
  */
-export function getCacheStats(): { keys: number; hits: number; misses: number; cgRateLimited: boolean } {
+export function getCacheStats(): { keys: number; hits: number; misses: number; cgRateLimited: boolean; ankrDisabled: boolean } {
   const stats = priceCache.getStats();
   return {
     keys: priceCache.keys().length,
     hits: stats.hits,
     misses: stats.misses,
     cgRateLimited: coinGeckoRateLimited,
+    ankrDisabled: ankrDisabled,
   };
 }
 
