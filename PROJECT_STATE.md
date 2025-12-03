@@ -368,9 +368,12 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
     • Impermanent loss estimator (IL_est) vs hold baseline.  
   - Pool detail view uses: owner concentration, whale entries/exits, collect cadence, RangeBand strategy buckets (Aggressive/Balanced/Conservative), alerts readiness.
 - **Universe/TVL Analytics (SP2):**  
-  - **Pool count:** SSoT is `Pool` table (filtered by factory addresses: Enosys `0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de`, SparkDEX `0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652`). `mv_pool_latest_state` provides pool count with events but `Pool` table is authoritative for total pools.  
-  - **TVL (USD):** Computed on-demand via pricing service (FTSO-first, CoinGecko fallback). Not stored in MVs (`mv_pool_latest_state` only has `pool` and `blockNumber` columns). Verifiers (`verify:data:w49-vs-w3`, `verify:data:coverage-gaps`) report 0 TVL until pricing pipeline populates TVL data.  
-  - **Coverage verifiers:** Use `Pool` table for pool counts, `mv_position_lifetime_v1` for positions, `PositionTransfer` for wallets. TVL requires pricing data which is computed on-demand and not yet stored in MVs.
+  - **UniverseOverview (`src/lib/analytics/db.ts`):** Central function `getUniverseOverview()` computes pool pricing coverage on-demand:
+    - **Pool count:** SSoT is `Pool` table (filtered by factory addresses: Enosys `0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de`, SparkDEX `0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652`). `mv_pool_latest_state` provides pool count with events but `Pool` table is authoritative for total pools.
+    - **TVL (USD):** Currently returns 0. Per-position TVL computation was removed to avoid fragile `PositionEventType` enum casts that caused 22P02 errors. TVL can be computed on-demand via API (e.g. `/api/pool/[tokenId]`) when position amounts are needed.
+    - **Priced vs unpriced pools:** Pools are classified as "priced" if both `token0` and `token1` have real USD prices (not `pool_ratio` fallback). Uses `getTokenPriceWithFallback()` from pricing service to check pricing availability.
+    - **Positions/Wallets:** Uses `mv_position_lifetime_v1` for positions (no enum dependency), `PositionTransfer` for wallets, `mv_wallet_lp_7d` for active wallets (7d). Does NOT filter by `PositionEventType` enum to avoid 22P02 errors.
+  - **Coverage verifiers:** `verify:data:w49-vs-w3` and `verify:data:coverage-gaps` use `getUniverseOverview()` for pool counts, positions, wallets, and pricing coverage. TVL is reported as 0 until a dedicated TVL MV or RPC-based approach is implemented.
 
 <!-- DELTA 2025-11-16 START -->
 
