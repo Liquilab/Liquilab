@@ -1001,15 +1001,12 @@ tsx scripts/ankr/fetch-factories-pools.mts --factory=all
 # Note: This only indexes factory events, not all pool events
 tsx scripts/indexer-follower.ts --factory=all --from=29837200
 
-# Step 2b: Hydrate Pool table from PoolEvent.PoolCreated events
-node scripts/dev/hydrate-pools-from-chain.mjs
+# Step 2b: Hydrate Pool table from PoolEvent.PoolCreated events + enrich with token metadata
+npm run enrich:pools:v3
 
-# Step 3: Enrich pools with token metadata (symbols, names, decimals)
-tsx scripts/dev/enrich-pools.mts
-
-# Step 4: Refresh MVs (optional but recommended)
+# Step 3: Refresh MVs (optional but recommended)
 npm run db:mvs:create
-npm run refresh:mvs
+npm run db:mvs:refresh:7d
 ```
 
 **Success criteria:**
@@ -1022,7 +1019,8 @@ npm run refresh:mvs
 1. Fetches PoolCreated events from factories (or reads from existing PoolEvent table)
 2. Creates Pool table entries with pool addresses, tokens, fees, factory
 3. Enriches with token metadata via RPC calls
-```
+
+**Canonical npm command:** `npm run enrich:pools:v3` (runs hydrate + enrich in sequence)
 
 **Next Steps (After Indexer Completes):**
 1. Verify all data: PositionEvent, PositionTransfer, PoolEvent counts
