@@ -1,7 +1,7 @@
 # PROJECT_STATE · LiquiLab Indexer & API (Concise)
 
 > Living document for the LiquiLab Flare V3 indexer stack.  
-> Last updated: 2025-12-03 (Pricing SSoT locked down for core v3 tokens). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
+> Last updated: 2025-12-03 (FTSO-first pricing + CG rate-limit guard). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
 
 ---
 
@@ -380,39 +380,48 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
 **Config file:** `config/token-pricing.config.ts`  
 **Service:** `src/services/tokenPriceService.ts`
 
-Token pricing follows explicit source configuration. No hidden heuristics.
+Token pricing follows explicit source configuration. **FTSO-first** for Flare-native tokens.
 
-| Symbol | Source | CoinGecko ID / Value | Notes |
-|--------|--------|---------------------|-------|
-| **Native/Wrapped Flare** ||||
-| FLR, WFLR | coingecko | `flare-networks` | Native Flare |
-| sFLR | coingecko | `sflr` | Staked FLR |
-| rFLR | coingecko | `flare-networks` | Reward FLR |
-| **Stablecoins (FIXED @ $1.00)** ||||
-| USDT, USDT0, USD0, eUSDT | fixed | $1.00 | Tether variants |
-| USDC, USDC.e | fixed | $1.00 | USD Coin |
-| DAI, USDX, cUSDX, USDS, USDD | fixed | $1.00 | Stablecoin variants |
-| **Cross-chain Assets** ||||
-| FXRP, stXRP, eFXRP | coingecko | `ripple` | Wrapped XRP |
-| ETH, WETH, eETH | coingecko | `ethereum` | Ethereum |
-| BTC, WBTC | coingecko | `bitcoin` | Bitcoin |
-| QNT, eQNT | coingecko | `quant-network` | Quant Network |
-| **DEX/Protocol Tokens (UNPRICED)** ||||
-| SPRK, SPX | unpriced | — | SparkDEX token; no verified CG ID |
-| APS | unpriced | — | APS token; CG ID unverified |
-| HLN | unpriced | — | Helion token |
-| JOULE | unpriced | — | Joule token |
-| XVN, BUGO, FOTON | unpriced | — | No verified CG ID |
+| Symbol | Source | FTSO Feed | CG Fallback | Notes |
+|--------|--------|-----------|-------------|-------|
+| **Flare-native (FTSO-first)** |||||
+| FLR, WFLR, rFLR | ftso | FLR | `flare-networks` | Native Flare; CG fallback enabled |
+| sFLR, cysFLR, cyFLR | ftso | FLR | `sflr` / `flare-networks` | Staked/Wrapped FLR |
+| FXRP, stXRP, eFXRP | ftso | XRP | `ripple` | Wrapped XRP; CG fallback enabled |
+| **Stablecoins (FIXED @ $1.00)** |||||
+| USDT, USDT0, USD0, eUSDT | fixed | — | — | $1.00 hardcoded |
+| USDC, USDC.e | fixed | — | — | $1.00 hardcoded |
+| DAI, USDX, cUSDX, USDS, USDD | fixed | — | — | $1.00 hardcoded |
+| **Cross-chain (CoinGecko primary)** |||||
+| ETH, WETH, eETH | coingecko | — | `ethereum` | No FTSO feed |
+| BTC, WBTC | coingecko | — | `bitcoin` | No FTSO feed |
+| QNT, eQNT | coingecko | — | `quant-network` | No FTSO feed |
+| **DEX/Protocol Tokens (UNPRICED)** |||||
+| SPRK, SPX | unpriced | — | — | No verified source |
+| APS, HLN, JOULE | unpriced | — | — | No verified source |
+| XVN, BUGO, FOTON | unpriced | — | — | No verified source |
+
+**Pricing hierarchy:**
+1. **FTSO** (primary for Flare-native tokens) — stubbed until FTSO integration is wired
+2. **CoinGecko** (fallback for FTSO tokens if `coingeckoFallback: true`, or primary for non-Flare assets)
+3. **FIXED** (stablecoins @ $1.00)
+4. **UNPRICED** (returns `null`; pool marked as unpriced)
+
+**CoinGecko rate-limit guard:**
+- After first 429 error in a process, all further CG calls are skipped for that run.
+- Prevents log spam and wasted requests.
+- Reset on process restart or via `clearPriceCache()`.
 
 **Behaviour:**
-- `fixed`: Returns hardcoded USD value (stablecoins).
+- `ftso`: Tries FTSO first; falls back to CG if configured and FTSO unavailable.
 - `coingecko`: Fetches from CoinGecko API; caches for 5 min.
+- `fixed`: Returns hardcoded USD value.
 - `unpriced`: Returns `null`; pool is marked as UNPRICED.
-- **Pool-ratio fallback is DISABLED.** No `"pool_ratio"` source in output.
+- **Pool-ratio fallback is DISABLED.** Never used.
 
 **Next steps:**
-- Implement FTSO-first pricing when FTSO integration is ready.
-- Verify CoinGecko IDs for SPRK, APS, HLN before marking as `coingecko`.
+- Wire FTSO contract calls or indexed FTSO data to `fetchFtsoPrice()`.
+- Verify CoinGecko IDs for SPRK, APS, HLN before promoting to `coingecko`.
 
 <!-- DELTA 2025-11-16 START -->
 

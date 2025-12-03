@@ -4,10 +4,10 @@
  * Defines the canonical pricing source for each core v3 token on Flare.
  * Used by tokenPriceService to determine how to price each token.
  * 
- * Sources:
+ * Sources (in priority order for FTSO tokens):
+ * - 'ftso': Fetch from Flare FTSO (primary for Flare-native tokens)
+ * - 'coingecko': Fetch from CoinGecko API (fallback or primary for non-Flare assets)
  * - 'fixed': Hardcoded USD value (for stablecoins)
- * - 'coingecko': Fetch from CoinGecko API
- * - 'ftso': Fetch from Flare FTSO (not yet implemented)
  * - 'unpriced': No reliable USD price source; treat as UNPRICED
  * 
  * @module config/token-pricing.config
@@ -20,8 +20,9 @@ export interface TokenPricingConfig {
   canonicalSymbol: string; // Normalized symbol for lookups
   address?: string; // On-chain address (lowercase)
   source: PricingSource;
-  coingeckoId?: string;
-  ftsoSymbol?: string;
+  coingeckoId?: string; // CoinGecko ID (for fallback or primary CG source)
+  ftsoSymbol?: string; // FTSO feed symbol (e.g., 'FLR', 'XRP')
+  coingeckoFallback?: boolean; // Allow CoinGecko as fallback when FTSO fails
   fixedUsdValue?: number;
   notes?: string;
 }
@@ -32,37 +33,75 @@ export interface TokenPricingConfig {
  * Keyed by canonical symbol (uppercase, no special chars)
  */
 export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
-  // ============ Native/Wrapped Flare ============
+  // ============ Native/Wrapped Flare (FTSO-first) ============
   'FLR': {
     symbol: 'FLR',
     canonicalSymbol: 'FLR',
-    source: 'coingecko',
+    source: 'ftso',
+    ftsoSymbol: 'FLR',
     coingeckoId: 'flare-networks',
-    notes: 'Native Flare token',
+    coingeckoFallback: true,
+    notes: 'Native Flare token; FTSO primary, CG fallback',
   },
   'WFLR': {
     symbol: 'WFLR',
     canonicalSymbol: 'WFLR',
     address: '0x1d80c49bbbcd1c0911346656b529df9e5c2f783d',
-    source: 'coingecko',
+    source: 'ftso',
+    ftsoSymbol: 'FLR',
     coingeckoId: 'flare-networks',
-    notes: 'Wrapped FLR; same price as FLR',
+    coingeckoFallback: true,
+    notes: 'Wrapped FLR; same FTSO feed as FLR',
   },
   'SFLR': {
     symbol: 'sFLR',
     canonicalSymbol: 'SFLR',
     address: '0x12e605bc104e93b45e1ad99f9e555f659051c2bb',
-    source: 'coingecko',
+    source: 'ftso',
+    ftsoSymbol: 'FLR', // sFLR tracks FLR price (staking derivative)
     coingeckoId: 'sflr',
-    notes: 'Staked FLR',
+    coingeckoFallback: true,
+    notes: 'Staked FLR; uses FLR FTSO feed, CG sflr as fallback',
   },
   'RFLR': {
     symbol: 'rFLR',
     canonicalSymbol: 'RFLR',
     address: '0xffa188493c15dfaf2c206c97d8633377847b6a52',
-    source: 'coingecko',
+    source: 'ftso',
+    ftsoSymbol: 'FLR',
     coingeckoId: 'flare-networks',
-    notes: 'Reward FLR; same price as FLR',
+    coingeckoFallback: true,
+    notes: 'Reward FLR; same FTSO feed as FLR',
+  },
+  
+  // ============ XRP variants (FTSO-first) ============
+  'FXRP': {
+    symbol: 'FXRP',
+    canonicalSymbol: 'FXRP',
+    address: '0xad552a648c74d49e10027ab8a618a3ad4901c5be',
+    source: 'ftso',
+    ftsoSymbol: 'XRP',
+    coingeckoId: 'ripple',
+    coingeckoFallback: true,
+    notes: 'Wrapped XRP on Flare; FTSO XRP feed, CG ripple fallback',
+  },
+  'STXRP': {
+    symbol: 'stXRP',
+    canonicalSymbol: 'STXRP',
+    source: 'ftso',
+    ftsoSymbol: 'XRP',
+    coingeckoId: 'ripple',
+    coingeckoFallback: true,
+    notes: 'Staked XRP variant; uses XRP FTSO feed',
+  },
+  'EFXRP': {
+    symbol: 'eFXRP',
+    canonicalSymbol: 'EFXRP',
+    source: 'ftso',
+    ftsoSymbol: 'XRP',
+    coingeckoId: 'ripple',
+    coingeckoFallback: true,
+    notes: 'Enosys FXRP; uses XRP FTSO feed',
   },
   
   // ============ Stablecoins (FIXED @ $1.00) ============
@@ -148,35 +187,13 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     notes: 'USD stablecoin variant',
   },
   
-  // ============ Cross-chain / Wrapped Assets ============
-  'FXRP': {
-    symbol: 'FXRP',
-    canonicalSymbol: 'FXRP',
-    address: '0xad552a648c74d49e10027ab8a618a3ad4901c5be',
-    source: 'coingecko',
-    coingeckoId: 'ripple',
-    notes: 'Wrapped XRP on Flare; tracks XRP price',
-  },
-  'STXRP': {
-    symbol: 'stXRP',
-    canonicalSymbol: 'STXRP',
-    source: 'coingecko',
-    coingeckoId: 'ripple',
-    notes: 'Staked XRP variant; tracks XRP price',
-  },
-  'EFXRP': {
-    symbol: 'eFXRP',
-    canonicalSymbol: 'EFXRP',
-    source: 'coingecko',
-    coingeckoId: 'ripple',
-    notes: 'Enosys FXRP; tracks XRP price',
-  },
+  // ============ Cross-chain Assets (CoinGecko primary) ============
   'ETH': {
     symbol: 'ETH',
     canonicalSymbol: 'ETH',
     source: 'coingecko',
     coingeckoId: 'ethereum',
-    notes: 'Ethereum',
+    notes: 'Ethereum; CoinGecko primary (no FTSO feed)',
   },
   'WETH': {
     symbol: 'WETH',
@@ -199,7 +216,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'BTC',
     source: 'coingecko',
     coingeckoId: 'bitcoin',
-    notes: 'Bitcoin',
+    notes: 'Bitcoin; CoinGecko primary',
   },
   'WBTC': {
     symbol: 'WBTC',
@@ -213,7 +230,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'QNT',
     source: 'coingecko',
     coingeckoId: 'quant-network',
-    notes: 'Quant Network',
+    notes: 'Quant Network; CoinGecko primary',
   },
   'EQNT': {
     symbol: 'eQNT',
@@ -224,12 +241,12 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     notes: 'Enosys QNT; same price as QNT',
   },
   
-  // ============ DEX / Protocol Tokens ============
+  // ============ DEX / Protocol Tokens (UNPRICED) ============
   'SPRK': {
     symbol: 'SPRK',
     canonicalSymbol: 'SPRK',
     source: 'unpriced',
-    notes: 'SparkDEX token; no reliable CoinGecko ID verified',
+    notes: 'SparkDEX token; no verified FTSO/CG source',
   },
   'SPX': {
     symbol: 'SPX',
@@ -242,26 +259,26 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'APS',
     address: '0xff56eb5b1a7faa972291117e5e9565da29bc808d',
     source: 'unpriced',
-    notes: 'APS token; CoinGecko ID "aps-token" may not be correct',
+    notes: 'APS token; no verified FTSO/CG source',
   },
   'HLN': {
     symbol: 'HLN',
     canonicalSymbol: 'HLN',
     address: '0xa20e10b9d3e5e0a4f5a2aabdd76a6a8fdc71a2cb',
     source: 'unpriced',
-    notes: 'Helion token; no verified CoinGecko ID',
+    notes: 'Helion token; no verified source',
   },
   'JOULE': {
     symbol: 'JOULE',
     canonicalSymbol: 'JOULE',
     source: 'unpriced',
-    notes: 'Joule token; no verified CoinGecko ID',
+    notes: 'Joule token; no verified source',
   },
   'XVN': {
     symbol: 'XVN',
     canonicalSymbol: 'XVN',
     source: 'unpriced',
-    notes: 'XVN token; no verified CoinGecko ID',
+    notes: 'XVN token; no verified source',
   },
   'BUGO': {
     symbol: 'BUGO',
@@ -273,23 +290,27 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     symbol: 'FOTON',
     canonicalSymbol: 'FOTON',
     source: 'unpriced',
-    notes: 'FOTON token; no verified CoinGecko ID',
+    notes: 'FOTON token; no verified source',
   },
   
-  // ============ Wrapped/Staked Variants ============
+  // ============ Wrapped/Staked Variants (FTSO-first) ============
   'CYSFLR': {
     symbol: 'cysFLR',
     canonicalSymbol: 'CYSFLR',
-    source: 'coingecko',
+    source: 'ftso',
+    ftsoSymbol: 'FLR',
     coingeckoId: 'sflr',
-    notes: 'Cyclo sFLR; same price as sFLR',
+    coingeckoFallback: true,
+    notes: 'Cyclo sFLR; uses FLR FTSO feed',
   },
   'CYFLR': {
     symbol: 'cyFLR',
     canonicalSymbol: 'CYFLR',
-    source: 'coingecko',
+    source: 'ftso',
+    ftsoSymbol: 'FLR',
     coingeckoId: 'flare-networks',
-    notes: 'Cyclo FLR; same price as FLR',
+    coingeckoFallback: true,
+    notes: 'Cyclo FLR; uses FLR FTSO feed',
   },
 };
 
@@ -322,3 +343,18 @@ export function getTokensBySource(source: PricingSource): TokenPricingConfig[] {
   return Object.values(TOKEN_PRICING_CONFIG).filter(t => t.source === source);
 }
 
+/**
+ * Check if a token has FTSO as primary source
+ */
+export function isFtsoToken(symbol: string): boolean {
+  const config = getTokenPricingConfig(symbol);
+  return config?.source === 'ftso';
+}
+
+/**
+ * Check if a token allows CoinGecko fallback
+ */
+export function allowsCoinGeckoFallback(symbol: string): boolean {
+  const config = getTokenPricingConfig(symbol);
+  return config?.coingeckoFallback === true && !!config.coingeckoId;
+}
