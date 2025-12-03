@@ -36,8 +36,27 @@ let cgRateLimitLoggedOnce = false;
 
 // ANKR API configuration
 // ANKR Advanced API requires API key in the URL (e.g., https://rpc.ankr.com/multichain/{API_KEY})
-// If not configured, ANKR pricing is disabled and CoinGecko is used as primary
-const ANKR_MULTICHAIN_ENDPOINT = process.env.ANKR_ADVANCED_API_URL || null;
+// We can derive the multichain endpoint from FLARE_RPC_URL if it's an ANKR URL
+function getAnkrMultichainEndpoint(): string | null {
+  // First check explicit ANKR_ADVANCED_API_URL
+  if (process.env.ANKR_ADVANCED_API_URL) {
+    return process.env.ANKR_ADVANCED_API_URL;
+  }
+  
+  // Try to derive from FLARE_RPC_URL if it's an ANKR URL with API key
+  // e.g., https://rpc.ankr.com/flare/{API_KEY} → https://rpc.ankr.com/multichain/{API_KEY}
+  const flareRpc = process.env.FLARE_RPC_URL;
+  if (flareRpc) {
+    const ankrMatch = flareRpc.match(/^https:\/\/rpc\.ankr\.com\/flare\/([a-f0-9]+)$/i);
+    if (ankrMatch && ankrMatch[1]) {
+      return `https://rpc.ankr.com/multichain/${ankrMatch[1]}`;
+    }
+  }
+  
+  return null;
+}
+
+const ANKR_MULTICHAIN_ENDPOINT = getAnkrMultichainEndpoint();
 const FLARE_BLOCKCHAIN_ID = 'flare';
 
 // Track if ANKR is available (disabled after first 403/401)
