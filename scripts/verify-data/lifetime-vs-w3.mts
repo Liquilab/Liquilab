@@ -28,104 +28,95 @@ interface LifetimeStats {
   }[];
 }
 
+// NFPM addresses for W3 scope (Enosys + SparkDEX v3 on Flare)
+const NFPM_ADDRESSES = [
+  '0xd9770b1c7a6ccd33c75b5bcb1c0078f46be46657', // Enosys
+  '0xee5ff5bc5f852764b5584d92a4d592a53dc527da', // SparkDEX
+];
+
 async function getLifetimeStats(): Promise<LifetimeStats> {
-  // Check if MV exists
+  // Positions from MV or PositionEvent
   const mvExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
     SELECT EXISTS (
       SELECT 1 FROM pg_matviews WHERE matviewname = 'mv_position_lifetime_v1'
     ) as exists
   `;
 
-  if (!mvExists[0]?.exists) {
-    console.log('⚠️  MV mv_position_lifetime_v1 does not exist. Querying PositionEvent directly...\n');
-    return getLifetimeStatsFromSource();
+  let totalPositions = 0;
+  let byDexPositions: Array<{ dex: string; positions: number }> = [];
+
+  if (mvExists[0]?.exists) {
+    const mvHasData = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*) as count FROM "mv_position_lifetime_v1"
+    `;
+
+    if (Number(mvHasData[0]?.count || 0) > 0) {
+      const posResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) as count FROM "mv_position_lifetime_v1"
+      `;
+      totalPositions = Number(posResult[0]?.count || 0);
+
+      const dexResult = await prisma.$queryRaw<Array<{ dex: string; positions: bigint }>>`
+        SELECT dex, COUNT(*) as positions
+        FROM "mv_position_lifetime_v1"
+        GROUP BY dex
+        ORDER BY dex
+      `;
+      byDexPositions = dexResult.map(row => ({
+        dex: row.dex,
+        positions: Number(row.positions),
+      }));
+    }
   }
 
-  // Check if MV has data
-  const mvHasData = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(*) as count FROM "mv_position_lifetime_v1"
-  `;
-
-  if (Number(mvHasData[0]?.count || 0) === 0) {
-    console.log('⚠️  MV mv_position_lifetime_v1 is empty. Querying PositionEvent directly...\n');
-    return getLifetimeStatsFromSource();
+  if (totalPositions === 0) {
+    console.log('⚠️  Using PositionEvent for position count...\n');
+    const posResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(DISTINCT "tokenId") as count 
+      FROM "PositionEvent"
+      WHERE LOWER("nfpmAddress") IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
+    `;
+    totalPositions = Number(posResult[0]?.count || 0);
   }
 
-  // Query from MV
-  const totalPositions = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(DISTINCT token_id) as count FROM "mv_position_lifetime_v1"
+  // Wallets from PositionTransfer (owner info is here, not in PositionEvent)
+  const walletResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(DISTINCT "to") as count 
+    FROM "PositionTransfer"
+    WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
+      AND "to" != '0x0000000000000000000000000000000000000000'
   `;
+  const totalWallets = Number(walletResult[0]?.count || 0);
 
-  const totalWallets = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(DISTINCT last_known_owner) as count 
-    FROM "mv_position_lifetime_v1"
-    WHERE last_known_owner IS NOT NULL
-  `;
-
-  const byDex = await prisma.$queryRaw<Array<{ dex: string; positions: bigint; wallets: bigint }>>`
-    SELECT 
-      dex,
-      COUNT(DISTINCT token_id) as positions,
-      COUNT(DISTINCT last_known_owner) as wallets
-    FROM "mv_position_lifetime_v1"
-    WHERE last_known_owner IS NOT NULL
-    GROUP BY dex
-    ORDER BY dex
-  `;
-
-  return {
-    totalPositions: Number(totalPositions[0]?.count || 0),
-    totalWallets: Number(totalWallets[0]?.count || 0),
-    byDex: byDex.map(row => ({
-      dex: row.dex,
-      positions: Number(row.positions),
-      wallets: Number(row.wallets),
-    })),
-  };
-}
-
-async function getLifetimeStatsFromSource(): Promise<LifetimeStats> {
-  // NFPM addresses for W3 scope
-  const nfpmAddresses = [
-    '0xd9770b1c7a6ccd33c75b5bcb1c0078f46be46657', // Enosys
-    '0xee5ff5bc5f852764b5584d92a4d592a53dc527da', // SparkDEX
-  ];
-
-  const totalPositions = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(DISTINCT "tokenId") as count 
-    FROM "PositionEvent"
-    WHERE LOWER("nfpmAddress") IN (${nfpmAddresses[0]}, ${nfpmAddresses[1]})
-  `;
-
-  const totalWallets = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(DISTINCT "owner") as count 
-    FROM "PositionEvent"
-    WHERE LOWER("nfpmAddress") IN (${nfpmAddresses[0]}, ${nfpmAddresses[1]})
-      AND "owner" IS NOT NULL
-  `;
-
-  const byDex = await prisma.$queryRaw<Array<{ nfpmAddress: string; positions: bigint; wallets: bigint }>>`
+  // By DEX breakdown (wallets from transfers)
+  const byDexWallets = await prisma.$queryRaw<Array<{ nfpmAddress: string; wallets: bigint }>>`
     SELECT 
       "nfpmAddress",
-      COUNT(DISTINCT "tokenId") as positions,
-      COUNT(DISTINCT "owner") as wallets
-    FROM "PositionEvent"
-    WHERE LOWER("nfpmAddress") IN (${nfpmAddresses[0]}, ${nfpmAddresses[1]})
-      AND "owner" IS NOT NULL
+      COUNT(DISTINCT "to") as wallets
+    FROM "PositionTransfer"
+    WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
+      AND "to" != '0x0000000000000000000000000000000000000000'
     GROUP BY "nfpmAddress"
-    ORDER BY "nfpmAddress"
   `;
 
+  // Merge position and wallet data by DEX
+  const byDex = byDexPositions.map(p => {
+    const nfpm = p.dex === 'enosys-v3' ? NFPM_ADDRESSES[0] : NFPM_ADDRESSES[1];
+    const walletRow = byDexWallets.find(w => w.nfpmAddress === nfpm);
+    return {
+      dex: p.dex,
+      positions: p.positions,
+      wallets: Number(walletRow?.wallets || 0),
+    };
+  });
+
   return {
-    totalPositions: Number(totalPositions[0]?.count || 0),
-    totalWallets: Number(totalWallets[0]?.count || 0),
-    byDex: byDex.map(row => ({
-      dex: row.nfpmAddress?.toLowerCase() === nfpmAddresses[0] ? 'enosys-v3' : 'sparkdex-v3',
-      positions: Number(row.positions),
-      wallets: Number(row.wallets),
-    })),
+    totalPositions,
+    totalWallets,
+    byDex,
   };
 }
+
 
 function formatPct(value: number, reference: number): string {
   if (reference === 0) return 'N/A';
