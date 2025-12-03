@@ -1,7 +1,7 @@
 # PROJECT_STATE · LiquiLab Indexer & API (Concise)
 
 > Living document for the LiquiLab Flare V3 indexer stack.  
-> Last updated: 2025-12-03 (FTSO-first pricing + CG rate-limit guard). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
+> Last updated: 2025-12-03 (FTSO/ANKR pricing implemented for Flare tokens). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
 
 ---
 
@@ -402,10 +402,17 @@ Token pricing follows explicit source configuration. **FTSO-first** for Flare-na
 | XVN, BUGO, FOTON | unpriced | — | — | No verified source |
 
 **Pricing hierarchy:**
-1. **FTSO** (primary for Flare-native tokens) — stubbed until FTSO integration is wired
+1. **FTSO/ANKR** (primary for Flare-native tokens) — uses ANKR Advanced API `ankr_getTokenPrice`
 2. **CoinGecko** (fallback for FTSO tokens if `coingeckoFallback: true`, or primary for non-Flare assets)
 3. **FIXED** (stablecoins @ $1.00)
 4. **UNPRICED** (returns `null`; pool marked as unpriced)
+
+**FTSO/ANKR implementation details:**
+- Uses ANKR Advanced API endpoint (`ANKR_ADVANCED_API_URL` or default `https://rpc.ankr.com/multichain`)
+- Calls `ankr_getTokenPrice` with `blockchain: 'flare'` and token contract address
+- For native FLR: no contractAddress needed (ANKR returns native coin price)
+- Token addresses mapped via `FTSO_SYMBOL_TO_ADDRESS` in tokenPriceService
+- If ANKR fails or returns no data → token falls back to CG (if `coingeckoFallback: true`) or UNPRICED
 
 **CoinGecko rate-limit guard:**
 - After first 429 error in a process, all further CG calls are skipped for that run.
@@ -413,14 +420,14 @@ Token pricing follows explicit source configuration. **FTSO-first** for Flare-na
 - Reset on process restart or via `clearPriceCache()`.
 
 **Behaviour:**
-- `ftso`: Tries FTSO first; falls back to CG if configured and FTSO unavailable.
+- `ftso`: Tries ANKR first; falls back to CG if configured and ANKR unavailable.
 - `coingecko`: Fetches from CoinGecko API; caches for 5 min.
 - `fixed`: Returns hardcoded USD value.
 - `unpriced`: Returns `null`; pool is marked as UNPRICED.
 - **Pool-ratio fallback is DISABLED.** Never used.
 
 **Next steps:**
-- Wire FTSO contract calls or indexed FTSO data to `fetchFtsoPrice()`.
+- Monitor ANKR pricing reliability on staging.
 - Verify CoinGecko IDs for SPRK, APS, HLN before promoting to `coingecko`.
 
 <!-- DELTA 2025-11-16 START -->

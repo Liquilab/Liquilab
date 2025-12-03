@@ -4,7 +4,8 @@
  * Fetches real-time USD prices for Flare Network tokens.
  * 
  * Pricing hierarchy (FTSO-first for Flare-native tokens):
- * 1. FTSO: Primary for Flare-native tokens (FLR, WFLR, SFLR, FXRP, STXRP)
+ * 1. FTSO/ANKR: Primary for Flare-native tokens (FLR, WFLR, SFLR, FXRP, STXRP)
+ *    Uses ANKR Advanced API for real-time prices (closest to FTSO data)
  * 2. CoinGecko: Fallback for FTSO tokens (if configured), primary for non-Flare assets
  * 3. FIXED: Stablecoins → hardcoded $1.00
  * 4. UNPRICED: No reliable source → returns null
@@ -33,6 +34,20 @@ const warnedTokens = new Set<string>();
 let coinGeckoRateLimited = false;
 let cgRateLimitLoggedOnce = false;
 
+// ANKR API configuration
+const ANKR_MULTICHAIN_ENDPOINT = process.env.ANKR_ADVANCED_API_URL || 
+  'https://rpc.ankr.com/multichain';
+const FLARE_BLOCKCHAIN_ID = 'flare';
+
+// Map FTSO symbols to token addresses for ANKR lookups
+const FTSO_SYMBOL_TO_ADDRESS: Record<string, string | undefined> = {
+  'FLR': undefined, // Native token - no address needed
+  'WFLR': '0x1D80c49BbBCd1C0911346656B529DF9E5c2F783d',
+  'SFLR': '0x12e605bc104e93B45e1aD99F9e555f659051c2BB',
+  'XRP': '0xAd552A648C74D49E10027AB8a618A3ad4901c5bE', // FXRP
+  'FXRP': '0xAd552A648C74D49E10027AB8a618A3ad4901c5bE',
+};
+
 /**
  * Normalize symbol: uppercase A-Z0-9 only
  * Handles special characters: ₮→T, ₀→0, .→(removed)
@@ -47,37 +62,92 @@ export function canonicalSymbol(symbol: string): string {
 }
 
 // ============================================================
-// FTSO Price Fetching (stubbed - to be implemented)
+// FTSO Price Fetching (via ANKR Advanced API)
 // ============================================================
 
 /**
- * Fetch price from Flare FTSO
+ * Fetch price from ANKR Advanced API (FTSO-equivalent for Flare tokens)
  * 
- * TODO: Implement actual FTSO integration when FTSO data is available.
- * For now, this is a stub that returns null and logs a warning.
+ * Uses ANKR's ankr_getTokenPrice method which provides real-time
+ * prices for Flare Network tokens.
  * 
  * @param config - Token pricing config with ftsoSymbol
- * @returns USD price or null if FTSO not available
+ * @returns USD price or null if unavailable
  */
 async function fetchFtsoPrice(config: TokenPricingConfig): Promise<number | null> {
   if (!config.ftsoSymbol) {
     return null;
   }
   
-  // TODO: Implement FTSO price fetch
-  // Options:
-  // 1. Query FTSO contract directly via RPC
-  // 2. Query indexed FTSO data from database (if ftso indexer is running)
-  // 3. Use Flare API endpoint (if available)
+  // Resolve token address from FTSO symbol
+  const tokenAddress = config.address || FTSO_SYMBOL_TO_ADDRESS[config.ftsoSymbol];
   
-  // For now, return null to indicate FTSO not yet available
-  // This will trigger CoinGecko fallback if configured
-  if (!warnedTokens.has(`ftso-stub:${config.canonicalSymbol}`)) {
-    console.log(`[PRICE] ${config.canonicalSymbol}: FTSO not yet implemented (feed: ${config.ftsoSymbol}); trying fallback`);
-    warnedTokens.add(`ftso-stub:${config.canonicalSymbol}`);
+  try {
+    const request = {
+      jsonrpc: '2.0' as const,
+      method: 'ankr_getTokenPrice',
+      params: {
+        blockchain: FLARE_BLOCKCHAIN_ID,
+        contractAddress: tokenAddress, // undefined for native FLR
+      },
+      id: 1,
+    };
+    
+    const response = await fetch(ANKR_MULTICHAIN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    
+    if (!response.ok) {
+      if (!warnedTokens.has(`ftso-error:${config.canonicalSymbol}`)) {
+        console.warn(`[PRICE] ANKR API error for ${config.canonicalSymbol}: ${response.status}`);
+        warnedTokens.add(`ftso-error:${config.canonicalSymbol}`);
+      }
+      return null;
+    }
+    
+    const data = await response.json() as {
+      jsonrpc: string;
+      id: number;
+      result?: { usdPrice: string };
+      error?: { message: string };
+    };
+    
+    if (data.error) {
+      if (!warnedTokens.has(`ftso-error:${config.canonicalSymbol}`)) {
+        console.warn(`[PRICE] ANKR error for ${config.canonicalSymbol}: ${data.error.message}`);
+        warnedTokens.add(`ftso-error:${config.canonicalSymbol}`);
+      }
+      return null;
+    }
+    
+    if (!data.result?.usdPrice) {
+      if (!warnedTokens.has(`ftso-nodata:${config.canonicalSymbol}`)) {
+        console.warn(`[PRICE] No ANKR price data for ${config.canonicalSymbol}`);
+        warnedTokens.add(`ftso-nodata:${config.canonicalSymbol}`);
+      }
+      return null;
+    }
+    
+    const price = parseFloat(data.result.usdPrice);
+    
+    if (!Number.isFinite(price) || price <= 0) {
+      if (!warnedTokens.has(`ftso-invalid:${config.canonicalSymbol}`)) {
+        console.warn(`[PRICE] Invalid ANKR price for ${config.canonicalSymbol}: ${data.result.usdPrice}`);
+        warnedTokens.add(`ftso-invalid:${config.canonicalSymbol}`);
+      }
+      return null;
+    }
+    
+    return price;
+  } catch (error) {
+    if (!warnedTokens.has(`ftso-exception:${config.canonicalSymbol}`)) {
+      console.error(`[PRICE] ANKR fetch error for ${config.canonicalSymbol}:`, error);
+      warnedTokens.add(`ftso-exception:${config.canonicalSymbol}`);
+    }
+    return null;
   }
-  
-  return null;
 }
 
 // ============================================================
@@ -146,7 +216,7 @@ async function fetchCoinGeckoPrice(coingeckoId: string): Promise<number | null> 
  * Get USD price for a token based on its SSoT configuration
  * 
  * Priority:
- * 1. FTSO (for source='ftso' tokens)
+ * 1. FTSO/ANKR (for source='ftso' tokens)
  * 2. CoinGecko (as fallback for FTSO tokens, or primary for source='coingecko')
  * 3. FIXED (for stablecoins)
  * 4. Returns null for UNPRICED or unknown tokens
@@ -186,7 +256,7 @@ export async function getTokenPriceUsd(
   // Handle each pricing source type
   switch (config.source) {
     case 'ftso':
-      // FTSO-first for Flare-native tokens
+      // FTSO/ANKR-first for Flare-native tokens
       price = await fetchFtsoPrice(config);
       if (price !== null) {
         source = 'ftso';
@@ -248,11 +318,15 @@ export async function getTokenPriceUsd(
  * Fetch USD prices for multiple tokens in a single batch call
  * More efficient than calling getTokenPriceUsd() multiple times
  * 
+ * Note: FTSO tokens are fetched individually (ANKR doesn't support batch),
+ * then CG tokens are batched together.
+ * 
  * @param symbols - Array of token symbols
  * @returns Record of canonical symbol → USD price (excludes UNPRICED tokens)
  */
 export async function getTokenPricesBatch(symbols: string[]): Promise<Record<string, number>> {
   const result: Record<string, number> = {};
+  const ftsoConfigs: TokenPricingConfig[] = [];
   const uncachedCoinGeckoIds: Map<string, string> = new Map(); // canonical → coingeckoId
   
   for (const symbol of symbols) {
@@ -279,10 +353,8 @@ export async function getTokenPricesBatch(symbols: string[]): Promise<Record<str
         break;
         
       case 'ftso':
-        // For FTSO tokens with CG fallback, add to batch
-        if (config.coingeckoFallback && config.coingeckoId) {
-          uncachedCoinGeckoIds.set(canonical, config.coingeckoId);
-        }
+        // Queue FTSO tokens for individual fetch
+        ftsoConfigs.push(config);
         break;
         
       case 'coingecko':
@@ -292,6 +364,18 @@ export async function getTokenPricesBatch(symbols: string[]): Promise<Record<str
         break;
         
       // 'unpriced' is skipped
+    }
+  }
+  
+  // Fetch FTSO prices individually (ANKR doesn't support batch)
+  for (const config of ftsoConfigs) {
+    const price = await fetchFtsoPrice(config);
+    if (price !== null) {
+      result[config.canonicalSymbol] = price;
+      priceCache.set(`price:${config.canonicalSymbol}`, price);
+    } else if (config.coingeckoFallback && config.coingeckoId) {
+      // Add to CG batch for fallback
+      uncachedCoinGeckoIds.set(config.canonicalSymbol, config.coingeckoId);
     }
   }
   
@@ -323,7 +407,7 @@ export async function getTokenPricesBatch(symbols: string[]): Promise<Record<str
           }
         }
         
-        console.log(`[PRICE] Batch fetched ${Object.keys(result).length} prices from CoinGecko`);
+        console.log(`[PRICE] Batch fetched ${uncachedCoinGeckoIds.size} prices from CoinGecko`);
       } else if (response.status === 429) {
         coinGeckoRateLimited = true;
         console.warn('[PRICE] CoinGecko rate limit (429) hit on batch request; skipping further CG calls');
