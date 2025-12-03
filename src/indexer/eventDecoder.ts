@@ -31,6 +31,7 @@ export interface DecodedPositionEvent {
   blockNumber: number;
   txHash: string;
   logIndex: number;
+  nfpmAddress: string; // NFPM contract address where the event was emitted
   // Event-specific fields
   recipient?: string;
   amount0?: string;
@@ -102,6 +103,7 @@ export class EventDecoder {
       blockNumber: Number(log.blockNumber),
       txHash: log.transactionHash!,
       logIndex: Number(log.logIndex),
+      nfpmAddress: log.address.toLowerCase(),
       liquidityDelta: decoded.args.liquidity.toString(),
       amount0: decoded.args.amount0.toString(),
       amount1: decoded.args.amount1.toString(),
@@ -121,6 +123,7 @@ export class EventDecoder {
       blockNumber: Number(log.blockNumber),
       txHash: log.transactionHash!,
       logIndex: Number(log.logIndex),
+      nfpmAddress: log.address.toLowerCase(),
       liquidityDelta: decoded.args.liquidity.toString(),
       amount0: decoded.args.amount0.toString(),
       amount1: decoded.args.amount1.toString(),
@@ -140,6 +143,7 @@ export class EventDecoder {
       blockNumber: Number(log.blockNumber),
       txHash: log.transactionHash!,
       logIndex: Number(log.logIndex),
+      nfpmAddress: log.address.toLowerCase(),
       recipient: decoded.args.recipient,
       amount0: decoded.args.amount0.toString(),
       amount1: decoded.args.amount1.toString(),

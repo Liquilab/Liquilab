@@ -214,6 +214,7 @@ export class DbWriter {
               logIndex: event.logIndex,
               timestamp,
               eventType: event.type,
+              nfpmAddress: event.nfpmAddress,
               recipient: event.recipient,
               amount0: event.amount0,
               amount1: event.amount1,

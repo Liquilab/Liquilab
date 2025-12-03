@@ -92,10 +92,12 @@ model PositionEvent {
   price1Per0     Float?
   usdValue       Float?
   metadata       Json?
+  nfpmAddress    String? // NFPM contract address (Enosys or SparkDEX)
 
   @@unique([txHash, logIndex])
   @@index([tokenId, blockNumber])
   @@index([pool, blockNumber])
+  @@index([nfpmAddress])
 }
 
 model PositionTransfer {
