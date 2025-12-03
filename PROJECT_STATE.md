@@ -1,7 +1,7 @@
 # PROJECT_STATE · LiquiLab Indexer & API (Concise)
 
 > Living document for the LiquiLab Flare V3 indexer stack.  
-> Last updated: 2025-12-02 (Railway Cron Job MV refresh setup complete). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
+> Last updated: 2025-12-03 (Pricing SSoT locked down for core v3 tokens). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
 
 ---
 
@@ -370,10 +370,49 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
 - **Universe/TVL Analytics (SP2):**  
   - **UniverseOverview (`src/lib/analytics/db.ts`):** Central function `getUniverseOverview()` computes pool pricing coverage on-demand:
     - **Pool count:** SSoT is `Pool` table (filtered by factory addresses: Enosys `0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de`, SparkDEX `0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652`). `mv_pool_latest_state` provides pool count with events but `Pool` table is authoritative for total pools.
-    - **TVL (USD):** Currently returns 0. Per-position TVL computation was removed to avoid fragile `PositionEventType` enum casts that caused 22P02 errors. TVL can be computed on-demand via API (e.g. `/api/pool/[tokenId]`) when position amounts are needed.
-    - **Priced vs unpriced pools:** Pools are classified as "priced" if both `token0` and `token1` have real USD prices (not `pool_ratio` fallback). Uses `getTokenPriceWithFallback()` from pricing service to check pricing availability.
+    - **TVL (USD):** Currently returns 0. Per-position TVL computation was removed to avoid fragile `PositionEventType` enum casts that caused 22P02 errors. TVL can be computed on-demand via API (e.g. `/api/pool/[tokenId]`) when position amounts are needed. Pricing SSoT is now stable (see below).
+    - **Priced vs unpriced pools:** Pools are classified as "priced" if both `token0` and `token1` have real USD prices (not `pool_ratio` fallback). Uses `getTokenPriceWithFallback()` from pricing service. Pool-ratio heuristics are **REMOVED**; tokens without a configured price source are marked as UNPRICED.
     - **Positions/Wallets:** Uses `mv_position_lifetime_v1` for positions (no enum dependency), `PositionTransfer` for wallets, `mv_wallet_lp_7d` for active wallets (7d). Does NOT filter by `PositionEventType` enum to avoid 22P02 errors.
   - **Coverage verifiers:** `verify:data:w49-vs-w3` and `verify:data:coverage-gaps` use `getUniverseOverview()` for pool counts, positions, wallets, and pricing coverage. TVL is reported as 0 until a dedicated TVL MV or RPC-based approach is implemented.
+
+### 7.2 Pricing SSoT (v3 Flare Tokens)
+
+**Config file:** `config/token-pricing.config.ts`  
+**Service:** `src/services/tokenPriceService.ts`
+
+Token pricing follows explicit source configuration. No hidden heuristics.
+
+| Symbol | Source | CoinGecko ID / Value | Notes |
+|--------|--------|---------------------|-------|
+| **Native/Wrapped Flare** ||||
+| FLR, WFLR | coingecko | `flare-networks` | Native Flare |
+| sFLR | coingecko | `sflr` | Staked FLR |
+| rFLR | coingecko | `flare-networks` | Reward FLR |
+| **Stablecoins (FIXED @ $1.00)** ||||
+| USDT, USDT0, USD0, eUSDT | fixed | $1.00 | Tether variants |
+| USDC, USDC.e | fixed | $1.00 | USD Coin |
+| DAI, USDX, cUSDX, USDS, USDD | fixed | $1.00 | Stablecoin variants |
+| **Cross-chain Assets** ||||
+| FXRP, stXRP, eFXRP | coingecko | `ripple` | Wrapped XRP |
+| ETH, WETH, eETH | coingecko | `ethereum` | Ethereum |
+| BTC, WBTC | coingecko | `bitcoin` | Bitcoin |
+| QNT, eQNT | coingecko | `quant-network` | Quant Network |
+| **DEX/Protocol Tokens (UNPRICED)** ||||
+| SPRK, SPX | unpriced | — | SparkDEX token; no verified CG ID |
+| APS | unpriced | — | APS token; CG ID unverified |
+| HLN | unpriced | — | Helion token |
+| JOULE | unpriced | — | Joule token |
+| XVN, BUGO, FOTON | unpriced | — | No verified CG ID |
+
+**Behaviour:**
+- `fixed`: Returns hardcoded USD value (stablecoins).
+- `coingecko`: Fetches from CoinGecko API; caches for 5 min.
+- `unpriced`: Returns `null`; pool is marked as UNPRICED.
+- **Pool-ratio fallback is DISABLED.** No `"pool_ratio"` source in output.
+
+**Next steps:**
+- Implement FTSO-first pricing when FTSO integration is ready.
+- Verify CoinGecko IDs for SPRK, APS, HLN before marking as `coingecko`.
 
 <!-- DELTA 2025-11-16 START -->
 
