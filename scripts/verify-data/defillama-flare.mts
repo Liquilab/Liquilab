@@ -58,15 +58,23 @@ async function fetchDefiLlamaTvl(slug: string): Promise<TvlData> {
     
     // Get Flare-specific TVL from currentChainTvls
     let flareTvl: number | null = null;
-    if (data.currentChainTvls) {
+    if (data.currentChainTvls && typeof data.currentChainTvls === 'object') {
       // Try different chain key formats
-      flareTvl = data.currentChainTvls['Flare'] 
-        ?? data.currentChainTvls['flare'] 
-        ?? null;
+      const flareVal = data.currentChainTvls['Flare'] ?? data.currentChainTvls['flare'];
+      flareTvl = typeof flareVal === 'number' ? flareVal : null;
     }
 
-    // Get total TVL
-    const totalTvl = data.tvl ?? null;
+    // Get total TVL (it might be an array or number)
+    let totalTvl: number | null = null;
+    if (typeof data.tvl === 'number') {
+      totalTvl = data.tvl;
+    } else if (Array.isArray(data.tvl) && data.tvl.length > 0) {
+      // If tvl is an array, get the last entry
+      const lastEntry = data.tvl[data.tvl.length - 1];
+      if (typeof lastEntry === 'object' && lastEntry !== null) {
+        totalTvl = typeof lastEntry.totalLiquidityUSD === 'number' ? lastEntry.totalLiquidityUSD : null;
+      }
+    }
 
     return { protocol: slug, flareTvl, totalTvl };
   } catch (error) {
@@ -89,8 +97,10 @@ async function getLiquiLabTvl(): Promise<number> {
   return Number(result[0]?.tvl ?? 0);
 }
 
-function formatUsd(value: number | null): string {
-  if (value === null) return 'N/A';
+function formatUsd(value: number | null | undefined): string {
+  if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) {
+    return 'N/A';
+  }
   if (value >= 1_000_000) {
     return `$${(value / 1_000_000).toFixed(2)}M`;
   }
