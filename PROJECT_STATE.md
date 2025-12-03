@@ -978,6 +978,50 @@ Next (accuracy): when NFPM address is stored per event/transfer, replace the fir
 ✅ PoolEvent: 404 (PoolCreated events only)
 ⏳ Pool contract events (Swap/Mint/Burn/Collect): Pending
 ⏳ Pool metadata enrichment: Pending (after indexer completes)
+
+### POOL BACKFILL — STAGING
+
+**When to run:** After DATABASE_URL switch or when `Pool` table is empty (0 pools). This fills the `Pool` table for v3 pools on Enosys + SparkDEX without re-indexing all PoolEvents.
+
+**Minimal pool backfill (STAGING):**
+
+```bash
+PROJECT_DIR="$HOME/Projects/Liquilab_staging"
+cd "$PROJECT_DIR" || exit 1
+
+# Set STAGING database URL (yamabiko.proxy.rlwy.net:37785)
+export DATABASE_URL='postgresql://postgres:yKWcFvDWUGxJsXdThwaReVVzixOPnuAx@yamabiko.proxy.rlwy.net:37785/railway'
+export FLARE_RPC_URL="${FLARE_RPC_URL:-https://flare-api.flare.network/ext/bc/C/rpc}"
+
+# Option 1: Use ANKR factory scanner (fetches PoolCreated events + inserts Pool entries directly)
+tsx scripts/ankr/fetch-factories-pools.mts --factory=all
+
+# Option 2: Two-step approach (if Option 1 fails or you prefer using existing PoolEvent data)
+# Step 2a: Index factories to get PoolCreated events into PoolEvent table (if missing)
+# Note: This only indexes factory events, not all pool events
+tsx scripts/indexer-follower.ts --factory=all --from=29837200
+
+# Step 2b: Hydrate Pool table from PoolEvent.PoolCreated events
+node scripts/dev/hydrate-pools-from-chain.mjs
+
+# Step 3: Enrich pools with token metadata (symbols, names, decimals)
+tsx scripts/dev/enrich-pools.mts
+
+# Step 4: Refresh MVs (optional but recommended)
+npm run db:mvs:create
+npm run refresh:mvs
+```
+
+**Success criteria:**
+- `Pool` table has entries for all v3 pools (Enosys + SparkDEX factories)
+- Pool entries have `token0`, `token1`, `fee`, `factory`, `blockNumber`, `txHash` populated
+- After enrichment: `token0Symbol`, `token1Symbol`, `token0Name`, `token1Name`, `token0Decimals`, `token1Decimals` populated
+- `mv_pool_latest_state` can be refreshed and shows pools with TVL > 0 (after pricing data is added)
+
+**Note:** This backfill does NOT re-index all PoolEvents (Swap/Mint/Burn/Collect). It only:
+1. Fetches PoolCreated events from factories (or reads from existing PoolEvent table)
+2. Creates Pool table entries with pool addresses, tokens, fees, factory
+3. Enriches with token metadata via RPC calls
 ```
 
 **Next Steps (After Indexer Completes):**
