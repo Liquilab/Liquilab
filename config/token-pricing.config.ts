@@ -300,9 +300,9 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'HLN',
     address: '0xa20e10b9d3e5e0a4f5a2aabdd76a6a8fdc71a2cb',
     source: 'coingecko',
-    coingeckoId: 'helion', // Helion governance token
+    coingeckoId: 'enosys', // HLN is the Enosys governance token
     pricingUniverse: true,
-    notes: 'Helion governance/DEX token; priced via CoinGecko',
+    notes: 'HLN (Enosys governance token); priced via CoinGecko',
   },
   'JOULE': {
     symbol: 'JOULE',
