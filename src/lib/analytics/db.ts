@@ -82,17 +82,29 @@ export interface UniverseOverview {
 }
 
 /**
+ * Normalize symbol for config lookup
+ */
+function canonicalSymbol(symbol: string): string {
+  return symbol
+    .toUpperCase()
+    .replace(/₮/g, 'T')
+    .replace(/₀/g, '0')
+    .replace(/\./g, '')
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+/**
  * Compute Universe TVL and pool pricing coverage
  * 
  * Uses Pool table + pricing service to:
- * - Classify pools as "priced" (both token0/token1 have USD prices) vs "unpriced"
+ * - Classify pools as "priced" (both token0/token1 in pricing universe with valid prices) vs "unpriced"
  * - Count positions from mv_position_lifetime_v1 (no enum dependency)
  * - Count wallets from PositionTransfer
  * - Active wallets from mv_wallet_lp_7d
  * 
- * Note: TVL computation is currently disabled (returns 0) because computing per-position
- * TVL requires position amounts which are not reliably available in MVs.
- * TVL can be computed on-demand per pool/position via the API when needed.
+ * Note: TVL computation requires per-pool token amounts which are not currently in MVs.
+ * TVL will show 0 until a dedicated amounts MV is created or RPC-based approach is implemented.
+ * For now, we classify pools as priced/unpriced based on pricing universe membership.
  */
 export async function getUniverseOverview(): Promise<UniverseOverview> {
   if (!hasDatabase()) {
@@ -111,6 +123,10 @@ export async function getUniverseOverview(): Promise<UniverseOverview> {
   const prisma = new PrismaClient();
 
   try {
+    // Import pricing config and service
+    const { getTokenPricingConfig, isInPricingUniverse } = await import('../../../config/token-pricing.config');
+    const { getTokenPriceUsd } = await import('@/services/tokenPriceService');
+
     // Get pools from Pool table (Enosys + SparkDEX v3)
     const pools = await prisma.pool.findMany({
       where: {
@@ -131,41 +147,53 @@ export async function getUniverseOverview(): Promise<UniverseOverview> {
 
     const totalPoolsCount = pools.length;
 
-    // Get pricing service
-    const { getTokenPriceWithFallback } = await import('@/services/tokenPriceService');
-
-    // Check pricing availability for each pool
+    // Classify pools based on pricing universe membership and price availability
     let pricedPoolsCount = 0;
     let unpricedPoolsCount = 0;
+    let tvlPricedUsd = 0;
 
     for (const pool of pools) {
-      if (!pool.token0Symbol || !pool.token1Symbol) {
+      // Check if both tokens are in pricing universe
+      const symbol0 = pool.token0Symbol || '';
+      const symbol1 = pool.token1Symbol || '';
+      
+      // A pool is only "priced" if:
+      // 1. Both tokens have symbols
+      // 2. Both tokens are in the pricing universe (pricingUniverse: true)
+      // 3. Both tokens have valid USD prices (not null/unknown)
+      
+      if (!symbol0 || !symbol1) {
         unpricedPoolsCount++;
         continue;
       }
 
-      // Try to get prices for both tokens (with fallback to pool ratio)
-      const price0Result = await getTokenPriceWithFallback(pool.token0Symbol, 1.0, pool.token0);
-      const price1Result = await getTokenPriceWithFallback(pool.token1Symbol, 1.0, pool.token1);
+      const inUniverse0 = isInPricingUniverse(symbol0);
+      const inUniverse1 = isInPricingUniverse(symbol1);
 
-      // Pool is "priced" if both tokens have real USD prices (not pool_ratio fallback)
-      const isPriced = 
-        price0Result.source !== 'pool_ratio' && 
-        price0Result.source !== 'unknown' &&
-        price1Result.source !== 'pool_ratio' && 
-        price1Result.source !== 'unknown';
-
-      if (isPriced) {
-        pricedPoolsCount++;
-      } else {
+      if (!inUniverse0 || !inUniverse1) {
+        // At least one token not in pricing universe
         unpricedPoolsCount++;
+        continue;
       }
-    }
 
-    // TVL computation is disabled for now (requires per-position amounts which 
-    // need enum-based queries that can fail). TVL can be computed on-demand via API.
-    // TODO: Implement TVL computation using a dedicated MV or RPC-based approach.
-    const tvlPricedUsd = 0;
+      // Both tokens are in pricing universe, try to get prices
+      const price0 = await getTokenPriceUsd(symbol0, pool.token0);
+      const price1 = await getTokenPriceUsd(symbol1, pool.token1);
+
+      if (price0 === null || price1 === null) {
+        // At least one token has no valid price
+        unpricedPoolsCount++;
+        continue;
+      }
+
+      // Pool is priced
+      pricedPoolsCount++;
+
+      // TVL computation would go here if we had pool amounts
+      // For now, TVL remains 0 until we have per-pool liquidity amounts
+      // TODO: Implement TVL computation using on-chain pool.liquidity or dedicated MV
+      // tvlPricedUsd += amount0 * price0 + amount1 * price1;
+    }
 
     // Get positions count from mv_position_lifetime_v1 (no enum dependency)
     let positionsCount = 0;

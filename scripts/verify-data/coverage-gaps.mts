@@ -27,17 +27,18 @@ const prisma = new PrismaClient();
 // W3 Cross-DEX reference constants
 const W3_POSITIONS = 74_857;
 const W3_WALLETS = 8_594;
-
-// Factory addresses for W3 scope (from PROJECT_STATE.md)
-const FACTORY_ADDRESSES = [
-  '0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de', // Enosys V3 Factory
-  '0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652', // SparkDEX V3 Factory
-];
+const W3_TVL_USD = 58_900_000;
 
 // NFPM addresses for W3 scope
 const NFPM_ADDRESSES = [
   '0xd9770b1c7a6ccd33c75b5bcb1c0078f46be46657', // Enosys NFPM
   '0xee5ff5bc5f852764b5584d92a4d592a53dc527da', // SparkDEX NFPM
+];
+
+// Factory addresses for W3 scope (from PROJECT_STATE.md)
+const FACTORY_ADDRESSES = [
+  '0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de', // Enosys V3 Factory
+  '0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652', // SparkDEX V3 Factory
 ];
 
 interface RawStats {
@@ -53,13 +54,6 @@ interface StateStats {
   wallets: number;
   pools: number;
   byDex: Array<{ dex: string; positions: number }>;
-}
-
-interface PricedStats {
-  tvlUsd: number;
-  pricedPools: number;
-  unpricedPools: number;
-  activeWallets7d: number;
 }
 
 async function getRawStats(): Promise<RawStats> {
@@ -159,18 +153,6 @@ async function getStateStats(): Promise<StateStats> {
   return { positions, wallets, pools, byDex };
 }
 
-async function getPricedStats(): Promise<PricedStats> {
-  // Get UniverseOverview (includes TVL, priced/unpriced pools, active wallets)
-  const universe = await getUniverseOverview();
-
-  return {
-    tvlUsd: universe.tvlPricedUsd,
-    pricedPools: universe.pricedPoolsCount,
-    unpricedPools: universe.unpricedPoolsCount,
-    activeWallets7d: universe.activeWallets7d,
-  };
-}
-
 function formatPct(value: number, reference: number): string {
   if (reference === 0) return 'N/A';
   const pct = (value / reference) * 100;
@@ -228,19 +210,26 @@ async function main() {
   console.log(`│   Wallets:   ${formatPct(state.wallets, W3_WALLETS).padStart(8)}  (${state.wallets.toLocaleString()} / ${W3_WALLETS.toLocaleString()})              │`);
   console.log('└─────────────────────────────────────────────────────────┘\n');
 
-  // Priced stats
+  // Priced Universe stats (from UniverseOverview)
   console.log('┌─────────────────────────────────────────────────────────┐');
-  console.log('│ 3. PRICED UNIVERSE (mv_pool_latest_state)               │');
+  console.log('│ 3. PRICED UNIVERSE (pricingUniverse pools only)         │');
   console.log('├─────────────────────────────────────────────────────────┤');
-  const priced = await getPricedStats();
-  console.log(`│ TVL (priced):         ${formatUsd(priced.tvlUsd).padStart(15)}                   │`);
-  console.log(`│ Priced pools:         ${String(priced.pricedPools.toLocaleString()).padStart(15)} pools             │`);
-  console.log(`│ Unpriced pools:       ${String(priced.unpricedPools.toLocaleString()).padStart(15)} pools             │`);
-  console.log(`│ Active wallets (7d):  ${String(priced.activeWallets7d.toLocaleString()).padStart(15)} wallets           │`);
+  const universe = await getUniverseOverview();
+  console.log(`│ TVL (priced):         ${formatUsd(universe.tvlPricedUsd).padStart(15)}                   │`);
+  console.log(`│ Priced pools:         ${String(universe.pricedPoolsCount.toLocaleString()).padStart(15)} pools             │`);
+  console.log(`│ Unpriced pools:       ${String(universe.unpricedPoolsCount.toLocaleString()).padStart(15)} pools             │`);
+  console.log(`│ Total pools:          ${String(universe.totalPoolsCount.toLocaleString()).padStart(15)} pools             │`);
+  console.log(`│ Active wallets (7d):  ${String(universe.activeWallets7d.toLocaleString()).padStart(15)} wallets           │`);
   console.log(`│                                                         │`);
-  console.log(`│ Wallet activity:                                        │`);
-  console.log(`│   Active (7d) vs State: ${formatPct(priced.activeWallets7d, state.wallets).padStart(8)}                      │`);
-  console.log(`│   Active (7d) vs W3:    ${formatPct(priced.activeWallets7d, W3_WALLETS).padStart(8)}                      │`);
+  console.log(`│ Pool pricing breakdown:                                 │`);
+  console.log(`│   Priced vs Total:     ${formatPct(universe.pricedPoolsCount, universe.totalPoolsCount).padStart(8)}                      │`);
+  console.log(`│   Priced vs W3 (238):  ${formatPct(universe.pricedPoolsCount, 238).padStart(8)}                      │`);
+  console.log(`│                                                         │`);
+  console.log(`│ TVL coverage vs W3 ($58.9M):                            │`);
+  console.log(`│   ${formatPct(universe.tvlPricedUsd, W3_TVL_USD).padStart(8)}                                              │`);
+  if (universe.tvlPricedUsd === 0) {
+    console.log(`│   (TVL = 0: per-pool amounts not in MVs yet)            │`);
+  }
   console.log('└─────────────────────────────────────────────────────────┘\n');
 
   // Gap analysis
@@ -257,9 +246,18 @@ async function main() {
     console.log('✅ Raw → State: No position gap');
   }
 
-  const poolGap = state.pools - priced.pricedPools;
+  const poolGap = state.pools - universe.pricedPoolsCount;
   if (poolGap > 0) {
     console.log(`⚠️  ${poolGap.toLocaleString()} pools unpriced (${formatPct(poolGap, state.pools)} of total)`);
+    console.log(`   These pools have tokens not in the pricing universe or without valid prices.`);
+  } else {
+    console.log('✅ All pools in pricing universe');
+  }
+
+  if (universe.tvlPricedUsd === 0 && universe.pricedPoolsCount > 0) {
+    console.log(`\n📊 TVL Note: ${universe.pricedPoolsCount} pools are priced, but TVL = 0.`);
+    console.log(`   This is because per-pool token amounts are not yet exposed in MVs.`);
+    console.log(`   Next step: Create mv_pool_liquidity or fetch amounts via RPC.`);
   }
 
   console.log();
@@ -273,4 +271,3 @@ main()
   .finally(() => {
     prisma.$disconnect();
   });
-

@@ -10,6 +10,10 @@
  * - 'fixed': Hardcoded USD value (for stablecoins)
  * - 'unpriced': No reliable USD price source; treat as UNPRICED
  * 
+ * pricingUniverse flag:
+ * - true: Token is eligible for TVL calculations
+ * - false/undefined: Token is excluded from TVL; pools containing it are deemed UNPRICED
+ * 
  * @module config/token-pricing.config
  */
 
@@ -24,6 +28,7 @@ export interface TokenPricingConfig {
   ftsoSymbol?: string; // FTSO feed symbol (e.g., 'FLR', 'XRP')
   coingeckoFallback?: boolean; // Allow CoinGecko as fallback when FTSO fails
   fixedUsdValue?: number;
+  pricingUniverse?: boolean; // If true, token contributes to TVL calculations
   notes?: string;
 }
 
@@ -41,6 +46,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     ftsoSymbol: 'FLR',
     coingeckoId: 'flare-networks',
     coingeckoFallback: true,
+    pricingUniverse: true,
     notes: 'Native Flare token; FTSO primary, CG fallback',
   },
   'WFLR': {
@@ -51,6 +57,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     ftsoSymbol: 'FLR',
     coingeckoId: 'flare-networks',
     coingeckoFallback: true,
+    pricingUniverse: true,
     notes: 'Wrapped FLR; same FTSO feed as FLR',
   },
   'SFLR': {
@@ -61,6 +68,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     ftsoSymbol: 'FLR', // sFLR tracks FLR price (staking derivative)
     coingeckoId: 'sflr',
     coingeckoFallback: true,
+    pricingUniverse: true,
     notes: 'Staked FLR; uses FLR FTSO feed, CG sflr as fallback',
   },
   'RFLR': {
@@ -71,6 +79,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     ftsoSymbol: 'FLR',
     coingeckoId: 'flare-networks',
     coingeckoFallback: true,
+    pricingUniverse: true,
     notes: 'Reward FLR; same FTSO feed as FLR',
   },
   
@@ -83,6 +92,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     ftsoSymbol: 'XRP',
     coingeckoId: 'ripple',
     coingeckoFallback: true,
+    pricingUniverse: true,
     notes: 'Wrapped XRP on Flare; FTSO XRP feed, CG ripple fallback',
   },
   'STXRP': {
@@ -92,6 +102,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     ftsoSymbol: 'XRP',
     coingeckoId: 'ripple',
     coingeckoFallback: true,
+    pricingUniverse: true,
     notes: 'Staked XRP variant; uses XRP FTSO feed',
   },
   'EFXRP': {
@@ -101,6 +112,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     ftsoSymbol: 'XRP',
     coingeckoId: 'ripple',
     coingeckoFallback: true,
+    pricingUniverse: true,
     notes: 'Enosys FXRP; uses XRP FTSO feed',
   },
   
@@ -110,6 +122,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'USDT',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'Tether USD',
   },
   'USDT0': {
@@ -118,6 +131,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     address: '0xe7cd86e13ac4309349f30b3435a9d337750fc82d',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'Flare-native USDT-pegged stablecoin',
   },
   'USD0': {
@@ -125,6 +139,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'USD0',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'Alias for USDT0',
   },
   'EUSDT': {
@@ -133,6 +148,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     address: '0x96b41289d90444b8add57e6f265db5ae8651df29',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'Enosys USDT',
   },
   'USDC': {
@@ -140,6 +156,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'USDC',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'USD Coin',
   },
   'USDCE': {
@@ -148,6 +165,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     address: '0xfbda5f676cb37624f28265a144a48b0d6e87d3b6',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'Bridged USDC',
   },
   'DAI': {
@@ -155,6 +173,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'DAI',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'MakerDAO DAI',
   },
   'USDX': {
@@ -163,6 +182,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     address: '0x4b64e7793c1912af8dd38f04095699ddc48d5857',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'USDX stablecoin',
   },
   'CUSDX': {
@@ -170,6 +190,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'CUSDX',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'Wrapped USDX',
   },
   'USDS': {
@@ -177,6 +198,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'USDS',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'USD stablecoin variant',
   },
   'USDD': {
@@ -184,6 +206,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'USDD',
     source: 'fixed',
     fixedUsdValue: 1.00,
+    pricingUniverse: true,
     notes: 'USD stablecoin variant',
   },
   
@@ -193,6 +216,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'ETH',
     source: 'coingecko',
     coingeckoId: 'ethereum',
+    pricingUniverse: true,
     notes: 'Ethereum; CoinGecko primary (no FTSO feed)',
   },
   'WETH': {
@@ -201,6 +225,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     address: '0x70ad7172ef0b131a1428d0c1f66457eb041f2176',
     source: 'coingecko',
     coingeckoId: 'ethereum',
+    pricingUniverse: true,
     notes: 'Wrapped ETH; same price as ETH',
   },
   'EETH': {
@@ -209,6 +234,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     address: '0xdbca67eafe5fc5cdb83ec5ef1e0e7e0d7e40a06c',
     source: 'coingecko',
     coingeckoId: 'ethereum',
+    pricingUniverse: true,
     notes: 'Enosys ETH; same price as ETH',
   },
   'BTC': {
@@ -216,6 +242,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'BTC',
     source: 'coingecko',
     coingeckoId: 'bitcoin',
+    pricingUniverse: true,
     notes: 'Bitcoin; CoinGecko primary',
   },
   'WBTC': {
@@ -223,6 +250,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'WBTC',
     source: 'coingecko',
     coingeckoId: 'bitcoin',
+    pricingUniverse: true,
     notes: 'Wrapped BTC; same price as BTC',
   },
   'QNT': {
@@ -230,6 +258,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'QNT',
     source: 'coingecko',
     coingeckoId: 'quant-network',
+    pricingUniverse: true,
     notes: 'Quant Network; CoinGecko primary',
   },
   'EQNT': {
@@ -238,20 +267,23 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     address: '0xd39b46f18bbd1fa864cde38f7ce3bd18c225b067',
     source: 'coingecko',
     coingeckoId: 'quant-network',
+    pricingUniverse: true,
     notes: 'Enosys QNT; same price as QNT',
   },
   
-  // ============ DEX / Protocol Tokens (UNPRICED) ============
+  // ============ DEX / Protocol Tokens (UNPRICED, not in pricing universe) ============
   'SPRK': {
     symbol: 'SPRK',
     canonicalSymbol: 'SPRK',
     source: 'unpriced',
+    pricingUniverse: false,
     notes: 'SparkDEX token; no verified FTSO/CG source',
   },
   'SPX': {
     symbol: 'SPX',
     canonicalSymbol: 'SPX',
     source: 'unpriced',
+    pricingUniverse: false,
     notes: 'SparkDEX variant; alias for SPRK',
   },
   'APS': {
@@ -259,6 +291,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'APS',
     address: '0xff56eb5b1a7faa972291117e5e9565da29bc808d',
     source: 'unpriced',
+    pricingUniverse: false,
     notes: 'APS token; no verified FTSO/CG source',
   },
   'HLN': {
@@ -266,30 +299,35 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'HLN',
     address: '0xa20e10b9d3e5e0a4f5a2aabdd76a6a8fdc71a2cb',
     source: 'unpriced',
+    pricingUniverse: false,
     notes: 'Helion token; no verified source',
   },
   'JOULE': {
     symbol: 'JOULE',
     canonicalSymbol: 'JOULE',
     source: 'unpriced',
+    pricingUniverse: false,
     notes: 'Joule token; no verified source',
   },
   'XVN': {
     symbol: 'XVN',
     canonicalSymbol: 'XVN',
     source: 'unpriced',
+    pricingUniverse: false,
     notes: 'XVN token; no verified source',
   },
   'BUGO': {
     symbol: 'BUGO',
     canonicalSymbol: 'BUGO',
     source: 'unpriced',
+    pricingUniverse: false,
     notes: 'BUGO meme token; UNPRICED',
   },
   'FOTON': {
     symbol: 'FOTON',
     canonicalSymbol: 'FOTON',
     source: 'unpriced',
+    pricingUniverse: false,
     notes: 'FOTON token; no verified source',
   },
   
@@ -301,6 +339,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     ftsoSymbol: 'FLR',
     coingeckoId: 'sflr',
     coingeckoFallback: true,
+    pricingUniverse: true,
     notes: 'Cyclo sFLR; uses FLR FTSO feed',
   },
   'CYFLR': {
@@ -310,6 +349,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     ftsoSymbol: 'FLR',
     coingeckoId: 'flare-networks',
     coingeckoFallback: true,
+    pricingUniverse: true,
     notes: 'Cyclo FLR; uses FLR FTSO feed',
   },
 };
@@ -337,10 +377,25 @@ export function isTokenUnpriced(symbol: string): boolean {
 }
 
 /**
+ * Check if a token is in the pricing universe (eligible for TVL)
+ */
+export function isInPricingUniverse(symbol: string): boolean {
+  const config = getTokenPricingConfig(symbol);
+  return config?.pricingUniverse === true;
+}
+
+/**
  * Get all tokens that have a specific pricing source
  */
 export function getTokensBySource(source: PricingSource): TokenPricingConfig[] {
   return Object.values(TOKEN_PRICING_CONFIG).filter(t => t.source === source);
+}
+
+/**
+ * Get all tokens in the pricing universe
+ */
+export function getPricingUniverseTokens(): TokenPricingConfig[] {
+  return Object.values(TOKEN_PRICING_CONFIG).filter(t => t.pricingUniverse === true);
 }
 
 /**

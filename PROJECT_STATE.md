@@ -367,13 +367,16 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
     • Fee yield (daily fees / liquidity)  
     • Impermanent loss estimator (IL_est) vs hold baseline.  
   - Pool detail view uses: owner concentration, whale entries/exits, collect cadence, RangeBand strategy buckets (Aggressive/Balanced/Conservative), alerts readiness.
-- **Universe/TVL Analytics (SP2):**  
+- **Universe/TVL Analytics (SP2-PRICING):**  
   - **UniverseOverview (`src/lib/analytics/db.ts`):** Central function `getUniverseOverview()` computes pool pricing coverage on-demand:
-    - **Pool count:** SSoT is `Pool` table (filtered by factory addresses: Enosys `0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de`, SparkDEX `0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652`). `mv_pool_latest_state` provides pool count with events but `Pool` table is authoritative for total pools.
-    - **TVL (USD):** Currently returns 0. Per-position TVL computation was removed to avoid fragile `PositionEventType` enum casts that caused 22P02 errors. TVL can be computed on-demand via API (e.g. `/api/pool/[tokenId]`) when position amounts are needed. Pricing SSoT is now stable (see below).
-    - **Priced vs unpriced pools:** Pools are classified as "priced" if both `token0` and `token1` have real USD prices (not `pool_ratio` fallback). Uses `getTokenPriceWithFallback()` from pricing service. Pool-ratio heuristics are **REMOVED**; tokens without a configured price source are marked as UNPRICED.
+    - **Pool count:** SSoT is `Pool` table (filtered by factory addresses: Enosys `0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de`, SparkDEX `0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652`).
+    - **TVL (USD):** Returns 0 until per-pool token amounts are exposed via MVs or RPC. Infrastructure for priced pool classification is in place.
+    - **Priced vs unpriced pools:** Pools are classified based on `pricingUniverse` flag in `config/token-pricing.config.ts`:
+      - **Priced:** Both `token0` and `token1` have `pricingUniverse: true` AND valid USD prices from FTSO/CG/FIXED.
+      - **Unpriced:** At least one token has `pricingUniverse: false`, `source: 'unpriced'`, or no price available.
+      - Pool-ratio heuristics are **REMOVED**; tokens without explicit pricing config are marked as UNPRICED.
     - **Positions/Wallets:** Uses `mv_position_lifetime_v1` for positions (no enum dependency), `PositionTransfer` for wallets, `mv_wallet_lp_7d` for active wallets (7d). Does NOT filter by `PositionEventType` enum to avoid 22P02 errors.
-  - **Coverage verifiers:** `verify:data:w49-vs-w3` and `verify:data:coverage-gaps` use `getUniverseOverview()` for pool counts, positions, wallets, and pricing coverage. TVL is reported as 0 until a dedicated TVL MV or RPC-based approach is implemented.
+  - **Coverage verifiers:** `verify:data:w49-vs-w3` and `verify:data:coverage-gaps` use `getUniverseOverview()` for pool counts, positions, wallets, and pricing coverage. TVL is reported as 0 until a dedicated `mv_pool_liquidity` MV or RPC-based approach is implemented.
 
 ### 7.2 Pricing SSoT (v3 Flare Tokens)
 
@@ -382,24 +385,32 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
 
 Token pricing follows explicit source configuration. **FTSO-first** for Flare-native tokens.
 
-| Symbol | Source | FTSO Feed | CG Fallback | Notes |
-|--------|--------|-----------|-------------|-------|
-| **Flare-native (FTSO-first)** |||||
-| FLR, WFLR, rFLR | ftso | FLR | `flare-networks` | Native Flare; CG fallback enabled |
-| sFLR, cysFLR, cyFLR | ftso | FLR | `sflr` / `flare-networks` | Staked/Wrapped FLR |
-| FXRP, stXRP, eFXRP | ftso | XRP | `ripple` | Wrapped XRP; CG fallback enabled |
-| **Stablecoins (FIXED @ $1.00)** |||||
-| USDT, USDT0, USD0, eUSDT | fixed | — | — | $1.00 hardcoded |
-| USDC, USDC.e | fixed | — | — | $1.00 hardcoded |
-| DAI, USDX, cUSDX, USDS, USDD | fixed | — | — | $1.00 hardcoded |
-| **Cross-chain (CoinGecko primary)** |||||
-| ETH, WETH, eETH | coingecko | — | `ethereum` | No FTSO feed |
-| BTC, WBTC | coingecko | — | `bitcoin` | No FTSO feed |
-| QNT, eQNT | coingecko | — | `quant-network` | No FTSO feed |
-| **DEX/Protocol Tokens (UNPRICED)** |||||
-| SPRK, SPX | unpriced | — | — | No verified source |
-| APS, HLN, JOULE | unpriced | — | — | No verified source |
-| XVN, BUGO, FOTON | unpriced | — | — | No verified source |
+#### `pricingUniverse` Flag (SP2-PRICING)
+
+Each token in `TOKEN_PRICING_CONFIG` now has a `pricingUniverse: boolean` field:
+- **`pricingUniverse: true`** — Token is eligible for TVL calculations. Pools where both tokens are in the pricing universe AND have valid prices contribute to `tvlPricedUsd`.
+- **`pricingUniverse: false`** — Token is excluded from TVL. Pools containing this token are deemed UNPRICED (counted in `unpricedPoolsCount`).
+
+This allows us to safely claim TVL only over tokens with verified, reliable pricing (FTSO, CG, FIXED) while explicitly excluding meme/DEX tokens.
+
+| Symbol | Source | FTSO Feed | CG Fallback | pricingUniverse | Notes |
+|--------|--------|-----------|-------------|-----------------|-------|
+| **Flare-native (FTSO-first)** ||||||
+| FLR, WFLR, rFLR | ftso | FLR | `flare-networks` | ✅ | Native Flare; CG fallback enabled |
+| sFLR, cysFLR, cyFLR | ftso | FLR | `sflr` / `flare-networks` | ✅ | Staked/Wrapped FLR |
+| FXRP, stXRP, eFXRP | ftso | XRP | `ripple` | ✅ | Wrapped XRP; CG fallback enabled |
+| **Stablecoins (FIXED @ $1.00)** ||||||
+| USDT, USDT0, USD0, eUSDT | fixed | — | — | ✅ | $1.00 hardcoded |
+| USDC, USDC.e | fixed | — | — | ✅ | $1.00 hardcoded |
+| DAI, USDX, cUSDX, USDS, USDD | fixed | — | — | ✅ | $1.00 hardcoded |
+| **Cross-chain (CoinGecko primary)** ||||||
+| ETH, WETH, eETH | coingecko | — | `ethereum` | ✅ | No FTSO feed |
+| BTC, WBTC | coingecko | — | `bitcoin` | ✅ | No FTSO feed |
+| QNT, eQNT | coingecko | — | `quant-network` | ✅ | No FTSO feed |
+| **DEX/Protocol Tokens (UNPRICED)** ||||||
+| SPRK, SPX | unpriced | — | — | ❌ | No verified source |
+| APS, HLN, JOULE | unpriced | — | — | ❌ | No verified source |
+| XVN, BUGO, FOTON | unpriced | — | — | ❌ | No verified source |
 
 **Pricing hierarchy:**
 1. **FTSO/ANKR** (primary for Flare-native tokens) — uses ANKR Advanced API `ankr_getTokenPrice`

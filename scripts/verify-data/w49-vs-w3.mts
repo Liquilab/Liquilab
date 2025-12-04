@@ -31,43 +31,9 @@ const W3_POOLS = 238;
 const W3_POSITIONS = 74_857;
 const W3_WALLETS = 8_594;
 
-// Factory addresses for W3 scope (from PROJECT_STATE.md)
-const FACTORY_ADDRESSES = [
-  '0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de', // Enosys V3 Factory
-  '0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652', // SparkDEX V3 Factory
-];
-
-// NFPM addresses for W3 scope
-const NFPM_ADDRESSES = [
-  '0xd9770b1c7a6ccd33c75b5bcb1c0078f46be46657', // Enosys NFPM
-  '0xee5ff5bc5f852764b5584d92a4d592a53dc527da', // SparkDEX NFPM
-];
-
-interface W49Stats {
-  tvlUsd: number;
-  pools: number;
-  positions: number;
-  wallets: number;
-  activeWallets: number;
-}
-
-async function getW49Stats(): Promise<W49Stats> {
-  // Get UniverseOverview (includes TVL, pool counts, positions, wallets)
-  const universe = await getUniverseOverview();
-  const tvlUsd = universe.tvlPricedUsd;
-  const pools = universe.totalPoolsCount;
-
-  // Use UniverseOverview for positions, wallets, active wallets
-  const positions = universe.positionsCount;
-  const wallets = universe.walletsCount;
-  const activeWallets = universe.activeWallets7d;
-
-  return { tvlUsd, pools, positions, wallets, activeWallets };
-}
-
 function formatUsd(value: number): string {
   if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
+    return `$${(value / 1_000_000).toFixed(2)}M`;
   }
   if (value >= 1_000) {
     return `$${(value / 1_000).toFixed(1)}K`;
@@ -84,49 +50,57 @@ function formatPct(value: number, reference: number): string {
 async function main() {
   console.log('\n=== W3 vs W49 Dataset Coverage ===\n');
 
-  const stats = await getW49Stats();
+  const universe = await getUniverseOverview();
 
   // TVL
   console.log('TVL (USD, priced pools):');
   console.log(`  W3:   ${formatUsd(W3_TVL_USD)}`);
-  console.log(`  W49:  ${formatUsd(stats.tvlUsd)}`);
-  console.log(`  Cov:  ${formatPct(stats.tvlUsd, W3_TVL_USD)}`);
+  console.log(`  W49:  ${formatUsd(universe.tvlPricedUsd)}`);
+  console.log(`  Cov:  ${formatPct(universe.tvlPricedUsd, W3_TVL_USD)}`);
+  if (universe.tvlPricedUsd === 0) {
+    console.log('  Note: TVL = 0 because per-pool amounts are not yet exposed in MVs');
+  }
   console.log();
 
-  // Pools
+  // Pools (total and priced/unpriced breakdown)
   console.log('Pools:');
-  console.log(`  W3:   ${W3_POOLS.toLocaleString()}`);
-  console.log(`  W49:  ${stats.pools.toLocaleString()}`);
-  console.log(`  Cov:  ${formatPct(stats.pools, W3_POOLS)}`);
+  console.log(`  W3:       ${W3_POOLS.toLocaleString()}`);
+  console.log(`  W49:      ${universe.totalPoolsCount.toLocaleString()} total`);
+  console.log(`    Priced:   ${universe.pricedPoolsCount.toLocaleString()} (${formatPct(universe.pricedPoolsCount, universe.totalPoolsCount)})`);
+  console.log(`    Unpriced: ${universe.unpricedPoolsCount.toLocaleString()} (${formatPct(universe.unpricedPoolsCount, universe.totalPoolsCount)})`);
+  console.log(`  Cov (total): ${formatPct(universe.totalPoolsCount, W3_POOLS)}`);
   console.log();
 
   // Positions
   console.log('Positions:');
   console.log(`  W3:   ${W3_POSITIONS.toLocaleString()}`);
-  console.log(`  W49:  ${stats.positions.toLocaleString()}`);
-  console.log(`  Cov:  ${formatPct(stats.positions, W3_POSITIONS)}`);
+  console.log(`  W49:  ${universe.positionsCount.toLocaleString()}`);
+  console.log(`  Cov:  ${formatPct(universe.positionsCount, W3_POSITIONS)}`);
   console.log();
 
   // Wallets
   console.log('Wallets:');
   console.log(`  W3:   ${W3_WALLETS.toLocaleString()}`);
-  console.log(`  W49:  ${stats.wallets.toLocaleString()}`);
-  console.log(`  Cov:  ${formatPct(stats.wallets, W3_WALLETS)}`);
+  console.log(`  W49:  ${universe.walletsCount.toLocaleString()}`);
+  console.log(`  Cov:  ${formatPct(universe.walletsCount, W3_WALLETS)}`);
   console.log();
 
   // Active Wallets (7d)
-  console.log('Active Wallets (mv_wallet_lp_7d):');
-  console.log(`  W49:  ${stats.activeWallets.toLocaleString()} (~${formatPct(stats.activeWallets, W3_WALLETS)} of W3 total)`);
+  console.log('Active Wallets (7d):');
+  console.log(`  W49:  ${universe.activeWallets7d.toLocaleString()} (~${formatPct(universe.activeWallets7d, W3_WALLETS)} of W3 total)`);
   console.log();
 
   // Summary
   console.log('=== Summary ===');
-  const avgCoverage = (
-    (stats.tvlUsd / W3_TVL_USD) +
-    (stats.pools / W3_POOLS) +
-    (stats.positions / W3_POSITIONS) +
-    (stats.wallets / W3_WALLETS)
-  ) / 4 * 100;
+  
+  // For coverage, we use priced pools (not total), positions, and wallets
+  // TVL is excluded from average until amounts are available
+  const poolCov = universe.pricedPoolsCount / W3_POOLS;
+  const posCov = universe.positionsCount / W3_POSITIONS;
+  const walletCov = universe.walletsCount / W3_WALLETS;
+  
+  // Weighted average (excluding TVL which is 0)
+  const avgCoverage = (poolCov + posCov + walletCov) / 3 * 100;
 
   if (avgCoverage >= 95) {
     console.log('✅ Excellent overall coverage (≥95%)');
@@ -137,7 +111,13 @@ async function main() {
   } else {
     console.log('❌ Low coverage (<50%) - backfill or indexing incomplete');
   }
-  console.log(`   Average coverage: ${avgCoverage.toFixed(1)}%\n`);
+  console.log(`   Average coverage (pools/positions/wallets): ${avgCoverage.toFixed(1)}%`);
+  
+  if (universe.tvlPricedUsd === 0) {
+    console.log('\n📊 TVL Note: Currently 0 because per-pool token amounts are not in MVs.');
+    console.log('   Next step: Create mv_pool_liquidity or fetch amounts via RPC.');
+  }
+  console.log();
 }
 
 main()
@@ -148,4 +128,3 @@ main()
   .finally(() => {
     prisma.$disconnect();
   });
-
