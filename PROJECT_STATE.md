@@ -414,9 +414,10 @@ Token pricing follows explicit source configuration. **FTSO-first** for Flare-na
 - Token addresses mapped via `FTSO_SYMBOL_TO_ADDRESS` in tokenPriceService
 - If ANKR fails or returns no data → token falls back to CG (if `coingeckoFallback: true`) or UNPRICED
 
-**CoinGecko rate-limit guard:**
-- After first 429 error in a process, all further CG calls are skipped for that run.
-- Prevents log spam and wasted requests.
+**CoinGecko configuration:**
+- **Requires `COINGECKO_API_KEY` env var** for reliable operation (Pro API).
+- Without API key, uses free tier with strict rate limits (429 errors).
+- Rate-limit guard: after first 429, all CG calls skipped for that process.
 - Reset on process restart or via `clearPriceCache()`.
 
 **Behaviour:**

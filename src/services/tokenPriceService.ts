@@ -33,6 +33,7 @@ const warnedTokens = new Set<string>();
 // CoinGecko rate-limit guard: skip CG calls after first 429 in this process
 let coinGeckoRateLimited = false;
 let cgRateLimitLoggedOnce = false;
+let cgApiKeyLoggedOnce = false;
 
 // ANKR API configuration
 // ANKR Advanced API requires API key in the URL (e.g., https://rpc.ankr.com/multichain/{API_KEY})
@@ -207,6 +208,7 @@ async function fetchFtsoPrice(config: TokenPricingConfig): Promise<number | null
 /**
  * Fetch price from CoinGecko API
  * 
+ * Requires COINGECKO_API_KEY env var for reliable operation.
  * Includes rate-limit guard: after first 429, skip all further CG calls.
  */
 async function fetchCoinGeckoPrice(coingeckoId: string): Promise<number | null> {
@@ -219,8 +221,19 @@ async function fetchCoinGeckoPrice(coingeckoId: string): Promise<number | null> 
     return null;
   }
   
+  const apiKey = process.env.COINGECKO_API_KEY;
+  
+  // Log API key status once
+  if (!cgApiKeyLoggedOnce) {
+    if (apiKey) {
+      console.log('[PRICE] CoinGecko API key configured (using Pro API)');
+    } else {
+      console.warn('[PRICE] COINGECKO_API_KEY not set; using free tier (rate limits apply)');
+    }
+    cgApiKeyLoggedOnce = true;
+  }
+  
   try {
-    const apiKey = process.env.COINGECKO_API_KEY;
     const baseUrl = apiKey 
       ? 'https://pro-api.coingecko.com/api/v3'
       : 'https://api.coingecko.com/api/v3';
@@ -528,6 +541,7 @@ export function clearPriceCache(): void {
   warnedTokens.clear();
   coinGeckoRateLimited = false;
   cgRateLimitLoggedOnce = false;
+  cgApiKeyLoggedOnce = false;
   ankrDisabled = false;
   ankrDisabledLoggedOnce = false;
   console.log('[PRICE] Cache cleared, rate-limit guards reset');
