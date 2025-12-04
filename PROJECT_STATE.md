@@ -419,9 +419,12 @@ This allows us to safely claim TVL only over tokens with verified, reliable pric
 | ETH, WETH, eETH | coingecko | — | `ethereum` | ✅ | No FTSO feed |
 | BTC, WBTC | coingecko | — | `bitcoin` | ✅ | No FTSO feed |
 | QNT, eQNT | coingecko | — | `quant-network` | ✅ | No FTSO feed |
+| **Flare DeFi Tokens (CoinGecko)** ||||||
+| APS | coingecko | — | `apsis` | ✅ | Apsis incentive token on Flare |
+| HLN | coingecko | — | `helion` | ✅ | Helion governance/DEX token |
 | **DEX/Protocol Tokens (UNPRICED)** ||||||
 | SPRK, SPX | unpriced | — | — | ❌ | No verified source |
-| APS, HLN, JOULE | unpriced | — | — | ❌ | No verified source |
+| JOULE | unpriced | — | — | ❌ | No verified source |
 | XVN, BUGO, FOTON | unpriced | — | — | ❌ | No verified source |
 
 **Pricing hierarchy:**
@@ -452,7 +455,8 @@ This allows us to safely claim TVL only over tokens with verified, reliable pric
 
 **Next steps:**
 - Monitor ANKR pricing reliability on staging.
-- Verify CoinGecko IDs for SPRK, APS, HLN before promoting to `coingecko`.
+- Verify CoinGecko IDs for SPRK before promoting to `coingecko`.
+- APS (`apsis`) and HLN (`helion`) now in pricing universe via CoinGecko.
 
 <!-- DELTA 2025-11-16 START -->
 

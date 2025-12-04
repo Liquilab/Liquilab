@@ -290,17 +290,19 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     symbol: 'APS',
     canonicalSymbol: 'APS',
     address: '0xff56eb5b1a7faa972291117e5e9565da29bc808d',
-    source: 'unpriced',
-    pricingUniverse: false,
-    notes: 'APS token; no verified FTSO/CG source',
+    source: 'coingecko',
+    coingeckoId: 'apsis', // Apsis token on Flare
+    pricingUniverse: true,
+    notes: 'APS incentive token on Flare; priced via CoinGecko',
   },
   'HLN': {
     symbol: 'HLN',
     canonicalSymbol: 'HLN',
     address: '0xa20e10b9d3e5e0a4f5a2aabdd76a6a8fdc71a2cb',
-    source: 'unpriced',
-    pricingUniverse: false,
-    notes: 'Helion token; no verified source',
+    source: 'coingecko',
+    coingeckoId: 'helion', // Helion governance token
+    pricingUniverse: true,
+    notes: 'Helion governance/DEX token; priced via CoinGecko',
   },
   'JOULE': {
     symbol: 'JOULE',
