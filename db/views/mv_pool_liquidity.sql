@@ -17,12 +17,6 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS "mv_pool_liquidity" AS
 WITH pool_amounts AS (
   SELECT
     LOWER(pe."pool") AS pool_address,
-    LOWER(pe."nfpmAddress") AS nfpm_address,
-    CASE 
-      WHEN LOWER(pe."nfpmAddress") = '0xd9770b1c7a6ccd33c75b5bcb1c0078f46be46657' THEN 'enosys-v3'
-      WHEN LOWER(pe."nfpmAddress") = '0xee5ff5bc5f852764b5584d92a4d592a53dc527da' THEN 'sparkdex-v3'
-      ELSE 'unknown'
-    END AS dex,
     -- Sum amounts: positive for INCREASE, negative for DECREASE
     -- Using text cast to avoid enum handling issues
     SUM(
@@ -51,12 +45,15 @@ WITH pool_amounts AS (
       '0xd9770b1c7a6ccd33c75b5bcb1c0078f46be46657',
       '0xee5ff5bc5f852764b5584d92a4d592a53dc527da'
     )
-  GROUP BY LOWER(pe."pool"), LOWER(pe."nfpmAddress")
+  GROUP BY LOWER(pe."pool")
 )
 SELECT
   pa.pool_address,
-  pa.nfpm_address,
-  pa.dex,
+  CASE 
+    WHEN p.factory = '0x17aa157ac8c54034381b840cb8f6bf7fc355f0de' THEN 'enosys-v3'
+    WHEN p.factory = '0x8a2578d23d4c532cc9a98fad91c0523f5efde652' THEN 'sparkdex-v3'
+    ELSE 'unknown'
+  END AS dex,
   p.token0 AS token0_address,
   p.token1 AS token1_address,
   p."token0Symbol" AS token0_symbol,
@@ -80,4 +77,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS mv_pool_liquidity_pool_idx
 -- Index for dex filtering
 CREATE INDEX IF NOT EXISTS mv_pool_liquidity_dex_idx 
   ON "mv_pool_liquidity" ("dex");
-
