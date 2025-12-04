@@ -1,7 +1,7 @@
 # PROJECT_STATE · LiquiLab Indexer & API (Concise)
 
 > Living document for the LiquiLab Flare V3 indexer stack.  
-> Last updated: 2025-12-03 (FTSO/ANKR pricing implemented for Flare tokens). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
+> Last updated: 2025-12-04 (SP2-PRICING closed; final state documented). Target size ≤ 25 KB; archived snapshots live under `docs/ops/STATE_ARCHIVE/`.
 
 ---
 
@@ -457,6 +457,30 @@ This allows us to safely claim TVL only over tokens with verified, reliable pric
 - Monitor ANKR pricing reliability on staging.
 - Verify CoinGecko IDs for SPRK before promoting to `coingecko`.
 - APS (`apsis`) and HLN (`helion`) now in pricing universe via CoinGecko.
+
+#### SP2 – Final State (Data & Pricing)
+
+**Data coverage:**
+- Position/state coverage vs W3: 77,769 positions (103.9% vs W3's 74,857), 8,907 wallets (103.6% vs W3's 8,594).
+- Pool coverage vs W3: 427 total v3 pools (Enosys + SparkDEX) vs 238 in W3 reference (179.4% coverage).
+
+**Pricing SSoT:**
+- FTSO-first for FLR/WFLR/SFLR/FXRP/stXRP via ANKR Advanced API (`ankr_getTokenPrice` with `ftsoSymbol` mapping).
+- CoinGecko Pro for cross-chain majors (WETH/EETH/EQNT/QNT/BTC) and Flare DeFi tokens (APS/HLN).
+- Fixed $1.00 for stablecoins (USDT0/USDT/EUSDT/USDC.e/USDX/CUSDX/DAI/USDS/USDD).
+- Long-tail/memecoins explicitly `UNPRICED` (SPRK/SPX/JOULE/XVN/BUGO/FOTON) and excluded from pricing universe.
+
+**TVL & pools:**
+- TVL (USD, priced pools): $59.12M (W49) vs $58.9M (W3), 100.4% coverage.
+- Pools: 199 priced (51.7% of 385 total) vs 186 unpriced (48.3%). Priced pools require both tokens in `pricingUniverse` with valid USD prices.
+
+**Active wallets (7d):**
+- Definition: Wallets with LP events (PositionEvent or PositionTransfer) in last 7 days, tracked via `mv_wallet_lp_7d`.
+- Current count: 3,043 active wallets (~35.4% of W3 total wallet count).
+
+**MVs & verifiers:**
+- Key MVs forming SSoT: `mv_position_lifetime_v1` (lifetime positions), `mv_pool_latest_state` (pool state), `mv_pool_liquidity` (per-pool token amounts for TVL), `mv_wallet_lp_7d` (active wallets 7d), `mv_pool_fees_24h` (fee accrual).
+- All SP2 verifiers run cleanly: `verify:data:w49-vs-w3` (coverage vs W3), `verify:data:coverage-gaps` (pipeline breakdown), `verify:data:lifetime-vs-w3` (position/wallet counts). Used as health checks for data completeness and pricing accuracy.
 
 <!-- DELTA 2025-11-16 START -->
 
