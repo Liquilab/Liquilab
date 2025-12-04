@@ -243,18 +243,18 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'CYWETH',
     address: '0xd8bf1d2720e9ffd01a2f9a2efc3e101a05b852b4',
     source: 'coingecko',
-    coingeckoId: 'ethereum',
+    coingeckoId: 'cyclo-cyweth', // Cyclo yield token - trades ~$0.47, NOT 1:1 with ETH!
     pricingUniverse: true,
-    notes: 'Cyclo wrapped ETH; same price as ETH',
+    notes: 'Cyclo cyWETH; yield token that trades around $0.47 (not 1:1 with ETH)',
   },
   'FLRETH': {
     symbol: 'flrETH',
     canonicalSymbol: 'FLRETH',
-    address: '0x26a1fab310bd080542dc864647d05985360b16a5',
+    address: '0xa8697b82a5e9f108296c6299859e82472340aea7', // Verified via Flarescan
     source: 'coingecko',
-    coingeckoId: 'ethereum',
+    coingeckoId: 'flare-staked-ether', // Sceptre Flare Staked Ether - $3,084.16
     pricingUniverse: true,
-    notes: 'Flare wrapped ETH (liquid staking); same price as ETH',
+    notes: 'flrETH (Sceptre liquid staking); priced via CoinGecko',
   },
   'BTC': {
     symbol: 'BTC',
@@ -294,15 +294,18 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
   'SPRK': {
     symbol: 'SPRK',
     canonicalSymbol: 'SPRK',
-    source: 'unpriced',
-    pricingUniverse: false,
-    notes: 'SparkDEX token; no verified FTSO/CG source',
+    address: '0x657097cc15fdec9e383db8628b57ea4a763f2ba0',
+    source: 'coingecko',
+    coingeckoId: 'sparkdex', // SparkDEX native token
+    pricingUniverse: true,
+    notes: 'SPRK (SparkDEX); priced via CoinGecko',
   },
   'SPX': {
     symbol: 'SPX',
     canonicalSymbol: 'SPX',
-    source: 'unpriced',
-    pricingUniverse: false,
+    source: 'coingecko',
+    coingeckoId: 'sparkdex', // Alias for SPRK
+    pricingUniverse: true,
     notes: 'SparkDEX variant; alias for SPRK',
   },
   'APS': {
@@ -326,9 +329,11 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
   'JOULE': {
     symbol: 'JOULE',
     canonicalSymbol: 'JOULE',
-    source: 'unpriced',
-    pricingUniverse: false,
-    notes: 'Joule token; no verified source',
+    address: '0xe6505f92583103af7ed9974dec451a7af4e3a3be',
+    source: 'coingecko',
+    coingeckoId: 'joule-2', // Kinetic lending protocol on Flare
+    pricingUniverse: true,
+    notes: 'JOULE (Kinetic protocol); priced via CoinGecko',
   },
   'XVN': {
     symbol: 'XVN',
@@ -340,9 +345,11 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
   'BUGO': {
     symbol: 'BUGO',
     canonicalSymbol: 'BUGO',
-    source: 'unpriced',
-    pricingUniverse: false,
-    notes: 'BUGO meme token; UNPRICED',
+    address: '0x6c1490729ce19e809cf9f7e3e223c0490833de02',
+    source: 'coingecko',
+    coingeckoId: 'bugo', // Flare memecoin
+    pricingUniverse: true,
+    notes: 'BUGO meme token on Flare; priced via CoinGecko',
   },
   'FOTON': {
     symbol: 'FOTON',

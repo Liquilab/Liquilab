@@ -2948,3 +2948,96 @@ Prevents broken code from reaching production. Catches integration issues early 
 ## Changelog — 2025-12-02
 
 - **Railway Cron Job MV Refresh Setup:** Configured Railway Cron Scheduler to automatically refresh all Materialized Views every 10 minutes via `/api/enrich/refresh-views` HTTP endpoint. Cron job service linked to Liquilab-staging web service with `CRON_SECRET` authentication. Refresh script (`scripts/enrich/refresh-views.mjs`) refreshes 11 MVs in safe dependency order: `mv_pool_latest_state`, `mv_pool_fees_24h`, `mv_position_range_status`, `mv_pool_position_stats`, `mv_position_latest_event`, `mv_pool_volume_7d`, `mv_pool_fees_7d`, `mv_positions_active_7d`, `mv_wallet_lp_7d`, `mv_pool_changes_7d`, `mv_position_lifetime_v1`. Documentation: `docs/RAILWAY_CRON_MV_REFRESH.md`. Environment variables: `CRON_SECRET` required in both Cron Job service and Liquilab-staging web service. Schedule: `*/10 * * * *` (every 10 minutes, UTC time).
+
+## Changelog — 2025-12-04
+
+### Token Pricing SSoT & TVL Coverage
+
+**Files Changed:**
+- `config/token-pricing.config.ts` — New SSoT for token pricing configuration
+- `src/services/tokenPriceService.ts` — Updated to use SSoT config with FTSO/CoinGecko/Fixed sources
+- `db/views/mv_pool_liquidity.sql` — New MV for pool-level token amounts
+
+**New Token Pricing Configuration (`config/token-pricing.config.ts`):**
+
+Single Source of Truth for how each token is priced and whether it contributes to TVL:
+
+| Token | Source | CoinGecko ID | pricingUniverse |
+|-------|--------|--------------|-----------------|
+| FLR/WFLR/sFLR/rFLR | ftso (FLR) | flare-networks (fallback) | ✅ |
+| FXRP/stXRP/eFXRP | ftso (XRP) | ripple (fallback) | ✅ |
+| cysFLR/cyFLR | ftso (FLR) | flare-networks (fallback) | ✅ |
+| USDT/USDC/USDT0/USDC.e/DAI/USDX/cUSDX | fixed ($1.00) | - | ✅ |
+| ETH/WETH/eETH | coingecko | ethereum | ✅ |
+| BTC/WBTC | coingecko | bitcoin | ✅ |
+| QNT/eQNT | coingecko | quant-network | ✅ |
+| SPRK | coingecko | sparkdex | ✅ |
+| JOULE | coingecko | joule-2 | ✅ |
+| BUGO | coingecko | bugo | ✅ |
+| HLN | coingecko | enosys | ✅ |
+| APS | coingecko | apsis | ✅ |
+| cyWETH | coingecko | cyclo-cyweth | ✅ (~$0.47, NOT 1:1 with ETH!) |
+| flrETH | coingecko | flare-staked-ether | ✅ (~$3,084) |
+| XVN/FLEME/PiCO/FUF/BULL/MOON | unpriced | - | ❌ |
+
+**TVL Coverage Achieved:**
+
+| DEX | External Reference | LiquiLab TVL | Coverage |
+|-----|-------------------|--------------|----------|
+| SparkDEX v3 | $62.40M | $62.37M | **100.0%** |
+| Enosys v3 | ~$6.05M | $6.19M | **102%** |
+| **Total** | ~$68.5M | $68.56M | **100.1%** |
+
+**Verification Commands:**
+```bash
+npm run verify:data:tvl-by-dex    # Breakdown by DEX + top pools
+npm run verify:data:w49-vs-w3     # Compare with W3 reference
+npm run verify:data:coverage-gaps # Data flow analysis
+```
+
+### Future: On-Chain Verification for Real-Time TVL
+
+**Problem:** Event-based TVL calculation (SUM INCREASE - SUM DECREASE) can drift from actual on-chain state due to:
+1. Complex position rebalances
+2. Concentrated liquidity dynamics (one-sided adds/removes)
+3. Missed events or indexer gaps
+
+**Solution Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    On-Chain Verification                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │ Pool Contract│    │ Multicall3   │    │ LiquiLab DB  │  │
+│  │   slot0()    │───▶│   Batch      │───▶│ mv_pool_tvl  │  │
+│  │ liquidity()  │    │   Reader     │    │   _verified  │  │
+│  └──────────────┘    └──────────────┘    └──────────────┘  │
+│                                                              │
+│  Flow:                                                       │
+│  1. Every 10 min: Read slot0 + liquidity for all pools      │
+│  2. Calculate TVL from sqrtPriceX96 + total liquidity       │
+│  3. Store in mv_pool_tvl_verified (authoritative)           │
+│  4. Compare with event-based MV → flag divergences          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Implementation Plan (Future Sprint):**
+
+1. **`scripts/verify-data/on-chain-tvl.mts`** — Batch-read pool contracts via Multicall3
+2. **`mv_pool_tvl_verified`** — New MV with on-chain source of truth
+3. **`/api/pools/[address]/tvl`** — API endpoint returning both event-based + verified TVL
+4. **Dashboard indicator** — Show "verified" badge when on-chain matches event-based ±5%
+
+**Benefits:**
+- Real-time accuracy (no event lag)
+- Automatic drift detection
+- Can be used for alerts: "Pool TVL changed by >10%"
+- Proof of reserves for compliance
+
+**RPC Cost Estimate:**
+- 400 pools × 2 calls (slot0 + liquidity) = 800 calls
+- Batched via Multicall3 = ~8 RPC requests per refresh
+- At 10-min interval: ~1,152 requests/day (well within free tier)
