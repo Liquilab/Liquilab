@@ -94,6 +94,7 @@ interface PoolLiquidityRow {
   amount1_raw: string; // NUMERIC as string
   positions_count: bigint;
   last_event_ts: number;
+  
 }
 
 /**

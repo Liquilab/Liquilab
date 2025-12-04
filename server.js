@@ -5,7 +5,8 @@ const url = require('url');
 const dev = process.env.NODE_ENV !== 'production';
 const port = process.env.PORT || 3000;
 
-const app = next({ dev });
+cons
+t app = next({ dev });
 const handle = app.getRequestHandler();
 
 async function start() {
