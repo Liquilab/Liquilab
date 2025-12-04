@@ -1,87 +1,95 @@
 /**
  * Token Price Service
- * 
+ *
  * Fetches real-time USD prices for Flare Network tokens.
- * 
- * Pricing hierarchy (FTSO-first for Flare-native tokens):
- * 1. FTSO/ANKR: Primary for Flare-native tokens (FLR, WFLR, SFLR, FXRP, STXRP)
- *    Uses ANKR Advanced API for real-time prices (closest to FTSO data)
- * 2. CoinGecko: Fallback for FTSO tokens (if configured), primary for non-Flare assets
+ *
+ * Pricing Hierarchy (SSoT: config/token-pricing.config.ts):
+ * 1. FTSO (via ANKR): Primary for Flare-native tokens (FLR, WFLR, SFLR, FXRP, stXRP)
+ * 2. CoinGecko: Fallback for FTSO tokens (if configured), primary for cross-chain assets
  * 3. FIXED: Stablecoins → hardcoded $1.00
  * 4. UNPRICED: No reliable source → returns null
- * 
- * IMPORTANT:
- * - Pool-ratio heuristics are REMOVED. Never used.
- * - CoinGecko rate-limit guard: After first 429, skip further CG calls for this run.
- * 
+ *
+ * Rate-Limit Guards:
+ * - CoinGecko: After first 429, skip all CG calls for this run
+ * - ANKR: After first 401/403, skip all ANKR calls for this run
+ *
  * @module services/tokenPriceService
  */
 
 import NodeCache from 'node-cache';
-import { 
-  TOKEN_PRICING_CONFIG, 
-  getTokenPricingConfig, 
-  type TokenPricingConfig 
+import {
+  TOKEN_PRICING_CONFIG,
+  getTokenPricingConfig,
+  type TokenPricingConfig,
+  type PricingSource,
 } from '../../config/token-pricing.config';
 
-// Cache prices for 5 minutes (300 seconds)
-const priceCache = new NodeCache({ stdTTL: 300 });
+// ============================================================
+// Types
+// ============================================================
 
-// Track warnings to avoid log spam (warn once per token per run)
+export type { PricingSource };
+
+export interface PriceResult {
+  price: number | null;
+  source: PricingSource | 'coingecko-fallback';
+  isReliable: boolean;
+}
+
+// ============================================================
+// Cache & State
+// ============================================================
+
+const priceCache = new NodeCache({ stdTTL: 300 }); // 5 minute TTL
 const warnedTokens = new Set<string>();
 
-// CoinGecko rate-limit guard: skip CG calls after first 429 in this process
+// Rate-limit guards (per-run)
 let coinGeckoRateLimited = false;
-let cgRateLimitLoggedOnce = false;
-let cgApiKeyLoggedOnce = false;
+let ankrDisabled = false;
 
-// ANKR API configuration
-// ANKR Advanced API requires API key in the URL (e.g., https://rpc.ankr.com/multichain/{API_KEY})
-// We can derive the multichain endpoint from FLARE_RPC_URL if it's an ANKR URL
-function getAnkrMultichainEndpoint(): string | null {
-  // First check explicit ANKR_ADVANCED_API_URL
+// Logging guards (single log per run)
+let loggedAnkrStatus = false;
+let loggedCgApiKeyStatus = false;
+let loggedCgRateLimit = false;
+
+// ============================================================
+// ANKR Configuration
+// ============================================================
+
+const FLARE_BLOCKCHAIN_ID = 'flare';
+
+const FTSO_SYMBOL_TO_ADDRESS: Record<string, string | undefined> = {
+  FLR: undefined, // Native token
+  WFLR: '0x1D80c49BbBCd1C0911346656B529DF9E5c2F783d',
+  SFLR: '0x12e605bc104e93B45e1aD99F9e555f659051c2BB',
+  XRP: '0xAd552A648C74D49E10027AB8a618A3ad4901c5bE',
+  FXRP: '0xAd552A648C74D49E10027AB8a618A3ad4901c5bE',
+  STXRP: '0x4c18ff3c89632c3dd62e796c0afa5c07c4c1b2b3',
+};
+
+function deriveAnkrEndpoint(): string | null {
   if (process.env.ANKR_ADVANCED_API_URL) {
-    console.log('[PRICE] Using ANKR_ADVANCED_API_URL for pricing');
     return process.env.ANKR_ADVANCED_API_URL;
   }
-  
-  // Try to derive from FLARE_RPC_URL or FLARE_RPC_URLS if it's an ANKR URL with API key
-  // e.g., https://rpc.ankr.com/flare/{API_KEY} → https://rpc.ankr.com/multichain/{API_KEY}
+
   const flareRpc = (process.env.FLARE_RPC_URL || process.env.FLARE_RPC_URLS)?.trim();
-  if (flareRpc) {
-    // Match ANKR URLs with API key: https://rpc.ankr.com/flare/{hex_key}
-    const ankrMatch = flareRpc.match(/^https?:\/\/rpc\.ankr\.com\/flare\/([a-f0-9]+)\/?$/i);
-    if (ankrMatch && ankrMatch[1]) {
-      const endpoint = `https://rpc.ankr.com/multichain/${ankrMatch[1]}`;
-      console.log('[PRICE] Derived ANKR multichain endpoint from FLARE_RPC_URL(S)');
-      return endpoint;
-    }
+  if (!flareRpc) return null;
+
+  // Match: https://rpc.ankr.com/flare/{hex_api_key}
+  const match = flareRpc.match(/^https?:\/\/rpc\.ankr\.com\/flare\/([a-f0-9]+)\/?$/i);
+  if (match?.[1]) {
+    return `https://rpc.ankr.com/multichain/${match[1]}`;
   }
-  
+
   return null;
 }
 
-const ANKR_MULTICHAIN_ENDPOINT = getAnkrMultichainEndpoint();
-const FLARE_BLOCKCHAIN_ID = 'flare';
+const ANKR_ENDPOINT = deriveAnkrEndpoint();
 
-// Track if ANKR is available (disabled after first 403/401)
-let ankrDisabled = false;
-let ankrDisabledLoggedOnce = false;
+// ============================================================
+// Symbol Normalization
+// ============================================================
 
-// Map FTSO symbols to token addresses for ANKR lookups
-const FTSO_SYMBOL_TO_ADDRESS: Record<string, string | undefined> = {
-  'FLR': undefined, // Native token - no address needed
-  'WFLR': '0x1D80c49BbBCd1C0911346656B529DF9E5c2F783d',
-  'SFLR': '0x12e605bc104e93B45e1aD99F9e555f659051c2BB',
-  'XRP': '0xAd552A648C74D49E10027AB8a618A3ad4901c5bE', // FXRP
-  'FXRP': '0xAd552A648C74D49E10027AB8a618A3ad4901c5bE',
-  'STXRP': '0x4c18ff3c89632c3dd62e796c0afa5c07c4c1b2b3', // stXRP (verified from Enosys v3 pool)
-};
-
-/**
- * Normalize symbol: uppercase A-Z0-9 only
- * Handles special characters: ₮→T, ₀→0, .→(removed)
- */
 export function canonicalSymbol(symbol: string): string {
   return symbol
     .toUpperCase()
@@ -92,182 +100,101 @@ export function canonicalSymbol(symbol: string): string {
 }
 
 // ============================================================
-// FTSO Price Fetching (via ANKR Advanced API)
+// FTSO Price Fetching (via ANKR)
 // ============================================================
 
-/**
- * Fetch price from ANKR Advanced API (FTSO-equivalent for Flare tokens)
- * 
- * Uses ANKR's ankr_getTokenPrice method which provides real-time
- * prices for Flare Network tokens.
- * 
- * IMPORTANT: ANKR Advanced API requires an API key in the URL.
- * If ANKR_ADVANCED_API_URL is not set or returns 403/401, ANKR is disabled
- * and CoinGecko fallback is used.
- * 
- * @param config - Token pricing config with ftsoSymbol
- * @returns USD price or null if unavailable
- */
 async function fetchFtsoPrice(config: TokenPricingConfig): Promise<number | null> {
-  if (!config.ftsoSymbol) {
-    return null;
-  }
-  
-  // If ANKR is not configured or disabled, skip entirely
-  if (!ANKR_MULTICHAIN_ENDPOINT || ankrDisabled) {
-    if (!ankrDisabledLoggedOnce) {
-      const reason = !ANKR_MULTICHAIN_ENDPOINT 
-        ? 'ANKR_ADVANCED_API_URL not set' 
-        : 'ANKR disabled due to auth error';
-      console.log(`[PRICE] ${reason}; using CoinGecko as primary for FTSO tokens`);
-      ankrDisabledLoggedOnce = true;
+  if (!config.ftsoSymbol) return null;
+
+  // Check if ANKR is available
+  if (!ANKR_ENDPOINT || ankrDisabled) {
+    if (!loggedAnkrStatus) {
+      const reason = !ANKR_ENDPOINT ? 'ANKR endpoint not configured' : 'ANKR disabled (auth error)';
+      console.log(`[PRICE] ${reason}; using CoinGecko for FTSO tokens`);
+      loggedAnkrStatus = true;
     }
     return null;
   }
-  
-  // Resolve token address from FTSO symbol
+
   const tokenAddress = config.address || FTSO_SYMBOL_TO_ADDRESS[config.ftsoSymbol];
-  
+
   try {
-    const request = {
-      jsonrpc: '2.0' as const,
-      method: 'ankr_getTokenPrice',
-      params: {
-        blockchain: FLARE_BLOCKCHAIN_ID,
-        contractAddress: tokenAddress, // undefined for native FLR
-      },
-      id: 1,
-    };
-    
-    const response = await fetch(ANKR_MULTICHAIN_ENDPOINT, {
+    const response = await fetch(ANKR_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'ankr_getTokenPrice',
+        params: { blockchain: FLARE_BLOCKCHAIN_ID, contractAddress: tokenAddress },
+        id: 1,
+      }),
     });
-    
+
     if (!response.ok) {
-      // 401/403 = auth error → disable ANKR entirely
       if (response.status === 401 || response.status === 403) {
         ankrDisabled = true;
-        console.warn(`[PRICE] ANKR auth error (${response.status}); disabling ANKR and using CoinGecko fallback`);
-        return null;
-      }
-      if (!warnedTokens.has(`ftso-error:${config.canonicalSymbol}`)) {
-        console.warn(`[PRICE] ANKR API error for ${config.canonicalSymbol}: ${response.status}`);
-        warnedTokens.add(`ftso-error:${config.canonicalSymbol}`);
+        console.warn(`[PRICE] ANKR auth error (${response.status}); disabling ANKR`);
+      } else if (!warnedTokens.has(`ankr:${config.canonicalSymbol}`)) {
+        console.warn(`[PRICE] ANKR error for ${config.canonicalSymbol}: ${response.status}`);
+        warnedTokens.add(`ankr:${config.canonicalSymbol}`);
       }
       return null;
     }
-    
-    const data = await response.json() as {
-      jsonrpc: string;
-      id: number;
+
+    const data = (await response.json()) as {
       result?: { usdPrice: string };
       error?: { message: string };
     };
-    
-    if (data.error) {
-      if (!warnedTokens.has(`ftso-error:${config.canonicalSymbol}`)) {
-        console.warn(`[PRICE] ANKR error for ${config.canonicalSymbol}: ${data.error.message}`);
-        warnedTokens.add(`ftso-error:${config.canonicalSymbol}`);
-      }
+
+    if (data.error || !data.result?.usdPrice) {
       return null;
     }
-    
-    if (!data.result?.usdPrice) {
-      if (!warnedTokens.has(`ftso-nodata:${config.canonicalSymbol}`)) {
-        console.warn(`[PRICE] No ANKR price data for ${config.canonicalSymbol}`);
-        warnedTokens.add(`ftso-nodata:${config.canonicalSymbol}`);
-      }
-      return null;
-    }
-    
+
     const price = parseFloat(data.result.usdPrice);
-    
-    if (!Number.isFinite(price) || price <= 0) {
-      if (!warnedTokens.has(`ftso-invalid:${config.canonicalSymbol}`)) {
-        console.warn(`[PRICE] Invalid ANKR price for ${config.canonicalSymbol}: ${data.result.usdPrice}`);
-        warnedTokens.add(`ftso-invalid:${config.canonicalSymbol}`);
-      }
-      return null;
-    }
-    
-    return price;
-  } catch (error) {
-    if (!warnedTokens.has(`ftso-exception:${config.canonicalSymbol}`)) {
-      console.error(`[PRICE] ANKR fetch error for ${config.canonicalSymbol}:`, error);
-      warnedTokens.add(`ftso-exception:${config.canonicalSymbol}`);
-    }
+    return Number.isFinite(price) && price > 0 ? price : null;
+  } catch {
     return null;
   }
 }
 
 // ============================================================
-// CoinGecko Price Fetching (with rate-limit guard)
+// CoinGecko Price Fetching
 // ============================================================
 
-/**
- * Fetch price from CoinGecko API
- * 
- * Requires COINGECKO_API_KEY env var for reliable operation.
- * Includes rate-limit guard: after first 429, skip all further CG calls.
- */
 async function fetchCoinGeckoPrice(coingeckoId: string): Promise<number | null> {
-  // Check rate-limit guard
   if (coinGeckoRateLimited) {
-    if (!cgRateLimitLoggedOnce) {
-      console.warn('[PRICE] CoinGecko rate-limited; skipping all CG calls for this run');
-      cgRateLimitLoggedOnce = true;
+    if (!loggedCgRateLimit) {
+      console.warn('[PRICE] CoinGecko rate-limited; skipping CG calls for this run');
+      loggedCgRateLimit = true;
     }
     return null;
   }
-  
+
   const apiKey = process.env.COINGECKO_API_KEY;
-  
-  // Log API key status once
-  if (!cgApiKeyLoggedOnce) {
-    if (apiKey) {
-      console.log('[PRICE] CoinGecko API key configured (using Pro API)');
-    } else {
-      console.warn('[PRICE] COINGECKO_API_KEY not set; using free tier (rate limits apply)');
-    }
-    cgApiKeyLoggedOnce = true;
+
+  if (!loggedCgApiKeyStatus) {
+    console.log(apiKey ? '[PRICE] CoinGecko Pro API enabled' : '[PRICE] CoinGecko free tier (rate limits apply)');
+    loggedCgApiKeyStatus = true;
   }
-  
+
   try {
-    const baseUrl = apiKey 
-      ? 'https://pro-api.coingecko.com/api/v3'
-      : 'https://api.coingecko.com/api/v3';
-    
-    const url = `${baseUrl}/simple/price?ids=${coingeckoId}&vs_currencies=usd`;
-    const headers: Record<string, string> = apiKey 
-      ? { 'x-cg-pro-api-key': apiKey } 
-      : {};
-    
-    const response = await fetch(url, { headers });
-    
+    const baseUrl = apiKey ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3';
+    const headers: Record<string, string> = apiKey ? { 'x-cg-pro-api-key': apiKey } : {};
+
+    const response = await fetch(`${baseUrl}/simple/price?ids=${coingeckoId}&vs_currencies=usd`, { headers });
+
     if (!response.ok) {
       if (response.status === 429) {
-        // Rate limited - set guard and stop all CG calls
         coinGeckoRateLimited = true;
-        console.warn(`[PRICE] CoinGecko rate limit (429) hit; skipping further CG calls for this run`);
-        return null;
+        console.warn('[PRICE] CoinGecko rate limit (429); disabling CG for this run');
       }
-      console.error(`[PRICE] CoinGecko API error: ${response.status} ${response.statusText}`);
       return null;
     }
-    
+
     const data = await response.json();
     const price = data[coingeckoId]?.usd;
-    
-    if (typeof price !== 'number') {
-      console.warn(`[PRICE] Invalid price data from CoinGecko for ${coingeckoId}`);
-      return null;
-    }
-    
-    return price;
-  } catch (error) {
-    console.error(`[PRICE] Error fetching CoinGecko price for ${coingeckoId}:`, error);
+    return typeof price === 'number' ? price : null;
+  } catch {
     return null;
   }
 }
@@ -277,137 +204,99 @@ async function fetchCoinGeckoPrice(coingeckoId: string): Promise<number | null> 
 // ============================================================
 
 /**
- * Get USD price for a token based on its SSoT configuration
- * 
- * Priority:
- * 1. FTSO/ANKR (for source='ftso' tokens)
- * 2. CoinGecko (as fallback for FTSO tokens, or primary for source='coingecko')
- * 3. FIXED (for stablecoins)
- * 4. Returns null for UNPRICED or unknown tokens
- * 
+ * Get USD price for a token based on SSoT configuration
+ *
  * @param symbol - Token symbol (e.g., "WFLR", "USDT0", "FXRP")
- * @param address - Optional contract address (for future use)
+ * @param address - Optional contract address
  * @returns USD price or null if UNPRICED/unavailable
  */
-export async function getTokenPriceUsd(
-  symbol: string,
-  address?: string
-): Promise<number | null> {
+export async function getTokenPriceUsd(symbol: string, address?: string): Promise<number | null> {
   const canonical = canonicalSymbol(symbol);
-  
-  // Check cache first
   const cacheKey = `price:${canonical}`;
+
+  // Check cache
   const cached = priceCache.get<number>(cacheKey);
-  if (cached !== undefined) {
-    return cached;
-  }
-  
-  // Get pricing config from SSoT
+  if (cached !== undefined) return cached;
+
+  // Get SSoT config
   const config = getTokenPricingConfig(symbol);
-  
   if (!config) {
-    // Unknown token - warn once and return null
     if (!warnedTokens.has(canonical)) {
-      console.warn(`[PRICE] Unknown token ${canonical}: no pricing config; treating as UNPRICED`);
+      console.warn(`[PRICE] ${canonical}: unknown token; treating as UNPRICED`);
       warnedTokens.add(canonical);
     }
     return null;
   }
-  
+
   let price: number | null = null;
-  let source: string = 'unknown';
-  
-  // Handle each pricing source type
+  let source = 'unknown';
+
   switch (config.source) {
     case 'ftso':
-      // FTSO/ANKR-first for Flare-native tokens
       price = await fetchFtsoPrice(config);
       if (price !== null) {
         source = 'ftso';
-        break;
-      }
-      
-      // Fallback to CoinGecko if configured
-      if (config.coingeckoFallback && config.coingeckoId) {
+      } else if (config.coingeckoFallback && config.coingeckoId) {
         price = await fetchCoinGeckoPrice(config.coingeckoId);
-        if (price !== null) {
-          source = 'coingecko-fallback';
-        }
+        if (price !== null) source = 'coingecko-fallback';
       }
       break;
-      
+
+    case 'coingecko':
+      if (config.coingeckoId) {
+        price = await fetchCoinGeckoPrice(config.coingeckoId);
+        if (price !== null) source = 'coingecko';
+      }
+      break;
+
     case 'fixed':
       price = config.fixedUsdValue ?? null;
-      if (price !== null) {
-        source = 'fixed';
-      }
+      if (price !== null) source = 'fixed';
       break;
-      
-    case 'coingecko':
-      if (!config.coingeckoId) {
-        if (!warnedTokens.has(`cg-missing:${canonical}`)) {
-          console.warn(`[PRICE] ${canonical} configured as 'coingecko' but missing coingeckoId`);
-          warnedTokens.add(`cg-missing:${canonical}`);
-        }
-        break;
-      }
-      price = await fetchCoinGeckoPrice(config.coingeckoId);
-      if (price !== null) {
-        source = 'coingecko';
-      }
-      break;
-      
+
     case 'unpriced':
-      // Explicitly UNPRICED - warn once
       if (!warnedTokens.has(canonical)) {
-        console.warn(`[PRICE] ${canonical}: configured as UNPRICED (no reliable USD source)`);
+        console.warn(`[PRICE] ${canonical}: configured as UNPRICED`);
         warnedTokens.add(canonical);
       }
       break;
   }
-  
-  // Log successful price fetch
+
   if (price !== null) {
     console.log(`[PRICE] ${canonical}: $${price.toFixed(4)} (${source})`);
     priceCache.set(cacheKey, price);
-  } else {
-    // Cache null sentinel for 60 seconds to avoid repeated lookups
-    priceCache.set(`unpriced:${canonical}`, true, 60);
   }
-  
+
   return price;
 }
 
 /**
- * Fetch USD prices for multiple tokens in a single batch call
- * More efficient than calling getTokenPriceUsd() multiple times
- * 
- * Note: FTSO tokens are fetched individually (ANKR doesn't support batch),
- * then CG tokens are batched together.
- * 
+ * Batch fetch USD prices for multiple tokens
+ *
+ * More efficient than individual calls: batches CoinGecko requests.
+ *
  * @param symbols - Array of token symbols
- * @returns Record of canonical symbol → USD price (excludes UNPRICED tokens)
+ * @returns Record of canonical symbol → USD price
  */
 export async function getTokenPricesBatch(symbols: string[]): Promise<Record<string, number>> {
   const result: Record<string, number> = {};
-  const ftsoConfigs: TokenPricingConfig[] = [];
-  const uncachedCoinGeckoIds: Map<string, string> = new Map(); // canonical → coingeckoId
-  
+  const ftsoQueue: TokenPricingConfig[] = [];
+  const cgQueue = new Map<string, string>(); // canonical → coingeckoId
+
   for (const symbol of symbols) {
     const canonical = canonicalSymbol(symbol);
     const cacheKey = `price:${canonical}`;
-    
-    // Check cache first
+
+    // Check cache
     const cached = priceCache.get<number>(cacheKey);
     if (cached !== undefined) {
       result[canonical] = cached;
       continue;
     }
-    
-    // Get pricing config
+
     const config = getTokenPricingConfig(symbol);
     if (!config) continue;
-    
+
     switch (config.source) {
       case 'fixed':
         if (config.fixedUsdValue !== undefined) {
@@ -415,184 +304,139 @@ export async function getTokenPricesBatch(symbols: string[]): Promise<Record<str
           priceCache.set(cacheKey, config.fixedUsdValue);
         }
         break;
-        
+
       case 'ftso':
-        // Queue FTSO tokens for individual fetch
-        ftsoConfigs.push(config);
+        ftsoQueue.push(config);
         break;
-        
+
       case 'coingecko':
         if (config.coingeckoId) {
-          uncachedCoinGeckoIds.set(canonical, config.coingeckoId);
+          cgQueue.set(canonical, config.coingeckoId);
         }
         break;
-        
-      // 'unpriced' is skipped
     }
   }
-  
-  // Fetch FTSO prices individually (ANKR doesn't support batch)
-  for (const config of ftsoConfigs) {
+
+  // Fetch FTSO prices (no batch support)
+  for (const config of ftsoQueue) {
     const price = await fetchFtsoPrice(config);
     if (price !== null) {
       result[config.canonicalSymbol] = price;
       priceCache.set(`price:${config.canonicalSymbol}`, price);
     } else if (config.coingeckoFallback && config.coingeckoId) {
-      // Add to CG batch for fallback
-      uncachedCoinGeckoIds.set(config.canonicalSymbol, config.coingeckoId);
+      cgQueue.set(config.canonicalSymbol, config.coingeckoId);
     }
   }
-  
-  // Batch fetch from CoinGecko (with rate-limit guard)
-  if (uncachedCoinGeckoIds.size > 0 && !coinGeckoRateLimited) {
+
+  // Batch fetch from CoinGecko
+  if (cgQueue.size > 0 && !coinGeckoRateLimited) {
     try {
       const apiKey = process.env.COINGECKO_API_KEY;
-      const baseUrl = apiKey 
-        ? 'https://pro-api.coingecko.com/api/v3'
-        : 'https://api.coingecko.com/api/v3';
-      
-      const coingeckoIds = Array.from(new Set(uncachedCoinGeckoIds.values()));
-      const idsParam = coingeckoIds.join(',');
-      const url = `${baseUrl}/simple/price?ids=${idsParam}&vs_currencies=usd`;
-      const headers: Record<string, string> = apiKey 
-        ? { 'x-cg-pro-api-key': apiKey } 
-        : {};
-      
-      const response = await fetch(url, { headers });
-      
+      const baseUrl = apiKey ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3';
+      const headers: Record<string, string> = apiKey ? { 'x-cg-pro-api-key': apiKey } : {};
+
+      const ids = [...new Set(cgQueue.values())].join(',');
+      const response = await fetch(`${baseUrl}/simple/price?ids=${ids}&vs_currencies=usd`, { headers });
+
       if (response.ok) {
         const data = await response.json();
-        
-        for (const [canonical, coingeckoId] of uncachedCoinGeckoIds.entries()) {
+        for (const [canonical, coingeckoId] of cgQueue) {
           const price = data[coingeckoId]?.usd;
           if (typeof price === 'number') {
             result[canonical] = price;
             priceCache.set(`price:${canonical}`, price);
           }
         }
-        
-        console.log(`[PRICE] Batch fetched ${uncachedCoinGeckoIds.size} prices from CoinGecko`);
+        console.log(`[PRICE] Batch: ${cgQueue.size} tokens from CoinGecko`);
       } else if (response.status === 429) {
         coinGeckoRateLimited = true;
-        console.warn('[PRICE] CoinGecko rate limit (429) hit on batch request; skipping further CG calls');
+        console.warn('[PRICE] CoinGecko rate limit (429) on batch');
       }
-    } catch (error) {
-      console.error('[PRICE] Error fetching batch prices:', error);
+    } catch {
+      // Batch failed silently
     }
   }
-  
+
   return result;
 }
 
-export type PriceSource = 'ftso' | 'coingecko' | 'coingecko-fallback' | 'fixed' | 'unpriced';
-
-export interface PriceResult {
-  price: number | null;
-  source: PriceSource;
-  isReliable: boolean;
-}
-
 /**
- * Get token price with explicit source information
- * 
- * IMPORTANT: No pool-ratio fallback. Returns UNPRICED if no reliable source.
- * 
- * @param symbol - Token symbol
- * @param _poolPriceRatio - DEPRECATED: ignored (kept for API compatibility)
- * @param address - Optional contract address
- * @returns Price result with source and reliability flag
+ * Legacy compatibility wrapper
+ *
+ * @deprecated Use getTokenPriceUsd() directly
  */
 export async function getTokenPriceWithFallback(
   symbol: string,
-  _poolPriceRatio: number = 1.0, // Deprecated parameter, ignored
-  address?: string
+  _poolPriceRatio = 1.0,
+  address?: string,
 ): Promise<{ price: number; source: 'coingecko' | 'stablecoin' | 'pool_ratio' | 'unknown' }> {
-  const canonical = canonicalSymbol(symbol);
   const config = getTokenPricingConfig(symbol);
-  
-  // Try to get price from SSoT
   const price = await getTokenPriceUsd(symbol, address);
-  
+
   if (price !== null) {
-    // Determine source for compatibility with existing callers
-    // Map internal sources to legacy source names
-    let legacySource: 'coingecko' | 'stablecoin' = 'coingecko';
-    if (config?.source === 'fixed') {
-      legacySource = 'stablecoin';
-    }
+    const legacySource = config?.source === 'fixed' ? 'stablecoin' : 'coingecko';
     return { price, source: legacySource };
   }
-  
-  // No reliable price - return as UNKNOWN (pools will be marked as unpriced)
-  // Do NOT fall back to pool_ratio
-  if (!warnedTokens.has(`fallback:${canonical}`)) {
-    console.warn(`[PRICE] ${canonical}: no reliable price; marking as UNPRICED`);
-    warnedTokens.add(`fallback:${canonical}`);
-  }
-  
-  // Return price=0 with source='unknown' so UniverseOverview knows to mark pool as unpriced
+
   return { price: 0, source: 'unknown' };
 }
 
-/**
- * Clear the price cache and reset rate-limit guards
- */
+// ============================================================
+// Cache Management
+// ============================================================
+
 export function clearPriceCache(): void {
   priceCache.flushAll();
   warnedTokens.clear();
   coinGeckoRateLimited = false;
-  cgRateLimitLoggedOnce = false;
-  cgApiKeyLoggedOnce = false;
   ankrDisabled = false;
-  ankrDisabledLoggedOnce = false;
-  console.log('[PRICE] Cache cleared, rate-limit guards reset');
+  loggedAnkrStatus = false;
+  loggedCgApiKeyStatus = false;
+  loggedCgRateLimit = false;
+  console.log('[PRICE] Cache cleared, guards reset');
 }
 
-/**
- * Get cache statistics
- */
-export function getCacheStats(): { keys: number; hits: number; misses: number; cgRateLimited: boolean; ankrDisabled: boolean } {
+export function getCacheStats(): {
+  keys: number;
+  hits: number;
+  misses: number;
+  cgRateLimited: boolean;
+  ankrDisabled: boolean;
+} {
   const stats = priceCache.getStats();
   return {
     keys: priceCache.keys().length,
     hits: stats.hits,
     misses: stats.misses,
     cgRateLimited: coinGeckoRateLimited,
-    ankrDisabled: ankrDisabled,
+    ankrDisabled,
   };
 }
 
-/**
- * Get pricing configuration for debugging
- */
-export function getPricingConfig(symbol: string): TokenPricingConfig | null {
-  return getTokenPricingConfig(symbol);
-}
-
-/**
- * List all configured tokens and their pricing sources
- */
-export function listPricingConfig(): Array<{ symbol: string; source: string; ftsoSymbol?: string; coingeckoId?: string }> {
-  return Object.values(TOKEN_PRICING_CONFIG).map(config => ({
-    symbol: config.canonicalSymbol,
-    source: config.source,
-    ftsoSymbol: config.ftsoSymbol,
-    coingeckoId: config.coingeckoId,
-  }));
-}
-
-/**
- * Check if CoinGecko is currently rate-limited
- */
 export function isCoinGeckoRateLimited(): boolean {
   return coinGeckoRateLimited;
 }
 
-/**
- * Reset CoinGecko rate-limit guard (for testing or after cooldown)
- */
 export function resetCoinGeckoRateLimit(): void {
   coinGeckoRateLimited = false;
-  cgRateLimitLoggedOnce = false;
-  console.log('[PRICE] CoinGecko rate-limit guard reset');
+  loggedCgRateLimit = false;
+  console.log('[PRICE] CoinGecko rate-limit reset');
+}
+
+export function getPricingConfig(symbol: string): TokenPricingConfig | null {
+  return getTokenPricingConfig(symbol);
+}
+
+export function listPricingConfig(): Array<{
+  symbol: string;
+  source: string;
+  ftsoSymbol?: string;
+  coingeckoId?: string;
+}> {
+  return Object.values(TOKEN_PRICING_CONFIG).map((c) => ({
+    symbol: c.canonicalSymbol,
+    source: c.source,
+    ftsoSymbol: c.ftsoSymbol,
+    coingeckoId: c.coingeckoId,
+  }));
 }

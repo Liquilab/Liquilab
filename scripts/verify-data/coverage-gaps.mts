@@ -2,45 +2,54 @@
 
 /**
  * Coverage Gaps Diagnostic (W49 vs W3)
- * 
+ *
  * Shows breakdown: Raw → State → Priced Universe
  * Identifies where data loss occurs in the pipeline.
- * 
- * W3 Reference (Enosys + SparkDEX v3 on Flare, 2025-11-16):
- *   - TVL: $58.9M
- *   - Positions: 74,857
- *   - Wallets: 8,594
- * 
+ *
  * Usage: npm run verify:data:coverage-gaps
+ *
+ * @module scripts/verify-data/coverage-gaps
  */
 
 import { config } from 'dotenv';
 import { resolve } from 'path';
 
-// Load .env.local first, then .env as fallback
+// Load environment
 config({ path: resolve(process.cwd(), '.env.local') });
 config({ path: resolve(process.cwd(), '.env') });
+
 import { PrismaClient } from '@prisma/client';
-import { getUniverseOverview } from '../../src/lib/analytics/db';
+import { getUniverseOverview, type UniverseOverview } from '../../src/lib/analytics/db';
 
-const prisma = new PrismaClient();
+// ============================================================
+// W3 Reference Constants
+// ============================================================
 
-// W3 Cross-DEX reference constants
-const W3_POSITIONS = 74_857;
-const W3_WALLETS = 8_594;
-const W3_TVL_USD = 58_900_000;
+const W3_REFERENCE = {
+  tvlUsd: 58_900_000,
+  pools: 238,
+  positions: 74_857,
+  wallets: 8_594,
+} as const;
 
-// NFPM addresses for W3 scope
-const NFPM_ADDRESSES = [
-  '0xd9770b1c7a6ccd33c75b5bcb1c0078f46be46657', // Enosys NFPM
-  '0xee5ff5bc5f852764b5584d92a4d592a53dc527da', // SparkDEX NFPM
-];
+// ============================================================
+// Contract Addresses (W3 scope)
+// ============================================================
 
-// Factory addresses for W3 scope (from PROJECT_STATE.md)
-const FACTORY_ADDRESSES = [
-  '0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de', // Enosys V3 Factory
-  '0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652', // SparkDEX V3 Factory
-];
+const CONTRACTS = {
+  nfpms: [
+    '0xd9770b1c7a6ccd33c75b5bcb1c0078f46be46657', // Enosys
+    '0xee5ff5bc5f852764b5584d92a4d592a53dc527da', // SparkDEX
+  ],
+  factories: [
+    '0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de', // Enosys
+    '0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652', // SparkDEX
+  ],
+} as const;
+
+// ============================================================
+// Types
+// ============================================================
 
 interface RawStats {
   positionEvents: number;
@@ -57,57 +66,88 @@ interface StateStats {
   byDex: Array<{ dex: string; positions: number }>;
 }
 
+interface CountResult {
+  count: bigint;
+}
+
+interface ExistsResult {
+  exists: boolean;
+}
+
+interface DexResult {
+  dex: string;
+  positions: bigint;
+}
+
+// ============================================================
+// Formatting Helpers
+// ============================================================
+
+function formatPct(value: number, reference: number): string {
+  if (reference === 0) return 'N/A';
+  return `${((value / reference) * 100).toFixed(1)}%`;
+}
+
+function formatUsd(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
+  return `$${value.toFixed(0)}`;
+}
+
+function padLeft(str: string, len: number): string {
+  return str.padStart(len);
+}
+
+// ============================================================
+// Data Fetching
+// ============================================================
+
+const prisma = new PrismaClient();
+
 async function getRawStats(): Promise<RawStats> {
-  // PositionEvent counts
-  const eventCountResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(*)::bigint as count
-    FROM "PositionEvent"
-    WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
-  `;
-  const positionEvents = Number(eventCountResult[0]?.count ?? 0);
+  const [nfpm0, nfpm1] = CONTRACTS.nfpms;
 
-  const tokenIdResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(DISTINCT "tokenId")::bigint as count
-    FROM "PositionEvent"
-    WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
+  const eventCount = await prisma.$queryRaw<CountResult[]>`
+    SELECT COUNT(*)::bigint as count FROM "PositionEvent"
+    WHERE "nfpmAddress" IN (${nfpm0}, ${nfpm1})
   `;
-  const distinctTokenIds = Number(tokenIdResult[0]?.count ?? 0);
 
-  const poolResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(DISTINCT "pool")::bigint as count
-    FROM "PositionEvent"
-    WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
+  const tokenIdCount = await prisma.$queryRaw<CountResult[]>`
+    SELECT COUNT(DISTINCT "tokenId")::bigint as count FROM "PositionEvent"
+    WHERE "nfpmAddress" IN (${nfpm0}, ${nfpm1})
   `;
-  const distinctPools = Number(poolResult[0]?.count ?? 0);
 
-  // PositionTransfer counts
-  const transferCountResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(*)::bigint as count
-    FROM "PositionTransfer"
-    WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
+  const poolCount = await prisma.$queryRaw<CountResult[]>`
+    SELECT COUNT(DISTINCT "pool")::bigint as count FROM "PositionEvent"
+    WHERE "nfpmAddress" IN (${nfpm0}, ${nfpm1})
   `;
-  const positionTransfers = Number(transferCountResult[0]?.count ?? 0);
 
-  const walletResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(DISTINCT "to")::bigint as count
-    FROM "PositionTransfer"
-    WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
+  const transferCount = await prisma.$queryRaw<CountResult[]>`
+    SELECT COUNT(*)::bigint as count FROM "PositionTransfer"
+    WHERE "nfpmAddress" IN (${nfpm0}, ${nfpm1})
+  `;
+
+  const walletCount = await prisma.$queryRaw<CountResult[]>`
+    SELECT COUNT(DISTINCT "to")::bigint as count FROM "PositionTransfer"
+    WHERE "nfpmAddress" IN (${nfpm0}, ${nfpm1})
       AND "to" != '0x0000000000000000000000000000000000000000'
   `;
-  const distinctWallets = Number(walletResult[0]?.count ?? 0);
 
   return {
-    positionEvents,
-    distinctTokenIds,
-    distinctPools,
-    positionTransfers,
-    distinctWallets,
+    positionEvents: Number(eventCount[0]?.count ?? 0),
+    distinctTokenIds: Number(tokenIdCount[0]?.count ?? 0),
+    distinctPools: Number(poolCount[0]?.count ?? 0),
+    positionTransfers: Number(transferCount[0]?.count ?? 0),
+    distinctWallets: Number(walletCount[0]?.count ?? 0),
   };
 }
 
 async function getStateStats(): Promise<StateStats> {
-  // Check if MV exists
-  const mvExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+  const [nfpm0, nfpm1] = CONTRACTS.nfpms;
+  const [factory0, factory1] = CONTRACTS.factories;
+
+  // Check MV existence
+  const mvExists = await prisma.$queryRaw<ExistsResult[]>`
     SELECT EXISTS (
       SELECT 1 FROM pg_matviews WHERE matviewname = 'mv_position_lifetime_v1'
     ) as exists
@@ -117,132 +157,127 @@ async function getStateStats(): Promise<StateStats> {
   let byDex: Array<{ dex: string; positions: number }> = [];
 
   if (mvExists[0]?.exists) {
-    const posResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    const posResult = await prisma.$queryRaw<CountResult[]>`
       SELECT COUNT(*)::bigint as count FROM "mv_position_lifetime_v1"
     `;
     positions = Number(posResult[0]?.count ?? 0);
 
-    const dexResult = await prisma.$queryRaw<Array<{ dex: string; positions: bigint }>>`
+    const dexResult = await prisma.$queryRaw<DexResult[]>`
       SELECT dex, COUNT(*)::bigint as positions
       FROM "mv_position_lifetime_v1"
-      GROUP BY dex
-      ORDER BY dex
+      GROUP BY dex ORDER BY dex
     `;
-    byDex = dexResult.map(row => ({
+    byDex = dexResult.map((row) => ({
       dex: row.dex,
       positions: Number(row.positions),
     }));
   }
 
-  // Wallets from PositionTransfer
-  const walletResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(DISTINCT "to")::bigint as count
-    FROM "PositionTransfer"
-    WHERE "nfpmAddress" IN (${NFPM_ADDRESSES[0]}, ${NFPM_ADDRESSES[1]})
+  const walletResult = await prisma.$queryRaw<CountResult[]>`
+    SELECT COUNT(DISTINCT "to")::bigint as count FROM "PositionTransfer"
+    WHERE "nfpmAddress" IN (${nfpm0}, ${nfpm1})
       AND "to" != '0x0000000000000000000000000000000000000000'
   `;
-  const wallets = Number(walletResult[0]?.count ?? 0);
 
-  // Pools from Pool table
-  const poolResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(*)::bigint as count
-    FROM "Pool"
-    WHERE LOWER(factory) IN (${FACTORY_ADDRESSES[0].toLowerCase()}, ${FACTORY_ADDRESSES[1].toLowerCase()})
+  const poolResult = await prisma.$queryRaw<CountResult[]>`
+    SELECT COUNT(*)::bigint as count FROM "Pool"
+    WHERE LOWER(factory) IN (${factory0.toLowerCase()}, ${factory1.toLowerCase()})
   `;
-  const pools = Number(poolResult[0]?.count ?? 0);
 
-  return { positions, wallets, pools, byDex };
+  return {
+    positions,
+    wallets: Number(walletResult[0]?.count ?? 0),
+    pools: Number(poolResult[0]?.count ?? 0),
+    byDex,
+  };
 }
 
-function formatPct(value: number, reference: number): string {
-  if (reference === 0) return 'N/A';
-  const pct = (value / reference) * 100;
-  return `${pct.toFixed(1)}%`;
-}
+// ============================================================
+// Output Functions
+// ============================================================
 
-function formatUsd(value: number): string {
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(2)}M`;
+function printBox(title: string, lines: string[]): void {
+  const width = 57;
+  console.log('┌' + '─'.repeat(width) + '┐');
+  console.log('│ ' + title.padEnd(width - 1) + '│');
+  console.log('├' + '─'.repeat(width) + '┤');
+  for (const line of lines) {
+    console.log('│ ' + line.padEnd(width - 1) + '│');
   }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(1)}K`;
-  }
-  return `$${value.toFixed(0)}`;
+  console.log('└' + '─'.repeat(width) + '┘');
+  console.log();
 }
 
-async function main() {
-  console.log('\n=== Coverage Gaps Diagnostic (W49 vs W3) ===\n');
-  console.log('Pipeline: Raw NFPM → SP2 Canonical State → Priced Universe\n');
+function printRawStats(raw: RawStats): void {
+  const lines = [
+    `PositionEvents:       ${padLeft(raw.positionEvents.toLocaleString(), 15)} events`,
+    `Distinct tokenIds:    ${padLeft(raw.distinctTokenIds.toLocaleString(), 15)} positions`,
+    `Distinct pools:       ${padLeft(raw.distinctPools.toLocaleString(), 15)} pools`,
+    `PositionTransfers:    ${padLeft(raw.positionTransfers.toLocaleString(), 15)} transfers`,
+    `Distinct wallets:     ${padLeft(raw.distinctWallets.toLocaleString(), 15)} wallets`,
+    '',
+    'Coverage vs W3:',
+    `  Positions: ${padLeft(formatPct(raw.distinctTokenIds, W3_REFERENCE.positions), 8)}  (${raw.distinctTokenIds.toLocaleString()} / ${W3_REFERENCE.positions.toLocaleString()})`,
+    `  Wallets:   ${padLeft(formatPct(raw.distinctWallets, W3_REFERENCE.wallets), 8)}  (${raw.distinctWallets.toLocaleString()} / ${W3_REFERENCE.wallets.toLocaleString()})`,
+  ];
+  printBox('1. RAW NFPM (PositionEvent + PositionTransfer)', lines);
+}
 
-  // Raw stats
-  console.log('┌─────────────────────────────────────────────────────────┐');
-  console.log('│ 1. RAW NFPM (PositionEvent + PositionTransfer)          │');
-  console.log('├─────────────────────────────────────────────────────────┤');
-  const raw = await getRawStats();
-  console.log(`│ PositionEvents:       ${String(raw.positionEvents.toLocaleString()).padStart(15)} events           │`);
-  console.log(`│ Distinct tokenIds:    ${String(raw.distinctTokenIds.toLocaleString()).padStart(15)} positions        │`);
-  console.log(`│ Distinct pools:       ${String(raw.distinctPools.toLocaleString()).padStart(15)} pools             │`);
-  console.log(`│ PositionTransfers:    ${String(raw.positionTransfers.toLocaleString()).padStart(15)} transfers        │`);
-  console.log(`│ Distinct wallets:     ${String(raw.distinctWallets.toLocaleString()).padStart(15)} wallets           │`);
-  console.log(`│                                                         │`);
-  console.log(`│ Coverage vs W3:                                         │`);
-  console.log(`│   Positions: ${formatPct(raw.distinctTokenIds, W3_POSITIONS).padStart(8)}  (${raw.distinctTokenIds.toLocaleString()} / ${W3_POSITIONS.toLocaleString()})            │`);
-  console.log(`│   Wallets:   ${formatPct(raw.distinctWallets, W3_WALLETS).padStart(8)}  (${raw.distinctWallets.toLocaleString()} / ${W3_WALLETS.toLocaleString()})              │`);
-  console.log('└─────────────────────────────────────────────────────────┘\n');
+function printStateStats(state: StateStats): void {
+  const lines = [
+    `Positions (MV):       ${padLeft(state.positions.toLocaleString(), 15)} positions`,
+    `Wallets (transfers):  ${padLeft(state.wallets.toLocaleString(), 15)} wallets`,
+    `Pools (Pool table):   ${padLeft(state.pools.toLocaleString(), 15)} pools`,
+  ];
 
-  // State stats
-  console.log('┌─────────────────────────────────────────────────────────┐');
-  console.log('│ 2. SP2 CANONICAL STATE (mv_position_lifetime_v1)        │');
-  console.log('├─────────────────────────────────────────────────────────┤');
-  const state = await getStateStats();
-  console.log(`│ Positions (MV):       ${String(state.positions.toLocaleString()).padStart(15)} positions        │`);
-  console.log(`│ Wallets (transfers):  ${String(state.wallets.toLocaleString()).padStart(15)} wallets           │`);
-  console.log(`│ Pools (Pool table):   ${String(state.pools.toLocaleString()).padStart(15)} pools             │`);
   if (state.byDex.length > 0) {
-    console.log(`│                                                         │`);
-    console.log(`│ By DEX:                                                 │`);
+    lines.push('', 'By DEX:');
     for (const row of state.byDex) {
-      console.log(`│   ${row.dex.padEnd(15)}: ${String(row.positions.toLocaleString()).padStart(10)} positions            │`);
+      lines.push(`  ${row.dex.padEnd(15)}: ${padLeft(row.positions.toLocaleString(), 10)} positions`);
     }
   }
-  console.log(`│                                                         │`);
-  console.log(`│ Coverage vs W3:                                         │`);
-  console.log(`│   Positions: ${formatPct(state.positions, W3_POSITIONS).padStart(8)}  (${state.positions.toLocaleString()} / ${W3_POSITIONS.toLocaleString()})            │`);
-  console.log(`│   Wallets:   ${formatPct(state.wallets, W3_WALLETS).padStart(8)}  (${state.wallets.toLocaleString()} / ${W3_WALLETS.toLocaleString()})              │`);
-  console.log('└─────────────────────────────────────────────────────────┘\n');
 
-  // Priced Universe stats (from UniverseOverview)
-  console.log('┌─────────────────────────────────────────────────────────┐');
-  console.log('│ 3. PRICED UNIVERSE (mv_pool_liquidity + pricing)        │');
-  console.log('├─────────────────────────────────────────────────────────┤');
-  const universe = await getUniverseOverview();
-  console.log(`│ TVL (priced):         ${formatUsd(universe.tvlPricedUsd).padStart(15)}                   │`);
-  console.log(`│ Priced pools:         ${String(universe.pricedPoolsCount.toLocaleString()).padStart(15)} pools             │`);
-  console.log(`│ Unpriced pools:       ${String(universe.unpricedPoolsCount.toLocaleString()).padStart(15)} pools             │`);
-  console.log(`│ Total pools:          ${String(universe.totalPoolsCount.toLocaleString()).padStart(15)} pools             │`);
-  console.log(`│ Active wallets (7d):  ${String(universe.activeWallets7d.toLocaleString()).padStart(15)} wallets           │`);
-  console.log(`│                                                         │`);
-  console.log(`│ Pool pricing breakdown:                                 │`);
-  console.log(`│   Priced vs Total:     ${formatPct(universe.pricedPoolsCount, universe.totalPoolsCount).padStart(8)}                      │`);
-  console.log(`│   Priced vs W3 (238):  ${formatPct(universe.pricedPoolsCount, 238).padStart(8)}                      │`);
-  console.log(`│                                                         │`);
-  console.log(`│ TVL coverage vs W3 ($58.9M):                            │`);
-  console.log(`│   ${formatPct(universe.tvlPricedUsd, W3_TVL_USD).padStart(8)}                                              │`);
+  lines.push(
+    '',
+    'Coverage vs W3:',
+    `  Positions: ${padLeft(formatPct(state.positions, W3_REFERENCE.positions), 8)}  (${state.positions.toLocaleString()} / ${W3_REFERENCE.positions.toLocaleString()})`,
+    `  Wallets:   ${padLeft(formatPct(state.wallets, W3_REFERENCE.wallets), 8)}  (${state.wallets.toLocaleString()} / ${W3_REFERENCE.wallets.toLocaleString()})`,
+  );
+
+  printBox('2. SP2 CANONICAL STATE (mv_position_lifetime_v1)', lines);
+}
+
+function printUniverseStats(universe: UniverseOverview): void {
+  const lines = [
+    `TVL (priced):         ${padLeft(formatUsd(universe.tvlPricedUsd), 15)}`,
+    `Priced pools:         ${padLeft(universe.pricedPoolsCount.toLocaleString(), 15)} pools`,
+    `Unpriced pools:       ${padLeft(universe.unpricedPoolsCount.toLocaleString(), 15)} pools`,
+    `Total pools:          ${padLeft(universe.totalPoolsCount.toLocaleString(), 15)} pools`,
+    `Active wallets (7d):  ${padLeft(universe.activeWallets7d.toLocaleString(), 15)} wallets`,
+    '',
+    'Pool pricing breakdown:',
+    `  Priced vs Total:     ${padLeft(formatPct(universe.pricedPoolsCount, universe.totalPoolsCount), 8)}`,
+    `  Priced vs W3 (238):  ${padLeft(formatPct(universe.pricedPoolsCount, W3_REFERENCE.pools), 8)}`,
+    '',
+    'TVL coverage vs W3 ($58.9M):',
+    `  ${padLeft(formatPct(universe.tvlPricedUsd, W3_REFERENCE.tvlUsd), 8)}`,
+  ];
+
   if (universe.tvlPricedUsd === 0 && universe.pricedPoolsCount > 0) {
-    console.log(`│   (TVL = 0: run db:mvs:refresh:7d to populate)          │`);
+    lines.push('  (TVL = 0: run db:mvs:refresh:7d)');
   }
-  console.log('└─────────────────────────────────────────────────────────┘\n');
 
-  // Gap analysis
+  printBox('3. PRICED UNIVERSE (mv_pool_liquidity + pricing)', lines);
+}
+
+function printGapAnalysis(raw: RawStats, state: StateStats, universe: UniverseOverview): void {
   console.log('=== Gap Analysis ===\n');
-  
+
   const rawToStateGap = raw.distinctTokenIds - state.positions;
-  if (rawToStateGap !== 0) {
-    if (rawToStateGap > 0) {
-      console.log(`⚠️  Raw → State gap: ${rawToStateGap.toLocaleString()} positions lost in MV aggregation`);
-    } else {
-      console.log(`✅ State has ${Math.abs(rawToStateGap).toLocaleString()} more positions than raw (aggregation correct)`);
-    }
+  if (rawToStateGap > 0) {
+    console.log(`⚠️  Raw → State: ${rawToStateGap.toLocaleString()} positions lost in MV aggregation`);
+  } else if (rawToStateGap < 0) {
+    console.log(`✅ State has ${Math.abs(rawToStateGap).toLocaleString()} more positions than raw`);
   } else {
     console.log('✅ Raw → State: No position gap');
   }
@@ -250,24 +285,49 @@ async function main() {
   const poolGap = state.pools - universe.pricedPoolsCount;
   if (poolGap > 0) {
     console.log(`⚠️  ${poolGap.toLocaleString()} pools unpriced (${formatPct(poolGap, state.pools)} of total)`);
-    console.log(`   These pools have tokens not in the pricing universe or without valid prices.`);
   } else if (universe.pricedPoolsCount > 0) {
     console.log('✅ All pools in pricing universe');
   }
 
   if (universe.tvlPricedUsd === 0 && universe.pricedPoolsCount > 0) {
-    console.log(`\n📊 TVL Note: ${universe.pricedPoolsCount} pools are priced, but TVL = 0.`);
-    console.log(`   Run: npm run db:mvs:create && npm run db:mvs:refresh:7d`);
+    console.log(`\n📊 TVL Note: ${universe.pricedPoolsCount} pools priced, but TVL = 0`);
+    console.log('   Run: npm run db:mvs:refresh:7d');
   } else if (universe.tvlPricedUsd > 0) {
-    console.log(`\n✅ TVL computed: ${formatUsd(universe.tvlPricedUsd)} across ${universe.pricedPoolsCount} priced pools`);
+    console.log(`\n✅ TVL: ${formatUsd(universe.tvlPricedUsd)} across ${universe.pricedPoolsCount} priced pools`);
   }
 
   console.log();
 }
 
+// ============================================================
+// Main
+// ============================================================
+
+async function main(): Promise<void> {
+  console.log('\n=== Coverage Gaps Diagnostic (W49 vs W3) ===\n');
+  console.log('Pipeline: Raw NFPM → SP2 State → Priced Universe\n');
+
+  try {
+    const [raw, state, universe] = await Promise.all([
+      getRawStats(),
+      getStateStats(),
+      getUniverseOverview(),
+    ]);
+
+    printRawStats(raw);
+    printStateStats(state);
+    printUniverseStats(universe);
+    printGapAnalysis(raw, state, universe);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[ERROR] ${msg}`);
+    process.exit(1);
+  }
+}
+
 main()
   .catch((error) => {
-    console.error('Error:', error);
+    console.error('[ERROR]', error instanceof Error ? error.message : error);
     process.exit(1);
   })
   .finally(() => {
