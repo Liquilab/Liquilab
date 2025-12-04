@@ -59,6 +59,8 @@
     "verify:indexer:rpc": "tsx scripts/verify-indexer/check-rpc-logs.mts",
     "refresh:mvs": "node scripts/enrich/refresh-views.mjs",
     "fix:checkpoint:update": "tsx scripts/fix/update-checkpoint-to-max.mts",
+    "fix:backfill-pools": "tsx scripts/fix/backfill-missing-pools.mts",
+    "fix:resolve-unknown-pools": "tsx scripts/fix/resolve-unknown-pools.mts",
     "fix:migration:check-nfpm": "tsx scripts/fix/resolve-nfpm-address-migration.mts",
     "fix:migration:check-all": "tsx scripts/fix/check-migration-status.mts",
     "test:cron:mv-refresh": "tsx scripts/verify-cron/mv-refresh-test.mts",

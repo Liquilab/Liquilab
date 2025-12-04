@@ -98,7 +98,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
   'STXRP': {
     symbol: 'stXRP',
     canonicalSymbol: 'STXRP',
-    address: '0xffed33d28ca65e52e927849f456d8e820b324508',
+    address: '0x4c18ff3c89632c3dd62e796c0afa5c07c4c1b2b3', // Correct stXRP token (verified via Enosys v3 pool)
     source: 'ftso',
     ftsoSymbol: 'XRP',
     coingeckoId: 'ripple',
