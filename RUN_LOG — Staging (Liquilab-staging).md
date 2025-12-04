@@ -77,3 +77,4 @@ OK 2025-12-03T08:45 ✅ VERIFIER SCRIPTS AANGEMAAKT:
    DeFiLlama current (2025-12-03): SparkDEX $62.63M + Enosys V3 $4.44M = $67.08M Flare v3 TVL
 NOTE Pool table is leeg (0 pools) - Factory backfill nodig voor Pool.address entries
 NOTE mv_pool_latest_state TVL = $0 - geen pricing data gekoppeld aan pools
+OK 2025-12-04T.. SP2-PRICING closed: data coverage ≥100% vs W3, TVL ≈$59.1M (≈100% vs W3) across 199 priced v3 pools; pricingUniverse/SSoT in place; Active Wallets (7d) computed from mv_wallet_lp_7d. See PROJECT_STATE.md "SP2 – Final State (Data & Pricing)" for complete status snapshot.
