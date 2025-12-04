@@ -57,8 +57,8 @@ async function main() {
   console.log(`  W3:   ${formatUsd(W3_TVL_USD)}`);
   console.log(`  W49:  ${formatUsd(universe.tvlPricedUsd)}`);
   console.log(`  Cov:  ${formatPct(universe.tvlPricedUsd, W3_TVL_USD)}`);
-  if (universe.tvlPricedUsd === 0) {
-    console.log('  Note: TVL = 0 because per-pool amounts are not yet exposed in MVs');
+  if (universe.tvlPricedUsd === 0 && universe.pricedPoolsCount > 0) {
+    console.log('  Note: TVL = 0; run db:mvs:refresh:7d to populate mv_pool_liquidity');
   }
   console.log();
 
@@ -93,14 +93,17 @@ async function main() {
   // Summary
   console.log('=== Summary ===');
   
-  // For coverage, we use priced pools (not total), positions, and wallets
-  // TVL is excluded from average until amounts are available
+  // For coverage, we use TVL, priced pools, positions, and wallets
+  const tvlCov = universe.tvlPricedUsd / W3_TVL_USD;
   const poolCov = universe.pricedPoolsCount / W3_POOLS;
   const posCov = universe.positionsCount / W3_POSITIONS;
   const walletCov = universe.walletsCount / W3_WALLETS;
   
-  // Weighted average (excluding TVL which is 0)
-  const avgCoverage = (poolCov + posCov + walletCov) / 3 * 100;
+  // Weighted average (include TVL if > 0)
+  const metrics = universe.tvlPricedUsd > 0 
+    ? [tvlCov, poolCov, posCov, walletCov]
+    : [poolCov, posCov, walletCov];
+  const avgCoverage = (metrics.reduce((a, b) => a + b, 0) / metrics.length) * 100;
 
   if (avgCoverage >= 95) {
     console.log('✅ Excellent overall coverage (≥95%)');
@@ -111,11 +114,12 @@ async function main() {
   } else {
     console.log('❌ Low coverage (<50%) - backfill or indexing incomplete');
   }
-  console.log(`   Average coverage (pools/positions/wallets): ${avgCoverage.toFixed(1)}%`);
   
-  if (universe.tvlPricedUsd === 0) {
-    console.log('\n📊 TVL Note: Currently 0 because per-pool token amounts are not in MVs.');
-    console.log('   Next step: Create mv_pool_liquidity or fetch amounts via RPC.');
+  if (universe.tvlPricedUsd > 0) {
+    console.log(`   Average coverage (TVL/pools/positions/wallets): ${avgCoverage.toFixed(1)}%`);
+  } else {
+    console.log(`   Average coverage (pools/positions/wallets): ${avgCoverage.toFixed(1)}%`);
+    console.log('\n📊 TVL Note: Run db:mvs:create && db:mvs:refresh:7d to enable TVL computation.');
   }
   console.log();
 }

@@ -31,6 +31,8 @@ const MV_ORDER = [
   'mv_position_range_status.sql', // depends on mv_pool_latest_state
   // Lifetime/analytics MVs
   'mv_position_lifetime_v1.sql',
+  // TVL-related MVs (depends on Pool table)
+  'mv_pool_liquidity.sql',
 ];
 
 async function createMV(sqlFile: string, viewsDir: string): Promise<{ name: string; success: boolean; error?: string }> {
@@ -123,4 +125,3 @@ main()
   .finally(() => {
     prisma.$disconnect();
   });
-

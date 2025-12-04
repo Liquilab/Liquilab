@@ -368,15 +368,21 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
     • Impermanent loss estimator (IL_est) vs hold baseline.  
   - Pool detail view uses: owner concentration, whale entries/exits, collect cadence, RangeBand strategy buckets (Aggressive/Balanced/Conservative), alerts readiness.
 - **Universe/TVL Analytics (SP2-PRICING):**  
-  - **UniverseOverview (`src/lib/analytics/db.ts`):** Central function `getUniverseOverview()` computes pool pricing coverage on-demand:
+  - **UniverseOverview (`src/lib/analytics/db.ts`):** Central function `getUniverseOverview()` computes pool pricing coverage and TVL on-demand:
     - **Pool count:** SSoT is `Pool` table (filtered by factory addresses: Enosys `0x17AA157AC8C54034381b840Cb8f6bf7Fc355f0de`, SparkDEX `0x8A2578d23d4C532cC9A98FaD91C0523f5efDE652`).
-    - **TVL (USD):** Returns 0 until per-pool token amounts are exposed via MVs or RPC. Infrastructure for priced pool classification is in place.
+    - **TVL (USD):** Computed from `mv_pool_liquidity` (per-pool token0/token1 amounts) × token USD prices. Only priced pools contribute to TVL.
     - **Priced vs unpriced pools:** Pools are classified based on `pricingUniverse` flag in `config/token-pricing.config.ts`:
       - **Priced:** Both `token0` and `token1` have `pricingUniverse: true` AND valid USD prices from FTSO/CG/FIXED.
       - **Unpriced:** At least one token has `pricingUniverse: false`, `source: 'unpriced'`, or no price available.
       - Pool-ratio heuristics are **REMOVED**; tokens without explicit pricing config are marked as UNPRICED.
     - **Positions/Wallets:** Uses `mv_position_lifetime_v1` for positions (no enum dependency), `PositionTransfer` for wallets, `mv_wallet_lp_7d` for active wallets (7d). Does NOT filter by `PositionEventType` enum to avoid 22P02 errors.
-  - **Coverage verifiers:** `verify:data:w49-vs-w3` and `verify:data:coverage-gaps` use `getUniverseOverview()` for pool counts, positions, wallets, and pricing coverage. TVL is reported as 0 until a dedicated `mv_pool_liquidity` MV or RPC-based approach is implemented.
+  - **mv_pool_liquidity (`db/views/mv_pool_liquidity.sql`):**
+    - Per-pool token0/token1 amounts, built from `PositionEvent` (sums INCREASE, subtracts DECREASE).
+    - Uses `eventType::text` cast to avoid enum handling issues.
+    - Joined with `Pool` table for token addresses and decimals.
+    - Used by `getUniverseOverview()` to compute TVL.
+    - Created via `npm run db:mvs:create`, refreshed via `npm run db:mvs:refresh:7d` or `/api/enrich/refresh-views`.
+  - **Coverage verifiers:** `verify:data:w49-vs-w3` and `verify:data:coverage-gaps` use `getUniverseOverview()` for TVL, pool counts, positions, wallets, and pricing coverage.
 
 ### 7.2 Pricing SSoT (v3 Flare Tokens)
 

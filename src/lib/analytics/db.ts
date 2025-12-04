@@ -81,30 +81,30 @@ export interface UniverseOverview {
   activeWallets7d: number;
 }
 
-/**
- * Normalize symbol for config lookup
- */
-function canonicalSymbol(symbol: string): string {
-  return symbol
-    .toUpperCase()
-    .replace(/₮/g, 'T')
-    .replace(/₀/g, '0')
-    .replace(/\./g, '')
-    .replace(/[^A-Z0-9]/g, '');
+interface PoolLiquidityRow {
+  pool_address: string;
+  dex: string;
+  token0_address: string;
+  token1_address: string;
+  token0_symbol: string | null;
+  token1_symbol: string | null;
+  token0_decimals: number | null;
+  token1_decimals: number | null;
+  amount0_raw: string; // NUMERIC as string
+  amount1_raw: string; // NUMERIC as string
+  positions_count: bigint;
+  last_event_ts: number;
 }
 
 /**
  * Compute Universe TVL and pool pricing coverage
  * 
- * Uses Pool table + pricing service to:
+ * Uses mv_pool_liquidity + pricing service to:
  * - Classify pools as "priced" (both token0/token1 in pricing universe with valid prices) vs "unpriced"
- * - Count positions from mv_position_lifetime_v1 (no enum dependency)
+ * - Compute TVL (USD) for priced pools
+ * - Count positions from mv_position_lifetime_v1
  * - Count wallets from PositionTransfer
  * - Active wallets from mv_wallet_lp_7d
- * 
- * Note: TVL computation requires per-pool token amounts which are not currently in MVs.
- * TVL will show 0 until a dedicated amounts MV is created or RPC-based approach is implemented.
- * For now, we classify pools as priced/unpriced based on pricing universe membership.
  */
 export async function getUniverseOverview(): Promise<UniverseOverview> {
   if (!hasDatabase()) {
@@ -124,78 +124,135 @@ export async function getUniverseOverview(): Promise<UniverseOverview> {
 
   try {
     // Import pricing config and service
-    const { getTokenPricingConfig, isInPricingUniverse } = await import('../../../config/token-pricing.config');
+    const { isInPricingUniverse } = await import('../../../config/token-pricing.config');
     const { getTokenPriceUsd } = await import('@/services/tokenPriceService');
 
-    // Get pools from Pool table (Enosys + SparkDEX v3)
-    const pools = await prisma.pool.findMany({
-      where: {
-        factory: {
-          in: [ENOSYS_FACTORY.toLowerCase(), SPARKDEX_FACTORY.toLowerCase()],
-        },
-      },
-      select: {
-        address: true,
-        token0: true,
-        token1: true,
-        token0Symbol: true,
-        token1Symbol: true,
-        token0Decimals: true,
-        token1Decimals: true,
-      },
-    });
+    // Check if mv_pool_liquidity exists
+    const mvLiquidityExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_matviews WHERE matviewname = 'mv_pool_liquidity'
+      ) as exists
+    `;
 
-    const totalPoolsCount = pools.length;
-
-    // Classify pools based on pricing universe membership and price availability
+    let tvlPricedUsd = 0;
     let pricedPoolsCount = 0;
     let unpricedPoolsCount = 0;
-    let tvlPricedUsd = 0;
+    let totalPoolsCount = 0;
 
-    for (const pool of pools) {
-      // Check if both tokens are in pricing universe
-      const symbol0 = pool.token0Symbol || '';
-      const symbol1 = pool.token1Symbol || '';
+    if (mvLiquidityExists[0]?.exists) {
+      // Query mv_pool_liquidity for per-pool amounts
+      const liquidityRows = await prisma.$queryRaw<PoolLiquidityRow[]>`
+        SELECT 
+          pool_address,
+          dex,
+          token0_address,
+          token1_address,
+          token0_symbol,
+          token1_symbol,
+          token0_decimals,
+          token1_decimals,
+          amount0_raw::text,
+          amount1_raw::text,
+          positions_count,
+          last_event_ts
+        FROM "mv_pool_liquidity"
+      `;
+
+      totalPoolsCount = liquidityRows.length;
+
+      for (const row of liquidityRows) {
+        const symbol0 = row.token0_symbol || '';
+        const symbol1 = row.token1_symbol || '';
+        const decimals0 = row.token0_decimals ?? 18;
+        const decimals1 = row.token1_decimals ?? 18;
+
+        // Check if both tokens are in pricing universe
+        if (!symbol0 || !symbol1) {
+          unpricedPoolsCount++;
+          continue;
+        }
+
+        const inUniverse0 = isInPricingUniverse(symbol0);
+        const inUniverse1 = isInPricingUniverse(symbol1);
+
+        if (!inUniverse0 || !inUniverse1) {
+          unpricedPoolsCount++;
+          continue;
+        }
+
+        // Get USD prices for both tokens
+        const price0 = await getTokenPriceUsd(symbol0, row.token0_address);
+        const price1 = await getTokenPriceUsd(symbol1, row.token1_address);
+
+        if (price0 === null || price1 === null) {
+          unpricedPoolsCount++;
+          continue;
+        }
+
+        // Pool is priced - compute TVL
+        pricedPoolsCount++;
+
+        // Convert raw amounts to human-readable using decimals
+        const amount0Raw = BigInt(row.amount0_raw || '0');
+        const amount1Raw = BigInt(row.amount1_raw || '0');
+        
+        const amount0 = Number(amount0Raw) / Math.pow(10, decimals0);
+        const amount1 = Number(amount1Raw) / Math.pow(10, decimals1);
+
+        const poolTvl = amount0 * price0 + amount1 * price1;
+        tvlPricedUsd += poolTvl;
+      }
+    } else {
+      // mv_pool_liquidity doesn't exist - fall back to Pool table for counts only
+      console.log('[UniverseOverview] mv_pool_liquidity not found; TVL = 0');
       
-      // A pool is only "priced" if:
-      // 1. Both tokens have symbols
-      // 2. Both tokens are in the pricing universe (pricingUniverse: true)
-      // 3. Both tokens have valid USD prices (not null/unknown)
-      
-      if (!symbol0 || !symbol1) {
-        unpricedPoolsCount++;
-        continue;
+      const pools = await prisma.pool.findMany({
+        where: {
+          factory: {
+            in: [ENOSYS_FACTORY.toLowerCase(), SPARKDEX_FACTORY.toLowerCase()],
+          },
+        },
+        select: {
+          address: true,
+          token0Symbol: true,
+          token1Symbol: true,
+          token0: true,
+          token1: true,
+        },
+      });
+
+      totalPoolsCount = pools.length;
+
+      for (const pool of pools) {
+        const symbol0 = pool.token0Symbol || '';
+        const symbol1 = pool.token1Symbol || '';
+
+        if (!symbol0 || !symbol1) {
+          unpricedPoolsCount++;
+          continue;
+        }
+
+        const inUniverse0 = isInPricingUniverse(symbol0);
+        const inUniverse1 = isInPricingUniverse(symbol1);
+
+        if (!inUniverse0 || !inUniverse1) {
+          unpricedPoolsCount++;
+          continue;
+        }
+
+        const price0 = await getTokenPriceUsd(symbol0, pool.token0);
+        const price1 = await getTokenPriceUsd(symbol1, pool.token1);
+
+        if (price0 === null || price1 === null) {
+          unpricedPoolsCount++;
+        } else {
+          pricedPoolsCount++;
+        }
       }
-
-      const inUniverse0 = isInPricingUniverse(symbol0);
-      const inUniverse1 = isInPricingUniverse(symbol1);
-
-      if (!inUniverse0 || !inUniverse1) {
-        // At least one token not in pricing universe
-        unpricedPoolsCount++;
-        continue;
-      }
-
-      // Both tokens are in pricing universe, try to get prices
-      const price0 = await getTokenPriceUsd(symbol0, pool.token0);
-      const price1 = await getTokenPriceUsd(symbol1, pool.token1);
-
-      if (price0 === null || price1 === null) {
-        // At least one token has no valid price
-        unpricedPoolsCount++;
-        continue;
-      }
-
-      // Pool is priced
-      pricedPoolsCount++;
-
-      // TVL computation would go here if we had pool amounts
-      // For now, TVL remains 0 until we have per-pool liquidity amounts
-      // TODO: Implement TVL computation using on-chain pool.liquidity or dedicated MV
-      // tvlPricedUsd += amount0 * price0 + amount1 * price1;
+      // TVL remains 0 without mv_pool_liquidity
     }
 
-    // Get positions count from mv_position_lifetime_v1 (no enum dependency)
+    // Get positions count from mv_position_lifetime_v1
     let positionsCount = 0;
     const mvLifetimeExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
       SELECT EXISTS (
@@ -209,7 +266,7 @@ export async function getUniverseOverview(): Promise<UniverseOverview> {
       `;
       positionsCount = Number(posResult[0]?.count ?? 0);
     } else {
-      // Fallback: count distinct tokenIds from PositionEvent (no eventType filter)
+      // Fallback: count distinct tokenIds from PositionEvent
       const posResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
         SELECT COUNT(DISTINCT "tokenId")::bigint as count 
         FROM "PositionEvent"

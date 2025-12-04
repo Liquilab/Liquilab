@@ -28,6 +28,8 @@ const REFRESH_ORDER = [
   'mv_position_lifetime_v1',
   // Dependent MVs (after base views)
   'mv_position_range_status', // depends on mv_pool_latest_state
+  // TVL-related MVs (depends on Pool table)
+  'mv_pool_liquidity',
 ];
 
 async function refreshMV(mvName: string): Promise<{ name: string; success: boolean; duration: number; error?: string }> {

@@ -7,6 +7,7 @@
  * Identifies where data loss occurs in the pipeline.
  * 
  * W3 Reference (Enosys + SparkDEX v3 on Flare, 2025-11-16):
+ *   - TVL: $58.9M
  *   - Positions: 74,857
  *   - Wallets: 8,594
  * 
@@ -212,7 +213,7 @@ async function main() {
 
   // Priced Universe stats (from UniverseOverview)
   console.log('┌─────────────────────────────────────────────────────────┐');
-  console.log('│ 3. PRICED UNIVERSE (pricingUniverse pools only)         │');
+  console.log('│ 3. PRICED UNIVERSE (mv_pool_liquidity + pricing)        │');
   console.log('├─────────────────────────────────────────────────────────┤');
   const universe = await getUniverseOverview();
   console.log(`│ TVL (priced):         ${formatUsd(universe.tvlPricedUsd).padStart(15)}                   │`);
@@ -227,8 +228,8 @@ async function main() {
   console.log(`│                                                         │`);
   console.log(`│ TVL coverage vs W3 ($58.9M):                            │`);
   console.log(`│   ${formatPct(universe.tvlPricedUsd, W3_TVL_USD).padStart(8)}                                              │`);
-  if (universe.tvlPricedUsd === 0) {
-    console.log(`│   (TVL = 0: per-pool amounts not in MVs yet)            │`);
+  if (universe.tvlPricedUsd === 0 && universe.pricedPoolsCount > 0) {
+    console.log(`│   (TVL = 0: run db:mvs:refresh:7d to populate)          │`);
   }
   console.log('└─────────────────────────────────────────────────────────┘\n');
 
@@ -250,14 +251,15 @@ async function main() {
   if (poolGap > 0) {
     console.log(`⚠️  ${poolGap.toLocaleString()} pools unpriced (${formatPct(poolGap, state.pools)} of total)`);
     console.log(`   These pools have tokens not in the pricing universe or without valid prices.`);
-  } else {
+  } else if (universe.pricedPoolsCount > 0) {
     console.log('✅ All pools in pricing universe');
   }
 
   if (universe.tvlPricedUsd === 0 && universe.pricedPoolsCount > 0) {
     console.log(`\n📊 TVL Note: ${universe.pricedPoolsCount} pools are priced, but TVL = 0.`);
-    console.log(`   This is because per-pool token amounts are not yet exposed in MVs.`);
-    console.log(`   Next step: Create mv_pool_liquidity or fetch amounts via RPC.`);
+    console.log(`   Run: npm run db:mvs:create && npm run db:mvs:refresh:7d`);
+  } else if (universe.tvlPricedUsd > 0) {
+    console.log(`\n✅ TVL computed: ${formatUsd(universe.tvlPricedUsd)} across ${universe.pricedPoolsCount} priced pools`);
   }
 
   console.log();
