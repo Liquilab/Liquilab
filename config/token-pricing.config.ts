@@ -66,10 +66,10 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     address: '0x12e605bc104e93b45e1ad99f9e555f659051c2bb',
     source: 'ftso',
     ftsoSymbol: 'FLR', // sFLR tracks FLR price (staking derivative)
-    coingeckoId: 'sflr',
+    coingeckoId: 'flare-networks', // Use FLR price as fallback (sFLR ≈ FLR)
     coingeckoFallback: true,
     pricingUniverse: true,
-    notes: 'Staked FLR; uses FLR FTSO feed, CG sflr as fallback',
+    notes: 'Staked FLR; uses FLR FTSO feed, CG flare-networks as fallback',
   },
   'RFLR': {
     symbol: 'rFLR',
@@ -340,7 +340,7 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
     canonicalSymbol: 'CYSFLR',
     source: 'ftso',
     ftsoSymbol: 'FLR',
-    coingeckoId: 'sflr',
+    coingeckoId: 'flare-networks', // Use FLR price as fallback (cysFLR ≈ FLR)
     coingeckoFallback: true,
     pricingUniverse: true,
     notes: 'Cyclo sFLR; uses FLR FTSO feed',
