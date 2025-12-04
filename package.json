@@ -77,6 +77,7 @@
     "verify:data:w49-vs-w3": "tsx scripts/verify-data/w49-vs-w3.mts",
     "verify:data:coverage-gaps": "tsx scripts/verify-data/coverage-gaps.mts",
     "verify:data:defillama:flare": "tsx scripts/verify-data/defillama-flare.mts",
+    "verify:data:tvl-by-dex": "tsx scripts/verify-data/tvl-by-dex.mts",
     "verify:enrichment": "node scripts/verify-enrichment/registry.mjs",
     "verify:icons": "node scripts/verify-enrichment/icons.mjs",
     "verify:icons:local": "node scripts/verify-icons/no-remote-icons.mjs",

@@ -481,6 +481,7 @@ This allows us to safely claim TVL only over tokens with verified, reliable pric
 **MVs & verifiers:**
 - Key MVs forming SSoT: `mv_position_lifetime_v1` (lifetime positions), `mv_pool_latest_state` (pool state), `mv_pool_liquidity` (per-pool token amounts for TVL), `mv_wallet_lp_7d` (active wallets 7d), `mv_pool_fees_24h` (fee accrual).
 - All SP2 verifiers run cleanly: `verify:data:w49-vs-w3` (coverage vs W3), `verify:data:coverage-gaps` (pipeline breakdown), `verify:data:lifetime-vs-w3` (position/wallet counts). Used as health checks for data completeness and pricing accuracy.
+- `verify:data:tvl-by-dex` — diagnostic script to break down TVL per DEX and top pools; used to reconcile LiquiLab TVL with SparkDEX/Enosys UI/DeFiLlama.
 
 <!-- DELTA 2025-11-16 START -->
 
