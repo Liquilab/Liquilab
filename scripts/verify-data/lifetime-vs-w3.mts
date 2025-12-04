@@ -10,7 +10,12 @@
  * Usage: npm run verify:data:lifetime-vs-w3
  */
 
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { resolve } from 'path';
+
+// Load .env.local first, then .env as fallback
+config({ path: resolve(process.cwd(), '.env.local') });
+config({ path: resolve(process.cwd(), '.env') });
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
