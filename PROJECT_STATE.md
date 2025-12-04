@@ -376,6 +376,12 @@ pnpm exec tsx -r dotenv/config scripts/dev/run-pools.ts --from=49618000 --dry
       - **Unpriced:** At least one token has `pricingUniverse: false`, `source: 'unpriced'`, or no price available.
       - Pool-ratio heuristics are **REMOVED**; tokens without explicit pricing config are marked as UNPRICED.
     - **Positions/Wallets:** Uses `mv_position_lifetime_v1` for positions (no enum dependency), `PositionTransfer` for wallets, `mv_wallet_lp_7d` for active wallets (7d). Does NOT filter by `PositionEventType` enum to avoid 22P02 errors.
+  - **mv_wallet_lp_7d (`db/views/mv_wallet_lp_7d.sql`):**
+    - 7-day LP activity snapshot per wallet.
+    - Derives active wallets from `PositionTransfer` (most reliable: from/to addresses) and `PositionEvent` (sender/owner/recipient as fallback).
+    - Uses timestamp-based 7d window (604800 seconds from max event timestamp).
+    - Filters to NFPM addresses in scope (Enosys + SparkDEX).
+    - `activeWallets7d = COUNT(DISTINCT wallet)` from this MV.
   - **mv_pool_liquidity (`db/views/mv_pool_liquidity.sql`):**
     - Per-pool token0/token1 amounts, built from `PositionEvent` (sums INCREASE, subtracts DECREASE).
     - Uses `eventType::text` cast to avoid enum handling issues.
