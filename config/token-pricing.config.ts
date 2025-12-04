@@ -98,12 +98,13 @@ export const TOKEN_PRICING_CONFIG: Record<string, TokenPricingConfig> = {
   'STXRP': {
     symbol: 'stXRP',
     canonicalSymbol: 'STXRP',
+    address: '0xffed33d28ca65e52e927849f456d8e820b324508',
     source: 'ftso',
     ftsoSymbol: 'XRP',
     coingeckoId: 'ripple',
     coingeckoFallback: true,
     pricingUniverse: true,
-    notes: 'Staked XRP variant; uses XRP FTSO feed',
+    notes: 'Staked XRP on Flare; uses XRP FTSO feed (live since 2024-12-03)',
   },
   'EFXRP': {
     symbol: 'eFXRP',
