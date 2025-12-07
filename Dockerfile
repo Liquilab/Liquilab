@@ -53,8 +53,5 @@ ENV NODE_ENV=production
 # Expose port (Railway sets this dynamically)
 EXPOSE 3000
 
-# Start command: check SERVICE_TYPE env var or RAILWAY_SERVICE_NAME
-# If SERVICE_TYPE=indexer or service name contains "indexer"/"worker", start indexer follower
-# Otherwise start Next.js web app
-# Railway Custom Start Command will override this CMD if set
-CMD sh -c 'if [ "$SERVICE_TYPE" = "indexer" ] || ([ -n "$RAILWAY_SERVICE_NAME" ] && echo "$RAILWAY_SERVICE_NAME" | grep -qiE "(indexer|worker)"); then npm run indexer:follow:railway; else ./start.sh; fi'
+# Start the app
+CMD ["./start.sh"]

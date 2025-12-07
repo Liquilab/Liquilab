@@ -12,7 +12,8 @@ const VIEWS = [
   'mv_positions_active_7d',
   'mv_wallet_lp_7d',
   'mv_pool_changes_7d',
-  'mv_position_lifetime_v1', // Added for lifetime positions tracking
+  'mv_position_lifetime_v1',
+  'mv_pool_liquidity',
 ];
 
 const { DATABASE_URL, DB_DISABLE } = process.env;
@@ -44,7 +45,18 @@ async function refreshViews() {
       await client.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY "${viewName}"`);
       console.log(`${label} ✓`);
     } catch (error) {
-      console.log(`${label} ⚠`, error instanceof Error ? error.message : error);
+      // If CONCURRENTLY fails (e.g., MV not populated), try non-concurrent
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('not populated') || errorMsg.includes('CONCURRENTLY cannot be used')) {
+        try {
+          await client.query(`REFRESH MATERIALIZED VIEW "${viewName}"`);
+          console.log(`${label} ✓ (non-concurrent)`);
+        } catch (fallbackError) {
+          console.log(`${label} ⚠`, fallbackError instanceof Error ? fallbackError.message : fallbackError);
+        }
+      } else {
+        console.log(`${label} ⚠`, errorMsg);
+      }
     }
   }
 
@@ -56,4 +68,3 @@ refreshViews().catch((error) => {
   console.log('[refresh-views] [SKIP] Unexpected error:', error instanceof Error ? error.message : error);
   process.exit(0);
 });
-

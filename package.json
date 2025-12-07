@@ -40,9 +40,9 @@
     "snapshot:brand:run": "pnpm dlx tsx --env-file=.env.local scripts/data/resolve-brand-pools.ts && pnpm dlx tsx --env-file=.env.local scripts/data/snapshot-brand-user-positions.ts",
     "state:rotate": "node scripts/dev/rotate-project-state.mjs",
     "scan:nfpm": "DOTENV_CONFIG_PATH=.env.local tsx -r dotenv/config -r dotenv-expand/config scripts/dev/ankr-nfpm-scan.mts",
-    "sql:backfill:tokenid-pool": "psql \\\"$RAW_DB\\\" -v ON_ERROR_STOP=1 -f scripts/dev/backfill-tokenid-pool.sql",
-    "sql:refresh:analytics-flat": "psql \\\"$RAW_DB\\\" -v ON_ERROR_STOP=1 -f scripts/dev/refresh-analytics-flat.sql",
-    "sql:verify:tokenid-pool": "psql \\\"$RAW_DB\\\" -v ON_ERROR_STOP=1 -f scripts/dev/verify-tokenid-pool.sql",
+    "sql:backfill:tokenid-pool": "psql \"$RAW_DB\" -v ON_ERROR_STOP=1 -f scripts/dev/backfill-tokenid-pool.sql",
+    "sql:refresh:analytics-flat": "psql \"$RAW_DB\" -v ON_ERROR_STOP=1 -f scripts/dev/refresh-analytics-flat.sql",
+    "sql:verify:tokenid-pool": "psql \"$RAW_DB\" -v ON_ERROR_STOP=1 -f scripts/dev/verify-tokenid-pool.sql",
     "test": "vitest",
     "docs": "pnpm dlx docsify-cli@latest serve docs -p 3030",
     "docs:ui": "open http://localhost:3000/docs",
@@ -106,6 +106,8 @@
     "@ankr.com/ankr.js": "^0.6.1",
     "@perplexity-ai/perplexity_ai": "^0.16.0",
     "@prisma/client": "6.19.0",
+    "@radix-ui/react-accordion": "^1.2.12",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-tabs": "^1.1.13",
     "@sentry/node": "7.120.4",
     "@tanstack/react-query": "5.90.5",
@@ -160,3 +162,4 @@
     "vitest": "^4.0.7"
   }
 }
+
