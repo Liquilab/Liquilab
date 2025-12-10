@@ -6,9 +6,16 @@
 
 import type { NextApiRequest } from 'next';
 
+import { pricingConfig } from '@/lib/billing/pricing';
+
 export type Role = 'VISITOR' | 'PREMIUM' | 'PRO';
 
 const ROLE_VALUES: Role[] = ['VISITOR', 'PREMIUM', 'PRO'];
+
+const GOLDEN_WALLET_ROLES: Record<string, Role> = {
+  '0x57d294d815968f0efa722f1e8094da65402cd951': 'PRO',
+  '0x88ef07c79443efdf569c6e22aa21501d1702a8f7': 'PREMIUM',
+};
 
 export type FieldEntitlements = {
   pair: boolean;
@@ -81,10 +88,21 @@ const ROLE_CAPS: Record<Role, Omit<Entitlements, 'role' | 'remainingSlots' | 'al
   },
 };
 
+export function getGoldenWalletRole(address?: string | null): Role | null {
+  if (!address) return null;
+  const normalized = address.trim().toLowerCase();
+  if (!normalized) return null;
+  return GOLDEN_WALLET_ROLES[normalized] ?? null;
+}
+
 /**
  * Get user role from request (stub via cookie/header; default VISITOR)
  */
 export function getRoleForUser(req: NextApiRequest): Role {
+  const queryWallet = extractWalletFromRequest(req);
+  const goldenRole = getGoldenWalletRole(queryWallet);
+  if (goldenRole) return goldenRole;
+
   const headerRole = normalizeRoleValue(req.headers['x-ll-session-role']);
   if (headerRole) return headerRole;
 
@@ -182,4 +200,19 @@ function normalizeRoleValue(value: unknown): Role | null {
   if (typeof raw !== 'string') return null;
   const upper = raw.trim().toUpperCase();
   return ROLE_VALUES.includes(upper as Role) ? (upper as Role) : null;
+}
+
+function extractWalletFromRequest(req: NextApiRequest): string | null {
+  const query = req.query ?? {};
+  const walletParam = query.wallet;
+  if (typeof walletParam === 'string' && walletParam.length) {
+    return walletParam;
+  }
+
+  const addressParam = query.address;
+  if (typeof addressParam === 'string' && addressParam.length) {
+    return addressParam;
+  }
+
+  return null;
 }

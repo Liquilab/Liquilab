@@ -117,8 +117,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const wallet = typeof req.query.wallet === 'string' ? req.query.wallet.toLowerCase() : '';
-  if (!ADDRESS_REGEX.test(wallet)) {
+  const rawWalletParam = typeof req.query.wallet === 'string' && req.query.wallet.length
+    ? req.query.wallet
+    : typeof req.query.address === 'string'
+      ? req.query.address
+      : '';
+
+  let wallet: `0x${string}`;
+  try {
+    wallet = normalizeWalletAddress(rawWalletParam);
+  } catch (error) {
     res.status(400).json({ error: 'Invalid wallet' });
     return;
   }

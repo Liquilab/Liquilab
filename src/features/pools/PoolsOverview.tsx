@@ -191,7 +191,7 @@ export default function PoolsOverview({ address }: PoolsOverviewProps) {
       <section className="rounded-3xl border border-white/10 bg-[rgba(10,15,26,0.85)] px-6 py-6 backdrop-blur-xl md:px-10">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="font-brand text-2xl font-semibold text-white">Your LiquiLab plan</h2>
+            <h2 className="font-brand text-2xl font-semibold text-white">Your Liquilab plan</h2>
             <p className="font-ui text-sm text-[#B0B9C7]">
               {planLabel} · capacity {planCapacity} pools · active {activePoolCount}
             </p>

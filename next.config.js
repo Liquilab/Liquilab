@@ -4,8 +4,8 @@ const path = require('path');
 const TOKEN_ICON_REMOTE_PATTERNS = [
   {
     protocol: 'https',
-    hostname: 'static.dexscreener.com',
-    pathname: '/token-icons/**',
+    hostname: 'assets.coingecko.com',
+    pathname: '/coins/images/**',
   },
 ];
 

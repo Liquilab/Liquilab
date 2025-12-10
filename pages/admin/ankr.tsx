@@ -82,7 +82,7 @@ export default function AnkrDashboard() {
   return (
     <>
       <Head>
-        <title>ANKR Usage — LiquiLab</title>
+        <title>ANKR Usage — Liquilab</title>
       </Head>
       <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">

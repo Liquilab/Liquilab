@@ -22,8 +22,8 @@ export default function SalesPage() {
   return (
     <>
       <Head>
-        <title>Sales Funnel · LiquiLab</title>
-        <meta name="description" content="Complete your LiquiLab subscription." />
+        <title>Sales Funnel · Liquilab</title>
+        <meta name="description" content="Complete your Liquilab subscription." />
       </Head>
 
       <div className="relative min-h-screen overflow-hidden text-white">

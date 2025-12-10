@@ -146,7 +146,7 @@ export default function SalesOfferPage() {
                   </div>
                   <div className="rounded-xl border border-white/10 bg-white/0 p-5">
                     <p className="font-ui text-sm text-white/70">
-                      LiquiLab brings all your Flare LPs together — with live RangeBand™ insights, fees
+                      Liquilab brings all your Flare LPs together — with live RangeBand™ insights, fees
                       and incentives. Your pools will appear in your dashboard right after subscribing.
                     </p>
                   </div>
@@ -157,7 +157,7 @@ export default function SalesOfferPage() {
                     No pools found for this wallet (yet)
                   </h2>
                   <p className="mt-2 font-ui text-sm text-white/70">
-                    LiquiLab works with your liquidity pools on Flare. Create a pool at a partner DEX
+                    Liquilab works with your liquidity pools on Flare. Create a pool at a partner DEX
                     and it will appear here automatically.
                   </p>
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">

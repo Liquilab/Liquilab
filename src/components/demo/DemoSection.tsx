@@ -17,7 +17,7 @@ export default function DemoSection() {
           See it live: cross-DEX pools, one dashboard
         </h2>
         <p className="mt-5 font-ui text-base leading-relaxed text-[#9CA3AF] sm:text-lg">
-          Real pools from Enosys, BlazeSwap, and SparkDEX — see how LiquiLab tracks liquidity, fees, incentives, and range status.
+          Real pools from Enosys, BlazeSwap, and SparkDEX — see how Liquilab tracks liquidity, fees, incentives, and range status.
         </p>
       </div>
       <div className="mt-10">

@@ -546,7 +546,7 @@ export default function PricingCalculator({ address: initialAddress }: PricingCa
           </div>
         </div>
         <p className="text-xs text-[#748199]">
-          Need more than 30 paid pools? Contact the LiquiLab team for an enterprise quote — every additional 10 paid pools unlocks an extra bonus slot automatically.
+          Need more than 30 paid pools? Contact the Liquilab team for an enterprise quote — every additional 10 paid pools unlocks an extra bonus slot automatically.
         </p>
       </div>
     </section>

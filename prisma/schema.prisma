@@ -141,6 +141,21 @@ model Pool {
   @@index([blockNumber])
 }
 
+model PoolState {
+  poolAddress    String   @id @map("pool_address")
+  dex            String   // 'enosys-v3' | 'sparkdex-v3' | 'other'
+  token0Address  String   @map("token0_address")
+  token1Address  String   @map("token1_address")
+  reserve0Raw    Decimal  @db.Decimal(78, 0) @map("reserve0_raw") // Raw token0 balance (wei)
+  reserve1Raw    Decimal  @db.Decimal(78, 0) @map("reserve1_raw") // Raw token1 balance (wei)
+  lastBlockNumber BigInt   @map("last_block_number")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([dex])
+  @@index([lastBlockNumber])
+  @@map("PoolState")
+}
+
 model PoolIncentive {
   id                Int      @id @default(autoincrement())
   poolAddress       String   // FK naar Pool.address

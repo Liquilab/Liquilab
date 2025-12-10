@@ -1,104 +1,169 @@
-import type { Address } from 'viem';
-import { TOKEN_ASSETS } from '@/lib/assets';
+import NodeCache from 'node-cache';
+import { canonicalSymbol } from '@/lib/icons/symbolMap';
+import { TOKEN_PRICING_CONFIG, type TokenPricingConfig } from '../../config/token-pricing.config';
 
-type IconCacheEntry = {
+export type TokenIconRequest = {
+  symbol?: string | null;
+  address?: string | null;
+};
+
+export type TokenIconMeta = {
   url: string | null;
-  timestamp: number;
+  source: 'coingecko' | 'default';
 };
 
-const cache = new Map<Address, IconCacheEntry>();
-const symbolCache = new Map<string, string>();
-const CACHE_TTL = 1000 * 60 * 60; // 1 hour
+const ICON_CACHE = new NodeCache({ stdTTL: 60 * 60 * 24 }); // 24 hours
+let iconRequestCount = 0;
+let coinGeckoRateLimited = false;
 
-const TOKEN_MEDIA_BASE = '/media/tokens';
-export const UNKNOWN_TOKEN_ICON = TOKEN_ASSETS.default;
+const CONFIG_BY_SYMBOL = new Map<string, TokenPricingConfig>();
+const CONFIG_BY_ADDRESS = new Map<string, TokenPricingConfig>();
 
-function normalizeSymbol(symbol: string): string {
-  return symbol
-    .toUpperCase()
-    .replaceAll('₮', 'T')
-    .replaceAll('₀', '0');
+for (const config of Object.values(TOKEN_PRICING_CONFIG)) {
+  CONFIG_BY_SYMBOL.set(config.canonicalSymbol, config);
+  if (config.address) {
+    CONFIG_BY_ADDRESS.set(config.address.toLowerCase(), config);
+  }
 }
 
-const LOCAL_SYMBOL_ICON_MAP: Record<string, string> = {
-  FXRP: `${TOKEN_MEDIA_BASE}/fxrp.webp`,
-  WFLR: `${TOKEN_MEDIA_BASE}/flr.webp`,
-  FLR: `${TOKEN_MEDIA_BASE}/flr.webp`,
-  SFLR: `${TOKEN_MEDIA_BASE}/sflr.webp`,
-  USDT0: `${TOKEN_MEDIA_BASE}/usd0.webp`,
-  USD0: `${TOKEN_MEDIA_BASE}/usd0.webp`,
-};
-
-// Well-known token addresses on Flare for remote fallback
-const KNOWN_TOKENS: Record<string, Address> = {
-  WFLR: '0x1d80c49bbbcd1c0911346656b529df9e5c2f783d',
-  FLR: '0x1d80c49bbbcd1c0911346656b529df9e5c2f783d',
-  USDT0: '0xe7cd86e13ac4309349f30b3435a9d337750fc82d',
-  USD0: '0xe7cd86e13ac4309349f30b3435a9d337750fc82d',
-  EUSDT: '0x96b41289d90444b8add57e6f265db5ae8651df29',
-  SGB: '0x02f0826ef6ad107cfc861152b32b52fd11bab9ed',
-  EXFI: '0xc348f894c0b6cf348b79328a6e131e0300d428c7',
-  CAND: '0x70ad7172ef0b131a1428d0c1f66457eb041f2176',
-  FXRP: '0xad552a648c74d49e10027ab8a618a3ad4901c5be',
-  APS: '0xff56eb5b1a7faa972291117e5e9565da29bc808d',
-};
-
-export function getLocalTokenIcon(symbol: string): string | null {
-  const normalized = normalizeSymbol(symbol);
-  return LOCAL_SYMBOL_ICON_MAP[normalized] ?? null;
-}
-
-export async function fetchTokenIcon(address: Address): Promise<string | null> {
-  const cached = cache.get(address);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.url;
+function resolveTokenConfig(symbol?: string | null, address?: string | null): TokenPricingConfig | null {
+  if (symbol) {
+    const canonical = canonicalSymbol(symbol);
+    if (canonical) {
+      const config = CONFIG_BY_SYMBOL.get(canonical);
+      if (config) return config;
+    }
   }
 
+  if (address) {
+    const trimmed = address.trim().toLowerCase();
+    const normalized = trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
+    const config = CONFIG_BY_ADDRESS.get(normalized);
+    if (config) return config;
+  }
+
+  return null;
+}
+
+function normalizeCoinGeckoUrl(url: string | null | undefined): string | null {
+  if (typeof url !== 'string' || url.length === 0) return null;
+  return url.startsWith('http') ? url : `https:${url}`;
+}
+
+function logCoinGeckoIconRequest({
+  coingeckoId,
+  url,
+  status,
+  rateLimitHeaders,
+}: {
+  coingeckoId: string;
+  url: string;
+  status: number;
+  rateLimitHeaders: Record<string, string | null>;
+}) {
+  iconRequestCount += 1;
+  const env = process.env.NODE_ENV || 'development';
+  if (env === 'production') {
+    return;
+  }
+
+  const limit = rateLimitHeaders['x-ratelimit-limit'] ?? rateLimitHeaders['x-cgpro-rate-limit-limit'] ?? null;
+  const remaining =
+    rateLimitHeaders['x-ratelimit-remaining'] ?? rateLimitHeaders['x-cgpro-rate-limit-remaining'] ?? null;
+  const reset = rateLimitHeaders['x-ratelimit-reset'] ?? rateLimitHeaders['x-cgpro-rate-limit-reset'] ?? null;
+
+  console.log(
+    '[COINGECKO_ICON] id=%s count=%d status=%d limit=%s remaining=%s reset=%s url=%s',
+    coingeckoId,
+    iconRequestCount,
+    status,
+    limit,
+    remaining,
+    reset,
+    url,
+  );
+}
+
+export function getIconRequestCount(): number {
+  return iconRequestCount;
+}
+
+async function fetchCoinGeckoIcon(coingeckoId: string): Promise<string | null> {
+  if (coinGeckoRateLimited) return null;
+
+  const apiKey = process.env.COINGECKO_API_KEY;
+  const baseUrl = apiKey ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3';
+  const headers: Record<string, string> = apiKey ? { 'x-cg-pro-api-key': apiKey } : {};
+  const endpoint = `${baseUrl}/coins/${encodeURIComponent(
+    coingeckoId,
+  )}?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false&sparkline=false`;
+
   try {
-    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
+    const response = await fetch(endpoint, { headers });
+    const headerSnapshot: Record<string, string | null> = {
+      'x-ratelimit-limit': response.headers.get('x-ratelimit-limit'),
+      'x-ratelimit-remaining': response.headers.get('x-ratelimit-remaining'),
+      'x-ratelimit-reset': response.headers.get('x-ratelimit-reset'),
+      'x-cgpro-rate-limit-limit': response.headers.get('x-cgpro-rate-limit-limit'),
+      'x-cgpro-rate-limit-remaining': response.headers.get('x-cgpro-rate-limit-remaining'),
+      'x-cgpro-rate-limit-reset': response.headers.get('x-cgpro-rate-limit-reset'),
+    };
+
+    if (response.status === 429) {
+      coinGeckoRateLimited = true;
+      console.warn('[tokenIconService] CoinGecko rate-limited; using default icons for remainder of this run');
+      logCoinGeckoIconRequest({ coingeckoId, url: endpoint, status: response.status, rateLimitHeaders: headerSnapshot });
+      return null;
+    }
+
     if (!response.ok) {
-      throw new Error(`DexScreener responded with ${response.status}`);
+      console.warn(`[tokenIconService] CoinGecko error for ${coingeckoId}: ${response.status}`);
+      logCoinGeckoIconRequest({ coingeckoId, url: endpoint, status: response.status, rateLimitHeaders: headerSnapshot });
+      return null;
     }
 
     const data = await response.json();
-    const icon = data?.pairs?.[0]?.info?.imageUrl ?? null;
+    const url =
+      normalizeCoinGeckoUrl(data?.image?.small) ??
+      normalizeCoinGeckoUrl(data?.image?.thumb) ??
+      normalizeCoinGeckoUrl(data?.image?.large);
 
-    cache.set(address, { url: icon, timestamp: Date.now() });
-    return icon;
+    logCoinGeckoIconRequest({ coingeckoId, url: endpoint, status: response.status, rateLimitHeaders: headerSnapshot });
+    return url;
   } catch (error) {
-    console.warn(`[tokenIconService] Failed to fetch icon for ${address}:`, error);
-    cache.set(address, { url: null, timestamp: Date.now() });
+    console.warn(`[tokenIconService] Failed to fetch CoinGecko icon for ${coingeckoId}`, error);
     return null;
   }
 }
 
-export async function fetchTokenIconBySymbol(symbol: string): Promise<string | null> {
-  const normalized = normalizeSymbol(symbol);
+export async function getTokenIconMeta(request: TokenIconRequest): Promise<TokenIconMeta> {
+  const config = resolveTokenConfig(request.symbol, request.address);
+  if (config?.coingeckoId) {
+    const cached = ICON_CACHE.get<string | null>(config.coingeckoId);
+    if (cached !== undefined) {
+      return cached
+        ? { url: cached, source: 'coingecko' }
+        : { url: null, source: 'default' };
+    }
 
-  const cached = symbolCache.get(normalized);
-  if (cached !== undefined) {
-    return cached;
+    const url = await fetchCoinGeckoIcon(config.coingeckoId);
+    ICON_CACHE.set(config.coingeckoId, url ?? null);
+
+    if (url) {
+      return { url, source: 'coingecko' };
+    }
   }
 
-  const local = getLocalTokenIcon(symbol);
-  if (local) {
-    symbolCache.set(normalized, local);
-    return local;
-  }
+  return { url: null, source: 'default' };
+}
 
-  const address = KNOWN_TOKENS[normalized];
-  if (!address) {
-    symbolCache.set(normalized, UNKNOWN_TOKEN_ICON);
-    return UNKNOWN_TOKEN_ICON;
-  }
-
-  const icon = await fetchTokenIcon(address);
-  const finalIcon = icon ?? UNKNOWN_TOKEN_ICON;
-  symbolCache.set(normalized, finalIcon);
-  return finalIcon;
+export async function getTokenIconUrl(symbol?: string | null, address?: string | null): Promise<string | null> {
+  const meta = await getTokenIconMeta({ symbol, address });
+  return meta.url;
 }
 
 export function clearTokenIconCache(): void {
-  cache.clear();
-  symbolCache.clear();
+  ICON_CACHE.flushAll();
+  coinGeckoRateLimited = false;
+  iconRequestCount = 0;
 }

@@ -95,8 +95,8 @@
 | SP2-D02   | DATA   | MV position overview + RangeBand™ status        | **CRITICAL WIP** | SSoT voor RangeBand; voedt Pool/Position Pro.   |
 | SP2-D03   | DATA   | MV position day stats (7d/30d)                  | Deferred → SP3| Nodig voor charts; niet blocker voor Strategy C v1. |
 | SP2-D04   | DATA   | MV position events recent (7d-window)           | Deferred → SP3| Nice-to-have voor snelle event views.               |
-| SP2-D10   | DATA   | PoolEvent backfill (SparkDEX + Enosys)          | **NEW / MUST**| Basis voor 7d volume/fees/changes.                  |
-| SP2-D11   | DATA   | 7d-MVs vullen + health checks                   | **NEW / MUST**| 7d volume/fees/changes/wallet_lp operationeel.      |
+| SP2-D10   | DATA   | PoolEvent backfill (SparkDEX + Enosys)          | Done          | Backfill afgerond 2025-12-02 (zie RUN_LOG).         |
+| SP2-D11   | DATA   | 7d-MVs vullen + health checks                   | Done          | Alle 7d-MVs live + cron refresh (RUN_LOG 2025-12-03).|
 
 **Korte duiding:**
 
@@ -117,7 +117,7 @@
 
 | ID        | Domein | Titel                                                     | Status        | Waarvoor gebruikt                                |
 |-----------|--------|-----------------------------------------------------------|---------------|--------------------------------------------------|
-| SP2-T70   | API    | Pool Universe endpoint wiring (volgens mapping-doc)       | **CRITICAL WIP** | Voedt Universe-sectie in Pool Pro + Weekly.  |
+| SP2-T70   | API    | Pool Universe endpoint wiring (volgens mapping-doc)       | Done          | Endpoint live en degrade-safe (RUN_LOG 2025-11-30). |
 | SP2-T71   | API    | Position Pro endpoint wiring (volgens mapping-doc)        | CRITICAL WIP  | Voedt Position Pro scherm (Strategy C).          |
 | SP2-T72   | API    | Portfolio endpoint afronden (PortfolioAnalyticsResponse)  | SHOULD        | Voedt Wallet Pro / Portfolio Pro.                |
 
@@ -129,6 +129,9 @@
 | SP2-T14   | FE     | MV position overview in /pool/[id] integreren  | WIP      | Wacht op D02/T70 (RangeBand SSoT).                |
 | SP2-T15   | FE     | Day Stats Chart 7d/30d                        | Deferred → SP3 | Koppelt aan D03.                                |
 | SP2-T16   | FE     | RangeBand preview UI integratie              | Parked / SP2+ | Afhankelijk van T51; niet SP2-kritiek.         |
+| SP2-FE-WALLET | FE | Wallet/Portfolio Pro FE — wallet-level positions view | TODO | Portfolio Pro scherm koppelen aan analytics endpoints/MVs (`mv_wallet_portfolio_latest`, Portfolio endpoint). Verifier: **Pro golden wallet 0x57d294d815968f0efa722f1e8094da65402cd951**. |
+| SP2-FE-POOL-UNIVERSE | FE | Pool Universe FE — /pool/[poolAddress]/universe | TODO | Universe UI voeden met SP2-T70 output; kies/markeer golden pools uit PROJECT_STATE voor QA (TODO). |
+| SP2-FE-POSITION-PRO | FE | Position Pro FE — /position/[tokenId]/pro | TODO | Position Pro scherm koppelen aan SP2-T71 endpoint + `mv_position_lifetime_v1`; gebruik Pro wallet voor testposities. |
 
 ### 3.5 SP2: hoe AI’s dit moeten zien
 
@@ -138,6 +141,9 @@
   Je zit in **SP2-T60/T61/T62/T70/T71/T72**. Doel: Universe/Position/Portfolio endpoints vullen met MVs en Weekly alignen.
 - **Als je frontend-schermen voor Universe/Pro bouwt:**  
   Je gebruikt de Strategy C endpoints; in SP2 is je taak vooral om **niet** om data-SSoT heen te werken.
+- **Golden wallets voor QA:**  
+  - Pro account: `0x57d294d815968f0efa722f1e8094da65402cd951`  
+  - Premium account: `0x88ef07c79443efdf569c6e22aa21501d1702a8f7`
 
 ---
 
@@ -160,21 +166,24 @@
 
 ### SP3 taken (samenvatting)
 
-| ID        | Domein   | Titel                                        | Status   |
-|-----------|----------|----------------------------------------------|----------|
-| SP3-T52   | API      | `/api/entitlements` (server-authoritative)   | Planned  |
-| SP3-T53   | API      | `/api/user/settings`                         | Planned  |
-| SP3-T54   | API      | `/api/user/delete` (GDPR)                    | Planned  |
-| SP3-B01   | BILLING  | Email verplicht in Stripe checkout           | Planned  |
-| SP3-B02   | BILLING  | EUR label + 24h FX cache                     | Planned  |
-| SP3-B03   | BILLING  | Trial countdown badge                        | Planned  |
-| SP3-T21-23| FE       | /pricing: email/EUR/trial + calculator UX    | Planned  |
-| SP3-T24   | FE       | /account page                                | Planned  |
-| SP3-T25   | FE       | /account settings API integratie             | Planned  |
-| SP3-T26   | FE       | /account delete flow                         | Planned  |
-| SP3-T42   | OPS+FE   | /legal/privacy, /legal/terms, /legal/cookies | Planned  |
-| SP3-G01   | FE+API   | `usePlanGating()` hook                       | Planned  |
-| SP3-G02   | FE+API   | Route×plan matrix enforcement                | Planned  |
+| ID        | Domein   | Titel                                        | Status   | Notities |
+|-----------|----------|----------------------------------------------|----------|----------|
+| SP3-T52   | API      | `/api/entitlements` (server-authoritative)   | WIP      | Endpoint live (staging) maar FE gating + plan badges nog niet afgerond; testen met golden wallets. |
+| SP3-T53   | API      | `/api/user/settings`                         | Planned  | CRUD + UI wiring nodig. |
+| SP3-T54   | API      | `/api/user/delete` (GDPR)                    | WIP      | API stub actief (`degrade:true`), UI/bevestiging emails pending. |
+| SP3-B01   | BILLING  | Email verplicht in Stripe checkout           | Planned  | Stripe TEST keys aanwezig. |
+| SP3-B02   | BILLING  | EUR label + 24h FX cache                     | Planned  | Sluit aan op SP2 pricing SSoT. |
+| SP3-B03   | BILLING  | Trial countdown badge                        | Planned  | Afhankelijk van entitlements. |
+| SP3-T21-23| FE       | /pricing: email/EUR/trial + calculator UX    | Planned  |  |
+| SP3-T24   | FE       | /account page                                | Planned  |  |
+| SP3-T25   | FE       | /account settings API integratie             | Planned  |  |
+| SP3-T26   | FE       | /account delete flow                         | Planned  | Gebruikt SP3-T54. |
+| SP3-T42   | OPS+FE   | /legal/privacy, /legal/terms, /legal/cookies | Planned  | Basispagina’s staan, copy/compliance afronden. |
+| SP3-G01   | FE+API   | `usePlanGating()` hook                       | WIP      | Hook deels aanwezig; Visitor UI nog inconsistent. |
+| SP3-G02   | FE+API   | Route×plan matrix enforcement                | WIP      | Route matrix deels afgedwongen, gating in UI nog te finetunen. |
+| SP3-M01   | OPS+MAIL | Mailgun setup & verification                 | Planned  | DNS + env + API verify (`MAILGUN_MODE=degrade` in staging). |
+| SP3-M02   | MAIL     | Mailgun e-mailflows (billing & compliance)   | Planned  | Welkom, trial reminder, payment failed/dunning, GDPR delete bevestiging. |
+| SP3-ADM01 | OPS+FE   | Admin dashboard & ops overview               | Planned  | TVL/Premium/Pro counts, cron/indexer status, error feed. |
 
 ---
 

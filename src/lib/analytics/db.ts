@@ -29,6 +29,12 @@ export interface UniverseOverview {
   activeWallets7d: number;
 }
 
+export interface PoolIncentiveBreakdownItem {
+  tokenSymbol: string;
+  amount: number;
+  amountUsd: number;
+}
+
 export interface PoolHeadMetrics {
   poolAddress: string;
   dex: string | null;
@@ -37,6 +43,9 @@ export interface PoolHeadMetrics {
   tvlUsd: number;
   fees24hUsd: number;
   fees7dUsd: number;
+  incentives24hUsd: number;
+  incentives7dUsd: number;
+  incentivesBreakdown7d: PoolIncentiveBreakdownItem[];
   positionsCount: number;
 }
 
@@ -53,6 +62,8 @@ export interface PoolUniverseHead {
     tvlUsd: number;
     fees24hUsd: number;
     fees7dUsd: number;
+    incentives24hUsd: number;
+    incentives7dUsd: number;
     positionsCount: number;
     walletsCount: number;
     poolsCount: number;
@@ -61,6 +72,7 @@ export interface PoolUniverseHead {
     dex: DexName;
     tvlUsd: number;
     fees7dUsd: number;
+    incentives7dUsd: number;
     positionsCount: number;
     poolsCount: number;
   }>;
@@ -70,6 +82,7 @@ export interface PoolUniverseHead {
     feeTierBps: number | null;
     tvlUsd: number;
     fees7dUsd: number;
+    incentives7dUsd: number;
     positionsCount: number;
   }>;
 }
@@ -88,6 +101,15 @@ interface PoolLiquidityRow {
   positions_count: bigint;
   last_event_ts: number;
 }
+
+type PoolReservesNow = {
+  poolAddress: string;
+  dex: string;
+  token0Address: string;
+  token1Address: string;
+  reserve0Raw: bigint;
+  reserve1Raw: bigint;
+};
 
 interface CountResult {
   count: bigint;
@@ -268,6 +290,237 @@ function factoryToDex(factory: string | null | undefined): DexName {
   if (lower === CONTRACTS.factories.enosys) return 'ENOSYS';
   if (lower === CONTRACTS.factories.sparkdex) return 'SPARKDEX';
   return 'OTHER';
+}
+
+async function getPoolReservesNow(prisma: any, poolAddress: string): Promise<PoolReservesNow | null> {
+  const rows = await prisma.$queryRaw<
+    {
+      pool_address: string;
+      dex: string;
+      token0_address: string;
+      token1_address: string;
+      reserve0_raw: bigint;
+      reserve1_raw: bigint;
+    }[]
+  >`
+    SELECT pool_address,
+           dex,
+           token0_address,
+           token1_address,
+           reserve0_raw,
+           reserve1_raw
+    FROM "mv_pool_reserves_now"
+    WHERE lower(pool_address) = lower(${poolAddress})
+    LIMIT 1;
+  `;
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    poolAddress: row.pool_address.toLowerCase(),
+    dex: row.dex,
+    token0Address: row.token0_address,
+    token1Address: row.token1_address,
+    reserve0Raw: row.reserve0_raw,
+    reserve1Raw: row.reserve1_raw,
+  };
+}
+
+async function computeSparkdexIncentivesForWindow(
+  prisma: any,
+  poolAddress: string,
+  window: '24h' | '7d'
+): Promise<{ totalUsd: number; breakdown: PoolIncentiveBreakdownItem[] }> {
+  const poolAddressLc = poolAddress.toLowerCase();
+
+  let rows:
+    | {
+        pool_address: string;
+        reward_token_address: string;
+        reward_token_symbol: string;
+        amount_raw: string | null;
+        amount_usd: string | null;
+      }[]
+    | null = null;
+
+  try {
+    if (window === '24h') {
+      rows = await prisma.$queryRaw<
+        {
+          pool_address: string;
+          reward_token_address: string;
+          reward_token_symbol: string;
+          amount_raw: string | null;
+          amount_usd: string | null;
+        }[]
+      >`
+        SELECT
+          pool_address,
+          reward_token_address,
+          reward_token_symbol,
+          amount_raw::text AS amount_raw,
+          amount_usd::text AS amount_usd
+        FROM "mv_sparkdex_rewards_24h"
+        WHERE LOWER(pool_address) = ${poolAddressLc}
+      `;
+    } else {
+      rows = await prisma.$queryRaw<
+        {
+          pool_address: string;
+          reward_token_address: string;
+          reward_token_symbol: string;
+          amount_raw: string | null;
+          amount_usd: string | null;
+        }[]
+      >`
+        SELECT
+          pool_address,
+          reward_token_address,
+          reward_token_symbol,
+          amount_raw::text AS amount_raw,
+          amount_usd::text AS amount_usd
+        FROM "mv_sparkdex_rewards_7d"
+        WHERE LOWER(pool_address) = ${poolAddressLc}
+      `;
+    }
+  } catch (error) {
+    console.error('[POOL_UNIVERSE_INCENTIVES_SPARKDEX] query failed', error);
+    return { totalUsd: 0, breakdown: [] };
+  }
+
+  if (!rows || rows.length === 0) {
+    return { totalUsd: 0, breakdown: [] };
+  }
+
+  const { getTokenPriceUsd } = await import('@/services/tokenPriceService');
+  let totalUsd = 0;
+  const breakdown: PoolIncentiveBreakdownItem[] = [];
+
+  for (const row of rows) {
+    const symbol = row.reward_token_symbol || '';
+    const amountRawNum = Number(row.amount_raw ?? '0');
+    const amount = Number.isFinite(amountRawNum) ? amountRawNum / 1e18 : 0;
+
+    let amountUsd = row.amount_usd !== null && row.amount_usd !== undefined ? Number(row.amount_usd) : null;
+    if (amountUsd === null || Number.isNaN(amountUsd)) {
+      const price = await getTokenPriceUsd(symbol, row.reward_token_address ?? undefined);
+      if (price !== null) {
+        amountUsd = amount * price;
+      }
+    }
+
+    if (amountUsd === null || Number.isNaN(amountUsd)) {
+      continue;
+    }
+
+    totalUsd += amountUsd;
+    breakdown.push({
+      tokenSymbol: symbol,
+      amount,
+      amountUsd,
+    });
+  }
+
+  return { totalUsd, breakdown };
+}
+
+async function computeEnosysIncentivesForWindow(
+  prisma: any,
+  poolAddress: string,
+  window: '24h' | '7d'
+): Promise<{ totalUsd: number; breakdown: PoolIncentiveBreakdownItem[] }> {
+  const poolAddressLc = poolAddress.toLowerCase();
+
+  let rows:
+    | {
+        pool_address: string;
+        reward_token_address: string;
+        reward_token_symbol: string;
+        amount_raw: string | null;
+        amount_usd: string | null;
+      }[]
+    | null = null;
+
+  try {
+    if (window === '24h') {
+      rows = await prisma.$queryRaw<
+        {
+          pool_address: string;
+          reward_token_address: string;
+          reward_token_symbol: string;
+          amount_raw: string | null;
+          amount_usd: string | null;
+        }[]
+      >`
+        SELECT
+          pool_address,
+          reward_token_address,
+          reward_token_symbol,
+          amount_raw::text AS amount_raw,
+          amount_usd::text AS amount_usd
+        FROM "mv_enosys_rewards_24h"
+        WHERE LOWER(pool_address) = ${poolAddressLc}
+      `;
+    } else {
+      rows = await prisma.$queryRaw<
+        {
+          pool_address: string;
+          reward_token_address: string;
+          reward_token_symbol: string;
+          amount_raw: string | null;
+          amount_usd: string | null;
+        }[]
+      >`
+        SELECT
+          pool_address,
+          reward_token_address,
+          reward_token_symbol,
+          amount_raw::text AS amount_raw,
+          amount_usd::text AS amount_usd
+        FROM "mv_enosys_rewards_7d"
+        WHERE LOWER(pool_address) = ${poolAddressLc}
+      `;
+    }
+  } catch (error) {
+    console.error('[POOL_UNIVERSE_INCENTIVES_ENOSYS] query failed', error);
+    return { totalUsd: 0, breakdown: [] };
+  }
+
+  if (!rows || rows.length === 0) {
+    return { totalUsd: 0, breakdown: [] };
+  }
+
+  const { getTokenPriceUsd } = await import('@/services/tokenPriceService');
+  let totalUsd = 0;
+  const breakdown: PoolIncentiveBreakdownItem[] = [];
+
+  for (const row of rows) {
+    const symbol = row.reward_token_symbol || '';
+    const amountRawNum = Number(row.amount_raw ?? '0');
+    const amount = Number.isFinite(amountRawNum) ? amountRawNum / 1e18 : 0;
+
+    let amountUsd = row.amount_usd !== null && row.amount_usd !== undefined ? Number(row.amount_usd) : null;
+    if (amountUsd === null || Number.isNaN(amountUsd)) {
+      const price = await getTokenPriceUsd(symbol, row.reward_token_address ?? undefined);
+      if (price !== null) {
+        amountUsd = amount * price;
+      }
+    }
+
+    if (amountUsd === null || Number.isNaN(amountUsd)) {
+      continue;
+    }
+
+    totalUsd += amountUsd;
+    breakdown.push({
+      tokenSymbol: symbol,
+      amount,
+      amountUsd,
+    });
+  }
+
+  return { totalUsd, breakdown };
 }
 
 // ============================================================
@@ -688,15 +941,15 @@ async function computeFeesUsd(
 
   if (period === '24h') {
     // Cast to text to ensure consistent string representation from Postgres NUMERIC
-    const rows = await prisma.$queryRaw<{ amount0: string; amount1: string }[]>`
-      SELECT "amount0"::text AS amount0, "amount1"::text AS amount1
+    const rows = await prisma.$queryRaw<{ fees0: string; fees1: string }[]>`
+      SELECT "fees0"::text AS fees0, "fees1"::text AS fees1
       FROM "mv_pool_fees_24h"
       WHERE LOWER("pool") = ${poolAddress}
       LIMIT 1
     `;
     if (!rows.length) return 0;
-    const fee0 = scaleAmount(rows[0].amount0, meta.decimals0);
-    const fee1 = scaleAmount(rows[0].amount1, meta.decimals1);
+    const fee0 = scaleAmount(rows[0].fees0, meta.decimals0);
+    const fee1 = scaleAmount(rows[0].fees1, meta.decimals1);
     return fee0 * price0 + fee1 * price1;
   }
 
@@ -754,46 +1007,53 @@ export async function getPoolHeadMetrics(poolAddress: string): Promise<PoolHeadR
   try {
     const { getTokenPriceUsd } = await import('@/services/tokenPriceService');
 
-    // Check MV exists
-    const liquidityMvExists = await checkMvExists(prisma, 'mv_pool_liquidity');
-    if (!liquidityMvExists) {
-      return { ok: false, degrade: true, metrics: null };
-    }
-
-    // Query liquidity row with ::text casts for numeric columns
-    const liquidity = await prisma.$queryRaw<PoolLiquidityRow[]>`
+    // Fetch pool metadata
+    const poolMetaRows = await prisma.$queryRaw<
+      Array<{
+        address: string;
+        token0: string;
+        token1: string;
+        token0Symbol: string | null;
+        token1Symbol: string | null;
+        token0Decimals: number | null;
+        token1Decimals: number | null;
+        fee: number;
+        factory: string;
+      }>
+    >`
       SELECT 
-        pool_address,
-        dex,
-        token0_address,
-        token1_address,
-        token0_symbol,
-        token1_symbol,
-        token0_decimals,
-        token1_decimals,
-        amount0_raw::text AS amount0_raw,
-        amount1_raw::text AS amount1_raw,
-        positions_count,
-        last_event_ts
-      FROM "mv_pool_liquidity"
-      WHERE pool_address = ${normalized}
+        address,
+        token0,
+        token1,
+        "token0Symbol",
+        "token1Symbol",
+        "token0Decimals",
+        "token1Decimals",
+        fee,
+        factory
+      FROM "Pool"
+      WHERE LOWER(address) = ${normalized}
       LIMIT 1
     `;
 
-    const liquidityRow = liquidity[0] ?? null;
-    if (!liquidityRow) {
-      // Pool not in liquidity MV yet; return zeroed metrics, not degrade
+    const poolMeta = poolMetaRows[0] ?? null;
+    if (!poolMeta) {
       return { ok: true, degrade: false, metrics: null };
     }
 
-    // Build meta from liquidity row
+    // Fetch current reserves
+    const reserves = await getPoolReservesNow(prisma, normalized);
+    if (!reserves) {
+      return { ok: true, degrade: false, metrics: null };
+    }
+
     const meta: PoolTokenMeta = {
-      symbol0: liquidityRow.token0_symbol,
-      symbol1: liquidityRow.token1_symbol,
-      token0: liquidityRow.token0_address,
-      token1: liquidityRow.token1_address,
-      decimals0: liquidityRow.token0_decimals,
-      decimals1: liquidityRow.token1_decimals,
+      symbol0: poolMeta.token0Symbol,
+      symbol1: poolMeta.token1Symbol,
+      token0: poolMeta.token0,
+      token1: poolMeta.token1,
+      decimals0: poolMeta.token0Decimals,
+      decimals1: poolMeta.token1Decimals,
     };
 
     // Check pricing eligibility
@@ -809,8 +1069,8 @@ export async function getPoolHeadMetrics(poolAddress: string): Promise<PoolHeadR
     const canPrice = price0 !== null && price1 !== null;
 
     // Scale amounts from raw to token-native units
-    const token0Amount = scaleAmount(liquidityRow.amount0_raw, meta.decimals0);
-    const token1Amount = scaleAmount(liquidityRow.amount1_raw, meta.decimals1);
+    const token0Amount = scaleAmount(reserves.reserve0Raw, meta.decimals0);
+    const token1Amount = scaleAmount(reserves.reserve1Raw, meta.decimals1);
 
     // Compute TVL
     let tvlUsd = 0;
@@ -818,15 +1078,31 @@ export async function getPoolHeadMetrics(poolAddress: string): Promise<PoolHeadR
       tvlUsd = token0Amount * (price0 as number) + token1Amount * (price1 as number);
     }
 
-    // Get positions count (from liquidity row first, fallback to MV query)
-    let positionsCount = Number(liquidityRow.positions_count ?? 0);
-    if (!positionsCount) {
-      positionsCount = await countPositionsForPool(prisma, normalized);
-    }
+    // Get positions count
+    const positionsCount = await countPositionsForPool(prisma, normalized);
 
     // Compute fees
     const fees24hUsd = canPrice ? await computeFeesUsd(prisma, '24h', normalized, meta, price0, price1) : 0;
     const fees7dUsd = canPrice ? await computeFeesUsd(prisma, '7d', normalized, meta, price0, price1) : 0;
+
+    // Incentives (SparkDEX + Enosys)
+    let incentives24hUsd = 0;
+    let incentives7dUsd = 0;
+    let incentivesBreakdown7d: PoolIncentiveBreakdownItem[] = [];
+    const dexName = factoryToDex(poolMeta.factory);
+    if (dexName === 'SPARKDEX') {
+      const inc24h = await computeSparkdexIncentivesForWindow(prisma, normalized, '24h');
+      const inc7d = await computeSparkdexIncentivesForWindow(prisma, normalized, '7d');
+      incentives24hUsd = inc24h.totalUsd;
+      incentives7dUsd = inc7d.totalUsd;
+      incentivesBreakdown7d = inc7d.breakdown;
+    } else if (dexName === 'ENOSYS') {
+      const inc24h = await computeEnosysIncentivesForWindow(prisma, normalized, '24h');
+      const inc7d = await computeEnosysIncentivesForWindow(prisma, normalized, '7d');
+      incentives24hUsd = inc24h.totalUsd;
+      incentives7dUsd = inc7d.totalUsd;
+      incentivesBreakdown7d = inc7d.breakdown;
+    }
 
     if (process.env.NODE_ENV !== 'production') {
       console.log(
@@ -843,13 +1119,16 @@ export async function getPoolHeadMetrics(poolAddress: string): Promise<PoolHeadR
       ok: true,
       degrade: false,
       metrics: {
-        poolAddress: liquidityRow.pool_address,
-        dex: liquidityRow.dex,
-        token0Symbol: liquidityRow.token0_symbol,
-        token1Symbol: liquidityRow.token1_symbol,
+        poolAddress: poolMeta.address.toLowerCase(),
+        dex: dexName,
+        token0Symbol: poolMeta.token0Symbol,
+        token1Symbol: poolMeta.token1Symbol,
         tvlUsd,
         fees24hUsd,
         fees7dUsd,
+        incentives24hUsd,
+        incentives7dUsd,
+        incentivesBreakdown7d,
         positionsCount,
       },
     };
@@ -1051,37 +1330,7 @@ export async function getPoolUniverseHead(poolAddress: string): Promise<PoolUniv
       return { ok: true, degrade: false, universe: null };
     }
 
-    // Step 3: Get liquidity data from MV for all these pools
     const poolAddresses = allPairPoolsRaw.map((p) => p.address.toLowerCase());
-    
-    let liquidityMap = new Map<string, PoolLiquidityRow>();
-    const liquidityMvExists = await checkMvExists(prisma, 'mv_pool_liquidity');
-    
-    if (liquidityMvExists && poolAddresses.length > 0) {
-      // Fetch all liquidity rows for these pools in one query
-      const liquidityRows = await prisma.$queryRaw<PoolLiquidityRow[]>`
-        SELECT 
-          pool_address,
-          dex,
-          token0_address,
-          token1_address,
-          token0_symbol,
-          token1_symbol,
-          token0_decimals,
-          token1_decimals,
-          amount0_raw::text AS amount0_raw,
-          amount1_raw::text AS amount1_raw,
-          positions_count,
-          last_event_ts
-        FROM "mv_pool_liquidity"
-        WHERE pool_address = ANY(${poolAddresses}::text[])
-      `;
-      
-      for (const row of liquidityRows) {
-        liquidityMap.set(row.pool_address.toLowerCase(), row);
-      }
-      console.log(`[POOL_UNIVERSE] Found ${liquidityRows.length} pools in mv_pool_liquidity`);
-    }
 
     // Get pricing info once (use base pool symbols)
     const symbol0 = basePool.token0Symbol?.trim() ?? '';
@@ -1097,15 +1346,17 @@ export async function getPoolUniverseHead(poolAddress: string): Promise<PoolUniv
 
     // Step 4: Compute per-pool metrics
     const segments: PoolUniverseHead['segments'] = [];
-    const dexAgg: Record<DexName, { tvlUsd: number; fees24hUsd: number; fees7dUsd: number; positionsCount: number; poolsCount: number }> = {
-      ENOSYS: { tvlUsd: 0, fees24hUsd: 0, fees7dUsd: 0, positionsCount: 0, poolsCount: 0 },
-      SPARKDEX: { tvlUsd: 0, fees24hUsd: 0, fees7dUsd: 0, positionsCount: 0, poolsCount: 0 },
-      OTHER: { tvlUsd: 0, fees24hUsd: 0, fees7dUsd: 0, positionsCount: 0, poolsCount: 0 },
+    const dexAgg: Record<DexName, { tvlUsd: number; fees24hUsd: number; fees7dUsd: number; incentives7dUsd: number; positionsCount: number; poolsCount: number }> = {
+      ENOSYS: { tvlUsd: 0, fees24hUsd: 0, fees7dUsd: 0, incentives7dUsd: 0, positionsCount: 0, poolsCount: 0 },
+      SPARKDEX: { tvlUsd: 0, fees24hUsd: 0, fees7dUsd: 0, incentives7dUsd: 0, positionsCount: 0, poolsCount: 0 },
+      OTHER: { tvlUsd: 0, fees24hUsd: 0, fees7dUsd: 0, incentives7dUsd: 0, positionsCount: 0, poolsCount: 0 },
     };
 
     let totalTvlUsd = 0;
     let totalFees24hUsd = 0;
     let totalFees7dUsd = 0;
+    let totalIncentives24hUsd = 0;
+    let totalIncentives7dUsd = 0;
     let totalPositionsCount = 0;
 
     for (const poolRow of allPairPoolsRaw) {
@@ -1128,30 +1379,34 @@ export async function getPoolUniverseHead(poolAddress: string): Promise<PoolUniv
         decimals1,
       };
 
-      // Get liquidity from MV if available
-      const liquidityRow = liquidityMap.get(poolAddr);
-      
       let poolTvlUsd = 0;
-      let poolPositions = 0;
-      
-      if (liquidityRow && canPrice) {
-        // Use MV data for TVL
-        const amt0Raw = isReversed ? liquidityRow.amount1_raw : liquidityRow.amount0_raw;
-        const amt1Raw = isReversed ? liquidityRow.amount0_raw : liquidityRow.amount1_raw;
-        const amt0 = scaleAmount(amt0Raw, decimals0);
-        const amt1 = scaleAmount(amt1Raw, decimals1);
+      let poolPositions = await countPositionsForPool(prisma, poolAddr);
+
+      const reserves = await getPoolReservesNow(prisma, poolAddr);
+      if (reserves && canPrice) {
+        const amt0 = scaleAmount(reserves.reserve0Raw, decimals0);
+        const amt1 = scaleAmount(reserves.reserve1Raw, decimals1);
         poolTvlUsd = amt0 * (price0 as number) + amt1 * (price1 as number);
-        poolPositions = Number(liquidityRow.positions_count ?? 0);
-      }
-      
-      // Fallback: count positions from MV if not in liquidity MV
-      if (!poolPositions) {
-        poolPositions = await countPositionsForPool(prisma, poolAddr);
       }
 
       // Compute fees
       const poolFees24h = canPrice ? await computeFeesUsd(prisma, '24h', poolAddr, meta, price0, price1) : 0;
       const poolFees7d = canPrice ? await computeFeesUsd(prisma, '7d', poolAddr, meta, price0, price1) : 0;
+
+      // Incentives
+      let poolIncentives24h = 0;
+      let poolIncentives7d = 0;
+      if (dex === 'SPARKDEX') {
+        const inc24h = await computeSparkdexIncentivesForWindow(prisma, poolAddr, '24h');
+        const inc7d = await computeSparkdexIncentivesForWindow(prisma, poolAddr, '7d');
+        poolIncentives24h = inc24h.totalUsd;
+        poolIncentives7d = inc7d.totalUsd;
+      } else if (dex === 'ENOSYS') {
+        const inc24h = await computeEnosysIncentivesForWindow(prisma, poolAddr, '24h');
+        const inc7d = await computeEnosysIncentivesForWindow(prisma, poolAddr, '7d');
+        poolIncentives24h = inc24h.totalUsd;
+        poolIncentives7d = inc7d.totalUsd;
+      }
 
       // Fee tier
       const feeTierBps = typeof poolRow.fee === 'number' ? Math.round(poolRow.fee / 100) : null;
@@ -1171,31 +1426,38 @@ export async function getPoolUniverseHead(poolAddress: string): Promise<PoolUniv
       totalTvlUsd += poolTvlUsd;
       totalFees24hUsd += poolFees24h;
       totalFees7dUsd += poolFees7d;
+      totalIncentives24hUsd += poolIncentives24h;
+      totalIncentives7dUsd += poolIncentives7d;
       totalPositionsCount += poolPositions;
 
       dexAgg[dex].tvlUsd += poolTvlUsd;
       dexAgg[dex].fees24hUsd += poolFees24h;
       dexAgg[dex].fees7dUsd += poolFees7d;
+      dexAgg[dex].incentives7dUsd += poolIncentives7d;
       dexAgg[dex].positionsCount += poolPositions;
       dexAgg[dex].poolsCount += 1;
     }
 
     // Active LP wallets (7d) across all pools in this pair
+    // Active LP wallets (lifetime owners) across all pools in this pair
     let walletsCount = 0;
-    const walletMvExists = await checkMvExists(prisma, 'mv_wallet_lp_7d');
-    if (walletMvExists && poolAddresses.length > 0) {
+    if (poolAddresses.length > 0) {
       try {
         const walletRows = await prisma.$queryRaw<CountResult[]>`
-          SELECT COUNT(DISTINCT wallet)::bigint AS count
-          FROM "mv_wallet_lp_7d"
-          WHERE LOWER(pool) = ANY(${poolAddresses})
+          SELECT COUNT(DISTINCT last_known_owner)::bigint AS count
+          FROM "mv_position_lifetime_v1"
+          WHERE LOWER(primary_pool) = ANY(${poolAddresses})
+            AND last_known_owner IS NOT NULL
+            AND last_known_owner <> ''
         `;
         walletsCount = Number(walletRows[0]?.count ?? 0);
       } catch (error) {
-        console.warn('[POOL_UNIVERSE] walletsCount query failed', error);
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('[POOL_UNIVERSE] walletsCount lifetime query failed', error);
+        }
+        walletsCount = 0;
       }
     }
-
     // Build DEX breakdown
     const dexBreakdown: PoolUniverseHead['dexBreakdown'] = [];
     for (const dexKey of ['ENOSYS', 'SPARKDEX', 'OTHER'] as DexName[]) {
@@ -1205,6 +1467,7 @@ export async function getPoolUniverseHead(poolAddress: string): Promise<PoolUniv
           dex: dexKey,
           tvlUsd: agg.tvlUsd,
           fees7dUsd: agg.fees7dUsd,
+          incentives7dUsd: agg.incentives7dUsd,
           positionsCount: agg.positionsCount,
           poolsCount: agg.poolsCount,
         });
@@ -1233,6 +1496,8 @@ export async function getPoolUniverseHead(poolAddress: string): Promise<PoolUniv
         tvlUsd: totalTvlUsd,
         fees24hUsd: totalFees24hUsd,
         fees7dUsd: totalFees7dUsd,
+        incentives24hUsd: totalIncentives24hUsd,
+        incentives7dUsd: totalIncentives7dUsd,
         positionsCount: totalPositionsCount,
         walletsCount,
         poolsCount: segments.length,

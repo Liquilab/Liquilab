@@ -4,7 +4,7 @@
  * Create Materialized Views from SQL files
  * 
  * Reads SQL files from db/views/ and creates the MVs in the database.
- * Safe to run multiple times (uses IF NOT EXISTS).
+ * SQL files should include DROP IF EXISTS before CREATE to ensure updates are applied.
  * 
  * Usage: npm run db:mvs:create
  */
@@ -20,10 +20,10 @@ const MV_ORDER = [
   // Core MVs (no dependencies)
   'mv_pool_latest_state.sql',
   'mv_pool_fees_24h.sql',
+  'mv_pool_fees_7d.sql',
   'mv_pool_position_stats.sql',
   'mv_position_latest_event.sql',
   'mv_pool_volume_7d.sql',
-  'mv_pool_fees_7d.sql',
   'mv_positions_active_7d.sql',
   'mv_wallet_lp_7d.sql',
   'mv_pool_changes_7d.sql',
@@ -33,6 +33,8 @@ const MV_ORDER = [
   'mv_position_lifetime_v1.sql',
   // TVL-related MVs (depends on Pool table)
   'mv_pool_liquidity.sql',
+  // Current reserves SSoT (depends on PoolState table)
+  'mv_pool_reserves_now.sql',
 ];
 
 async function createMV(sqlFile: string, viewsDir: string): Promise<{ name: string; success: boolean; error?: string }> {
@@ -62,7 +64,7 @@ async function createMV(sqlFile: string, viewsDir: string): Promise<{ name: stri
           await prisma.$executeRawUnsafe(statement + ';');
         } catch (stmtError) {
           const errorMsg = stmtError instanceof Error ? stmtError.message : String(stmtError);
-          // Ignore "already exists" errors
+          // Ignore "already exists" errors for indexes
           if (!errorMsg.includes('already exists') && !errorMsg.includes('duplicate')) {
             throw stmtError;
           }
@@ -81,6 +83,7 @@ async function createMV(sqlFile: string, viewsDir: string): Promise<{ name: stri
 
 async function main() {
   console.log('🔨 Creating Materialized Views...\n');
+  console.log('Note: SQL files should include DROP IF EXISTS to update existing MVs.\n');
 
   const viewsDir = join(process.cwd(), 'db/views');
   const existingFiles = readdirSync(viewsDir).filter(f => f.endsWith('.sql'));

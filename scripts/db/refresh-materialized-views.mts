@@ -18,10 +18,10 @@ const REFRESH_ORDER = [
   // Base MVs (no dependencies)
   'mv_pool_latest_state',
   'mv_pool_fees_24h',
+  'mv_pool_fees_7d',
   'mv_pool_position_stats',
   'mv_position_latest_event',
   'mv_pool_volume_7d',
-  'mv_pool_fees_7d',
   'mv_positions_active_7d',
   'mv_wallet_lp_7d',
   'mv_pool_changes_7d',
@@ -102,4 +102,3 @@ main()
   .finally(() => {
     prisma.$disconnect();
   });
-

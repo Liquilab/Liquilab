@@ -196,7 +196,7 @@ export function PoolRow({ pool, onNavigate, onShare }: PoolRowProps) {
       } else if (shareUrl && typeof window !== 'undefined') {
         const intent = new URL('https://twitter.com/intent/tweet');
         intent.searchParams.set('url', shareUrl);
-        intent.searchParams.set('text', `Tracking ${pairLabel} on LiquiLab`);
+        intent.searchParams.set('text', `Tracking ${pairLabel} on Liquilab`);
         window.open(intent.toString(), '_blank', 'noopener,noreferrer');
       }
     },

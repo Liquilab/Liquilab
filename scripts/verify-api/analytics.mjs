@@ -24,23 +24,45 @@ function isSummaryPayload(payload) {
 }
 
 function isPoolPayload(payload) {
-  if (!payload || typeof payload.ts !== 'number') {
+  if (!payload || (typeof payload.ts !== 'number' && typeof payload.ts !== 'string')) {
     return false;
   }
   if (payload.degrade) {
     return true;
   }
+
   const pool = payload.pool;
   if (!payload.ok || !pool) {
     return false;
   }
-  return (
-    typeof pool.state === 'string' &&
-    typeof pool.tvl === 'number' &&
-    typeof pool.fees24h === 'number' &&
-    typeof pool.fees7d === 'number' &&
-    typeof pool.positionsCount === 'number'
-  );
+
+  const head = pool.head;
+  const universe = pool.universe;
+  const summary = universe?.summary;
+
+  const headValid =
+    head &&
+    typeof head.state === 'string' &&
+    typeof head.tvl === 'number' &&
+    typeof head.fees24h === 'number' &&
+    typeof head.fees7d === 'number' &&
+    typeof head.positionsCount === 'number';
+
+  const universeValid =
+    universe &&
+    summary &&
+    typeof summary.tvlUsd === 'number' &&
+    typeof summary.fees24hUsd === 'number' &&
+    typeof summary.fees7dUsd === 'number' &&
+    typeof summary.positionsCount === 'number' &&
+    typeof summary.walletsCount === 'number' &&
+    Array.isArray(universe.segments);
+
+  if (headValid && universeValid) {
+    return true;
+  }
+
+  return false;
 }
 
 async function fetchJson(pathname) {

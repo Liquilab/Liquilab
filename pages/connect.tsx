@@ -6,9 +6,9 @@ import Link from 'next/link';
 import { isAddress } from 'viem';
 import { useAccount, useConnect } from 'wagmi';
 
-import { LiquiLabLogo } from '@/components/LiquiLabLogo';
+import { LiquilabLogo } from '@/components/LiquilabLogo';
 import { PoolRowPreview } from '@/components/pools/PoolRowPreview';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import { PricePill } from '@/components/ui/PricePill';
 import { ProgressSteps } from '@/components/ui/ProgressSteps';
 import {
@@ -212,14 +212,14 @@ export default function ConnectPage() {
   return (
     <>
       <Head>
-        <title>Connect wallet · LiquiLab</title>
+        <title>Connect wallet · Liquilab</title>
       </Head>
 
       <div className="relative min-h-screen overflow-hidden text-white">
         <div className="page-bg" aria-hidden="true" />
         <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col px-6 pb-20 pt-10 sm:px-10">
           <header className="flex items-center justify-between">
-            <LiquiLabLogo variant="full" size="sm" theme="dark" />
+            <LiquilabLogo variant="full" size="sm" theme="dark" />
             <Link
               href="/login"
               className="text-sm font-semibold text-white/80 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"

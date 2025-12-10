@@ -15,7 +15,7 @@ type IntentResponse = {
   expiresAt: string | null;
 };
 
-const fastTrackDisclaimer = 'LiquiLab is in early development. Outages or data issues may occur. No refunds can be issued for early access or usage-based payments.';
+const fastTrackDisclaimer = 'Liquilab is in early development. Outages or data issues may occur. No refunds can be issued for early access or usage-based payments.';
 
 function buildQrContent(intent: IntentResponse) {
   return `Send ${intent.amountToken} USDT0 to ${intent.treasury} on Flare (chainId ${intent.chainId}). Intent: ${intent.intentId}`;
@@ -100,7 +100,7 @@ export default function FastForwardPayPage() {
   return (
     <>
       <Head>
-        <title>LiquiLab · Fast-Track Payment</title>
+        <title>Liquilab · Fast-Track Payment</title>
       </Head>
       <main className="min-h-screen bg-liqui-navy text-white">
         <Header showTabs={false} />
@@ -108,7 +108,7 @@ export default function FastForwardPayPage() {
           <section className="space-y-4">
             <h1 className="font-brand text-3xl font-bold md:text-4xl">Fast-Track · $50 in USDT₀</h1>
             <p className="text-liqui-subtext md:text-lg">
-              Send a one-time $50 payment in USDT₀ (Flare) to the LiquiLab treasury. After on-chain confirmation an admin approves your access and unlocks two pools.
+              Send a one-time $50 payment in USDT₀ (Flare) to the Liquilab treasury. After on-chain confirmation an admin approves your access and unlocks two pools.
             </p>
           </section>
 
@@ -168,7 +168,7 @@ export default function FastForwardPayPage() {
           {intent && (
             <section className="space-y-6 rounded-3xl border border-liqui-border bg-liqui-card/60 p-8">
               <header className="space-y-2">
-                <h2 className="text-2xl font-semibold">1. Send 50 USDT₀ to the LiquiLab treasury</h2>
+                <h2 className="text-2xl font-semibold">1. Send 50 USDT₀ to the Liquilab treasury</h2>
                 <p className="text-sm text-liqui-subtext">
                   Use USDT₀ (6 decimals) on Flare (chainId {intent.chainId}). Intent ID: {intent.intentId}
                 </p>

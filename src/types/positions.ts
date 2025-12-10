@@ -5,6 +5,12 @@ export interface TokenInfo {
   address?: string;
 }
 
+export interface PositionIncentiveBreakdownItem {
+  tokenSymbol: string;   // e.g. "rFLR", "APS"
+  amount: string;        // human-readable token amount
+  amountUsd: number;     // USD value for this reward token
+}
+
 export interface RawPositionData {
   nonce: number;
   operator: `0x${string}`;
@@ -37,11 +43,13 @@ export interface PositionRow {
   fee1: number;
   
   // Incentives (protocol rewards: rFLR, APS, etc.)
-  incentivesUsd?: number;  // Canonical field for all incentives
-  rflrRewardsUsd: number;  // rFLR-specific (legacy)
-  rflrAmount: number;
-  rflrUsd: number;
-  rflrPriceUsd: number;
+  incentivesUsd?: number;  // Canonical total incentives (all tokens)
+  incentivesBreakdown?: PositionIncentiveBreakdownItem[]; // Optional per-token breakdown
+  // Legacy rFLR-specific fields (to be deprecated)
+  rflrRewardsUsd?: number;
+  rflrAmount?: number;
+  rflrUsd?: number;
+  rflrPriceUsd?: number;
   
   // Rewards (CALCULATED server-side: fees + incentives)
   // ⚠️ This field is populated by API, never calculate manually

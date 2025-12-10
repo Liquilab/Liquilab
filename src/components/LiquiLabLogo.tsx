@@ -1,6 +1,6 @@
 import React from 'react';
 
-interface LiquiLabLogoProps {
+interface LiquilabLogoProps {
   variant?: 'full' | 'mark-only' | 'wordmark-only';
   size?: 'sm' | 'md' | 'lg';
   theme?: 'dark' | 'light';
@@ -8,17 +8,17 @@ interface LiquiLabLogoProps {
 }
 
 /**
- * LiquiLab Logo Component
+ * Liquilab Logo Component
  *
  * Renders the droplet mark and Quicksand wordmark inline so the logo never
  * depends on external image assets loading.
  */
-export function LiquiLabLogo({
+export function LiquilabLogo({
   variant = 'full',
   size = 'md',
   theme = 'dark',
   className = '',
-}: LiquiLabLogoProps) {
+}: LiquilabLogoProps) {
   const sizeConfig = {
     sm: {
       mark: 24,
@@ -52,7 +52,7 @@ export function LiquiLabLogo({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       role={ariaHidden ? 'presentation' : 'img'}
-      aria-label={ariaHidden ? undefined : 'LiquiLab droplet mark'}
+      aria-label={ariaHidden ? undefined : 'Liquilab droplet mark'}
       aria-hidden={ariaHidden}
       className="flex-shrink-0"
     >
@@ -79,7 +79,7 @@ export function LiquiLabLogo({
             fontVariantNumeric: 'normal',
           }}
         >
-          LiquiLab
+          Liquilab
         </span>
       </div>
     );
@@ -95,7 +95,7 @@ export function LiquiLabLogo({
           fontVariantNumeric: 'normal',
         }}
       >
-        LiquiLab
+        Liquilab
       </span>
     </div>
   );
@@ -111,7 +111,7 @@ interface LogoLockupProps {
  * Logo with tagline lockup
  * For hero sections and prominent placements
  */
-export function LiquiLabLogoLockup({
+export function LiquilabLogoLockup({
   theme = 'dark',
   size = 'md',
   className = '',
@@ -140,7 +140,7 @@ export function LiquiLabLogoLockup({
 
   return (
     <div className={`flex flex-col items-start ${config.gap} ${className}`}>
-      <LiquiLabLogo variant="full" size={config.logo} theme={theme} />
+      <LiquilabLogo variant="full" size={config.logo} theme={theme} />
       <p
         className={`font-ui ${config.tagline} font-medium ${taglineColor}`}
         style={{
@@ -154,4 +154,4 @@ export function LiquiLabLogoLockup({
   );
 }
 
-export default LiquiLabLogo;
+export default LiquilabLogo;

@@ -9,7 +9,7 @@ export default function DemoPage() {
   return (
     <>
       <Head>
-        <title>Network metrics · LiquiLab</title>
+        <title>Network metrics · Liquilab</title>
         <meta
           name="description"
           content="Track Flare network TVL and pool counts across Enosys and SparkDEX in one calm overview."

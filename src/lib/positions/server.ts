@@ -34,10 +34,11 @@ export function calculateRewards(position: PositionRow): number {
   // INCENTIVES: rFLR, APS, and future reward tokens
   // Use incentivesUsd if available (canonical field)
   // Otherwise fall back to provider-specific fields
-  const incentives = position.incentivesUsd || 
-                    position.rflrRewardsUsd || 
-                    position.rflrUsd || 
-                    0;
+  const incentives =
+    position.incentivesUsd ??
+    position.rflrRewardsUsd ??
+    position.rflrUsd ??
+    0;
   
   return fees + incentives;
 }

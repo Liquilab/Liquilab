@@ -1,5 +1,7 @@
 import type { NextPage } from "next";
 import Image from "next/image";
+import { GlobalCtaButton } from '@/components/GlobalCtaButton';
+import { Navigation } from '@/components/Navigation';
 
 const HomePage: NextPage = () => {
   return (
@@ -35,7 +37,7 @@ const HomePage: NextPage = () => {
         }}
       >
         <Image
-          src="/water-splash.jpg"
+          src="/media/wave-hero.png"
           alt=""
           fill
           style={{
@@ -44,6 +46,7 @@ const HomePage: NextPage = () => {
           }}
           priority
           quality={95}
+          className="opacity-90"
         />
       </div>
 
@@ -59,12 +62,15 @@ const HomePage: NextPage = () => {
         }}
       />
 
+      {/* Global Navigation */}
+      <Navigation className="relative z-50 bg-transparent" />
+
       {/* Content */}
       <main
         style={{
           position: "relative",
           zIndex: 3,
-          minHeight: "100vh",
+          minHeight: "calc(100vh - 84px)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -77,41 +83,8 @@ const HomePage: NextPage = () => {
             textAlign: "center",
           }}
         >
-          {/* Logo */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.75rem",
-              marginBottom: "2.5rem",
-            }}
-          >
-            <svg
-              width="36"
-              height="43"
-              viewBox="0 0 40 48"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              style={{ flexShrink: 0 }}
-            >
-              <path
-                d="M20 0C20 0 0 18 0 30C0 40.4934 8.95431 48 20 48C31.0457 48 40 40.4934 40 30C40 18 20 0 20 0Z"
-                fill="#3B82F6"
-              />
-            </svg>
-            <span
-              style={{
-                fontSize: "1.75rem",
-                fontWeight: 600,
-                color: "rgba(255, 255, 255, 0.98)",
-                letterSpacing: "-0.02em",
-              }}
-            >
-              LiquiLab
-            </span>
-          </div>
-
+          {/* Logo - Removed as it is now in Navigation */}
+          
           {/* Heading */}
           <h1
             style={{
@@ -120,6 +93,7 @@ const HomePage: NextPage = () => {
               color: "rgba(255, 255, 255, 0.98)",
               lineHeight: 1.15,
               marginBottom: "1.25rem",
+              marginTop: "-4rem", // Slight visual offset to center vertically
             }}
           >
             Non-custodial liquidity analytics for Flare LPs.
@@ -135,7 +109,7 @@ const HomePage: NextPage = () => {
               lineHeight: 1.6,
             }}
           >
-            LiquiLab is preparing its first public release. Track your
+            Liquilab is preparing its first public release. Track your
             concentrated liquidity positions on Flare with RangeBand™ insights
             and Universe analytics.
           </p>
@@ -159,38 +133,7 @@ const HomePage: NextPage = () => {
             >
               Want to know more, or interested in early access?
             </p>
-            <a
-              href="mailto:hello@liquilab.io"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                padding: "0.75rem 1.5rem",
-                borderRadius: "9999px",
-                backgroundColor: "#3B82F6",
-                color: "#ffffff",
-                fontSize: "0.9375rem",
-                fontWeight: 600,
-                textDecoration: "none",
-                boxShadow:
-                  "0 10px 20px -5px rgba(59, 130, 246, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3)",
-                transition: "all 0.2s ease",
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = "#2563EB";
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.boxShadow =
-                  "0 15px 25px -5px rgba(59, 130, 246, 0.5), 0 6px 8px -2px rgba(0, 0, 0, 0.4)";
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = "#3B82F6";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow =
-                  "0 10px 20px -5px rgba(59, 130, 246, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3)";
-              }}
-            >
-              hello@liquilab.io
-            </a>
+            <GlobalCtaButton className="mt-6" />
           </div>
         </div>
       </main>

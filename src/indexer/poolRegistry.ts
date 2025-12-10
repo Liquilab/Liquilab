@@ -8,13 +8,27 @@ export class PoolRegistry {
   constructor(private prisma: PrismaClient) {}
 
   async getPools(allowlistPath = DEFAULT_ALLOWLIST): Promise<string[]> {
-    const result = await this.prisma.poolEvent.findMany({
+    // Primary SSoT: Pool table (covers pools even if PoolCreated events were never ingested)
+    const poolRows = await this.prisma.pool.findMany({
+      select: { address: true },
+    });
+
+    // Secondary: PoolCreated events (legacy discovery path)
+    const createdRows = await this.prisma.poolEvent.findMany({
       where: { eventName: 'PoolCreated' },
       distinct: ['pool'],
       select: { pool: true },
     });
 
-    const pools = result.map((row) => row.pool.toLowerCase());
+    const poolSet = new Set<string>();
+    for (const row of poolRows) {
+      poolSet.add(row.address.toLowerCase());
+    }
+    for (const row of createdRows) {
+      poolSet.add(row.pool.toLowerCase());
+    }
+
+    const pools = Array.from(poolSet);
 
     const allowlist = await this.loadAllowlist(allowlistPath);
     if (!allowlist) {
@@ -26,11 +40,19 @@ export class PoolRegistry {
   }
 
   async getMinCreatedBlock(): Promise<number | null> {
-    const aggregate = await this.prisma.poolEvent.aggregate({
+    // Prefer Pool SSoT; fallback to PoolEvent if Pool table is empty
+    const poolAggregate = await this.prisma.pool.aggregate({
+      _min: { blockNumber: true },
+    });
+    if (poolAggregate._min.blockNumber !== null) {
+      return poolAggregate._min.blockNumber ?? null;
+    }
+
+    const eventAggregate = await this.prisma.poolEvent.aggregate({
       where: { eventName: 'PoolCreated' },
       _min: { blockNumber: true },
     });
-    return aggregate._min.blockNumber ?? null;
+    return eventAggregate._min.blockNumber ?? null;
   }
 
   private async loadAllowlist(filePath: string): Promise<string[] | null> {

@@ -54,14 +54,14 @@ export default function WaitlistPage() {
   return (
     <>
       <Head>
-        <title>LiquiLab · Waitlist</title>
-        <meta name="description" content="Join the LiquiLab waitlist for early access" />
+        <title>Liquilab · Waitlist</title>
+        <meta name="description" content="Join the Liquilab waitlist for early access" />
       </Head>
       <main className="min-h-screen bg-liqui-navy text-white font-ui">
         <Header showTabs={false} />
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-12">
           <section className="space-y-4">
-            <h1 className="font-brand text-3xl font-bold md:text-4xl">Join the LiquiLab Waitlist</h1>
+            <h1 className="font-brand text-3xl font-bold md:text-4xl">Join the Liquilab Waitlist</h1>
             <p className="font-ui text-liqui-subtext md:text-lg">
               Sign up for early access. Early operators get two pools free and hear first when the Pool Detail beta unlocks.
             </p>
@@ -118,7 +118,7 @@ export default function WaitlistPage() {
             <div className="space-y-1 text-xs text-liqui-subtext font-ui">
               <p className="font-brand font-semibold uppercase tracking-wide text-[10px] text-liqui-aqua">Disclaimer</p>
               <p>
-                LiquiLab is in early development. Outages or data issues may occur. No refunds can be issued for early
+                Liquilab is in early development. Outages or data issues may occur. No refunds can be issued for early
                 access or usage-based fees.
               </p>
             </div>

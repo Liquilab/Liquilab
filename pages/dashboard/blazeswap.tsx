@@ -91,7 +91,7 @@ export default function BlazeSwapDashboardPage() {
     return (
       <>
         <Head>
-          <title>BlazeSwap · LiquiLab</title>
+          <title>BlazeSwap · Liquilab</title>
         </Head>
         <Header
           currentPage="blazeswap"
@@ -104,7 +104,7 @@ export default function BlazeSwapDashboardPage() {
           <p className="mt-4 font-ui text-sm text-white/60">
             Set <code className="font-mono">ENABLE_BLAZESWAP=true</code> and{' '}
             <code className="font-mono">FLARE_RPC_URL</code> to enable BlazeSwap liquidity
-            management inside LiquiLab.
+            management inside Liquilab.
           </p>
         </main>
       </>
@@ -114,7 +114,7 @@ export default function BlazeSwapDashboardPage() {
   return (
     <>
       <Head>
-        <title>BlazeSwap (Flare) · LiquiLab</title>
+        <title>BlazeSwap (Flare) · Liquilab</title>
       </Head>
 
       <Header currentPage="blazeswap" showTabs={false} />
@@ -125,7 +125,7 @@ export default function BlazeSwapDashboardPage() {
             Manage BlazeSwap liquidity
           </h1>
           <p className="font-ui text-sm text-white/60">
-            Discover BlazeSwap pairs on Flare, inspect your LP positions, and add or remove liquidity without leaving LiquiLab.
+            Discover BlazeSwap pairs on Flare, inspect your LP positions, and add or remove liquidity without leaving Liquilab.
           </p>
           <p className="font-ui text-xs text-white/40">
             Powered by BlazeSwap • RangeBand™ compatible analytics coming soon

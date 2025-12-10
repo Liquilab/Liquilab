@@ -91,7 +91,7 @@ export default function AdminDb() {
 
   return (
     <main className="min-h-screen text-white" style={{ background:'#0B1530', fontFamily:'ui-sans-serif, system-ui, -apple-system, Inter, Segoe UI, Roboto'}}>
-      <Head><title>LiquiLab — Admin / Database</title></Head>
+      <Head><title>Liquilab — Admin / Database</title></Head>
       <div className="max-w-7xl mx-auto p-6">
         <h1 className="text-2xl font-semibold mb-4">Admin — Database</h1>
 

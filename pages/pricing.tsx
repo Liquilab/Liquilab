@@ -2,1051 +2,489 @@
 
 import React from 'react';
 import Head from 'next/head';
-import { useRouter } from 'next/router';
-import { useAccount } from 'wagmi';
-import Header from '@/components/Header';
-import { formatEUR, calcPoolsCost, calcNotifCost, calcTotal, nextTierFor } from '@/lib/pricing';
-import { pricingConfig, formatUSD } from '@/lib/billing/pricing';
-import { TokenIcon } from '@/components/TokenIcon';
-import WalletConnect from '@/components/WalletConnect';
-import { fetchPositions, computeSummary as computeClientSummary } from '@/lib/positions/client';
-import type { PositionRow } from '@/lib/positions/types';
+import Link from 'next/link';
+import { Navigation } from '@/components/Navigation';
+import { WaveBackground } from '@/components/WaveBackground';
+import Footer from '@/components/Footer';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { GlobalCtaButton } from '@/components/GlobalCtaButton';
+import { Check, Minus, Info, Gauge, TrendingUp, Building2, ArrowRight, Sparkles } from 'lucide-react';
+import { pricingConfig } from '@/lib/billing/pricing';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-type PositionSummary = {
-  total: number;
-  active: number;
-  inactive: number;
-  ended: number;
-  archived: number;
-  totals: {
-    tvlUsd: number;
-    unclaimedFeesUsd: number;
-    incentivesUsd: number;
-    totalRewardsUsd: number;
-  };
-};
+// Import Icons properly if they exist, else use Lucide
+const SparklesIcon = Sparkles; 
 
-type SummaryLike = {
-  active?: number;
-  inactive?: number;
-  ended?: number;
-  count?: number;
-  tvlUsd?: number;
-  fees24hUsd?: number;
-  incentivesUsd?: number;
-  rewardsUsd?: number;
-};
+// Comparison Table Component
+function ComparisonTable() {
+  const FeatureRow = ({ 
+    feature, 
+    premium, 
+    pro, 
+    enterprise,
+    tooltip 
+  }: { 
+    feature: string; 
+    premium: React.ReactNode; 
+    pro: React.ReactNode; 
+    enterprise: React.ReactNode;
+    tooltip?: string;
+  }) => (
+    <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 sm:gap-6 px-4 sm:px-8 py-4 border-b border-white/[0.03] last:border-0 items-center">
+      <div className="flex items-center gap-2 font-ui text-white/95 text-sm sm:text-base">
+        {feature}
+        {tooltip && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Info className="w-4 h-4 text-white/40 hover:text-white/70 transition-colors" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs bg-[#0F1A36]/95 border-white/10 text-white">
+                <p className="font-ui text-sm">{tooltip}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+      <div className="flex items-center justify-center font-ui text-white/70 text-sm text-center">
+        {premium}
+      </div>
+      <div className="flex items-center justify-center font-ui text-white/70 text-sm text-center">
+        {pro}
+      </div>
+      <div className="flex items-center justify-center font-ui text-white/70 text-sm text-center">
+        {enterprise}
+      </div>
+    </div>
+  );
 
-/**
- * Type-safe summary picker that handles both response schemas:
- * - `{ success: true, data: { summary } }` (canonical)
- * - `{ success: true, summary }` (legacy/alt)
- */
-function pickSummary(resp: unknown): SummaryLike | null {
-  const r = resp as Record<string, unknown>;
-  const dataObj = r?.data as Record<string, unknown> | undefined;
-  const s = dataObj?.summary ?? r?.summary;
-  if (s && typeof s === 'object') return s as SummaryLike;
-  return null;
-}
+  const SectionHeader = ({ title }: { title: string }) => (
+    <div className="px-4 sm:px-8 py-4 sm:py-6 bg-[#0B1530]/50 mt-4 first:mt-0">
+      <h3 className="font-ui text-white/95 font-semibold">{title}</h3>
+    </div>
+  );
 
-const MIN_POOLS = 5;
-const MAX_POOLS = 100;
-const STEP = 5;
+  const CheckIcon = () => <Check className="w-5 h-5 text-[#1BE8D2]" />;
+  const DashIcon = () => <Minus className="w-5 h-5 text-white/20" />;
 
-const PROVIDER_LINKS: Record<string, string> = {
-  enosys: 'https://enosys.global',
-  sparkdex: 'https://sparkdex.ai',
-  blazeswap: 'https://blazeswap.com',
-};
+  return (
+    <div className="mb-20">
+      {/* Table Header */}
+      <div className="text-center mb-12">
+        <h2 className="font-brand text-white/95 mb-4 text-3xl">Compare plans</h2>
+        <p className="font-ui text-white/[0.58] max-w-3xl mx-auto">
+          Detailed feature comparison across all Liquilab plans. Choose the right level of analytics, 
+          RangeBand™ insights, and support for your liquidity management needs.
+        </p>
+      </div>
 
-function buildPositionSummary(
-  positions: PositionRow[],
-  summary?: SummaryLike | null,
-): PositionSummary {
-  const derived = summary ?? computeClientSummary(positions);
+      <div className="bg-[#0F1A36]/95 border border-white/10 rounded-lg overflow-hidden overflow-x-auto">
+        <div className="min-w-[800px]">
+          {/* Column Headers */}
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-6 px-8 py-6 border-b border-white/10 sticky top-0 bg-[#0F1A36]/95 z-10">
+            <div className="font-ui text-white/40">Features</div>
+            <div className="font-ui text-white/95 text-center font-semibold">Premium</div>
+            <div className="font-ui text-white/95 text-center font-semibold">Pro</div>
+            <div className="font-ui text-white/95 text-center font-semibold">Enterprise</div>
+          </div>
 
-  const active = summary?.active ?? positions.filter((p) => p.category === 'Active').length;
-  const inactive = summary?.inactive ?? positions.filter((p) => p.category === 'Inactive').length;
-  const ended = summary?.ended ?? positions.filter((p) => p.category === 'Ended').length;
+          {/* Section 1: Core Liquilab access */}
+          <SectionHeader title="Core Liquilab access" />
+          <FeatureRow
+            feature="Wallet dashboard & Pools overview"
+            premium={<CheckIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="Access to your wallet's positions and pool analytics"
+          />
+          <FeatureRow
+            feature="List & Grid views (PoolRow & PoolCard)"
+            premium={<CheckIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+          />
+          <FeatureRow
+            feature="Pool detail pages (/pool/[id])"
+            premium="Full details"
+            pro="Full + peer analytics"
+            enterprise="Custom access"
+            tooltip="Detailed pool analytics including price charts, fee history, and position data"
+          />
 
-  return {
-    total: summary?.count ?? positions.length,
-    active,
-    inactive,
-    ended,
-    archived: ended,
-    totals: {
-      tvlUsd: derived.tvlUsd ?? 0,
-      unclaimedFeesUsd: derived.fees24hUsd ?? 0,
-      incentivesUsd: derived.incentivesUsd ?? 0,
-      totalRewardsUsd: derived.rewardsUsd ?? 0,
-    },
-  };
-}
+          {/* Section 2: Data & Analytics */}
+          <SectionHeader title="Data & Analytics" />
+          <FeatureRow
+            feature="Real-time TVL, fees, incentives per pool"
+            premium={<CheckIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+          />
+          <FeatureRow
+            feature="Historical price & range charts (24H / 7D / 30D / 90D)"
+            premium="Own positions"
+            pro="Own + pool-level"
+            enterprise={<CheckIcon />}
+            tooltip="Time-series analysis of price movements and range performance"
+          />
+          <FeatureRow
+            feature="Network summary (/summary) – pools, TVL, fees"
+            premium={<CheckIcon />}
+            pro="Extra metrics"
+            enterprise="Custom KPIs"
+          />
+          <FeatureRow
+            feature="Pool analytics (fees, volume, positions count)"
+            premium="UI only"
+            pro="UI + export-ready (Pro)"
+            enterprise="Full (Enterprise)"
+          />
+          <FeatureRow
+            feature="Wallet cockpit with header stats"
+            premium={<CheckIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="Dashboard view of your wallet's key metrics at a glance"
+          />
+          <FeatureRow
+            feature="My Positions table with claim signals"
+            premium={<CheckIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="Smart indicators showing when it's optimal to claim fees from your positions"
+          />
+          <FeatureRow
+            feature="Token breakdown under USD amounts"
+            premium={<CheckIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="See exact token quantities (e.g., 125 WFLR · 48 FXRP) below dollar values"
+          />
+          <FeatureRow
+            feature="Pro Analytics strip (6 time-driven metrics)"
+            premium={<DashIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="Total Fees, Incentives, Earned, Realized APR, PnL, Range Efficiency – all time-period aware"
+          />
+          <FeatureRow
+            feature="Pro Positions columns"
+            premium={<DashIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="Advanced metrics showing position efficiency and peer comparison rankings"
+          />
+          <FeatureRow
+            feature="Portfolio Analytics"
+            premium={<DashIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="Portfolio-level insights: asset allocation, efficiency tracking, missed fees, LP behavior profiling"
+          />
 
-function hydratePositionForUi(position: PositionRow): PositionRow {
-  return {
-    ...position,
-    poolId: position.marketId,
-  } as PositionRow;
+          {/* Section 3: RangeBand™ & Risk */}
+          <SectionHeader title="RangeBand™ & Risk" />
+          <FeatureRow
+            feature="RangeBand™ status per position"
+            premium={<CheckIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="Live monitoring of whether your position is actively earning fees"
+          />
+          <FeatureRow
+            feature="RangeBand™ strategy insights"
+            premium="Basic labels"
+            pro="Full metrics (Pro)"
+            enterprise="Full + custom"
+            tooltip="Detailed breakdown of strategy performance: days in range, efficiency %, out-of-range events"
+          />
+          <FeatureRow
+            feature="Risk indicators"
+            premium={<CheckIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+          />
+          <FeatureRow
+            feature="Risk & Range Insights card"
+            premium={<DashIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="Pro-only: Detailed risk assessment with downside/upside sensitivity and contextual recommendations"
+          />
+          <FeatureRow
+            feature="Days tracking in chart"
+            premium={<CheckIcon />}
+            pro={<CheckIcon />}
+            enterprise={<CheckIcon />}
+            tooltip="See how many days your position was in range vs out of range, shown directly in price chart legend"
+          />
+
+          {/* Section 4: Alerts & Reports */}
+          <SectionHeader title="Alerts & Reports" />
+          <FeatureRow
+            feature="RangeBand™ alerts"
+            premium={`+$${pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle}/5 pools`}
+            pro="Included"
+            enterprise="Included + custom"
+            tooltip="Real-time notifications when positions move out of range or fees are ready to claim"
+          />
+          <FeatureRow
+            feature="Weekly reports"
+            premium="Summary email"
+            pro={
+              <div className="flex flex-col items-center gap-1">
+                <span>Full exports</span>
+                <Badge variant="outline" className="bg-white/5 border-white/20 text-white/40 text-[10px] sm:text-xs">
+                  Post-MVP
+                </Badge>
+              </div>
+            }
+            enterprise="Bespoke reporting"
+            tooltip="Automated performance reports delivered to your inbox"
+          />
+
+          {/* Section 6: Billing & usage */}
+          <SectionHeader title="Billing & usage" />
+          <FeatureRow
+            feature="Included pools"
+            premium={`${pricingConfig.premium.includedPools} pools + bundles`}
+            pro={`${pricingConfig.pro.includedPools} pools + bundles`}
+            enterprise="Custom limits"
+          />
+          <FeatureRow
+            feature="Additional pool bundles"
+            premium={`+$${pricingConfig.premium.extraBundlePriceUsd} per ${pricingConfig.premium.extraBundlePools} pools`}
+            pro={`+$${pricingConfig.pro.extraBundlePriceUsd} per ${pricingConfig.pro.extraBundlePools} pools`}
+            enterprise="Custom pricing"
+            tooltip="Expand your monitoring capacity by adding bundles of 5 pools"
+          />
+          <FeatureRow
+            feature="RangeBand™ Alerts pricing"
+            premium={`+$${pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle}/month per ${pricingConfig.rangebandAlerts.bundlePools} pools`}
+            pro="Included"
+            enterprise="Included"
+          />
+
+          {/* Section 7: Support */}
+          <SectionHeader title="Support" />
+          <FeatureRow
+            feature="Email support"
+            premium="Standard email"
+            pro="Priority email"
+            enterprise="Priority + dedicated"
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function PricingPage() {
-  const router = useRouter();
-  const { address, isConnected } = useAccount();
   const premiumPlan = pricingConfig.premium;
+  const proPlan = pricingConfig.pro;
 
-  const [positions, setPositions] = React.useState<PositionRow[] | null>(null);
-  const [summary, setSummary] = React.useState<PositionSummary | null>(null);
-  const [loadingPositions, setLoadingPositions] = React.useState(false);
-  const [positionsError, setPositionsError] = React.useState<string | null>(null);
-
-  const [paidPools, setPaidPools] = React.useState<number>(5);
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState<boolean>(false);
-  const [hasAutoSet, setHasAutoSet] = React.useState<boolean>(false);
-  const [selectedPoolIds, setSelectedPoolIds] = React.useState<Set<string>>(new Set());
-  const [showArchived, setShowArchived] = React.useState<boolean>(false);
-  const [expandedPairs, setExpandedPairs] = React.useState<Set<string>>(new Set());
-
-  const loadPositions = React.useCallback(
-    async (signal?: AbortSignal) => {
-      if (!address || !isConnected) {
-        setPositions(null);
-        setSummary(null);
-        setPositionsError(null);
-        setLoadingPositions(false);
-        return;
-      }
-
-      setLoadingPositions(true);
-      setPositionsError(null);
-
-      try {
-        const payload = await fetchPositions(address, { signal });
-        const positionsData = payload.data?.positions ?? [];
-        const summaryData = pickSummary(payload);
-        const hydratedPositions = positionsData.map(hydratePositionForUi);
-
-        setPositions(hydratedPositions);
-        setSummary(buildPositionSummary(hydratedPositions, summaryData));
-      } catch (error) {
-        if ((error as Error).name === 'AbortError') {
-          return;
-        }
-
-        console.error('[pricing] positions fetch failed', error);
-        setPositions([]);
-        setSummary(null);
-        setPositionsError('Couldn\'t load positions. Please retry.');
-      } finally {
-        setLoadingPositions(false);
-      }
+  const plans = [
+    {
+      name: "Premium",
+      price: `$${premiumPlan.priceMonthlyUsd}`,
+      eurPrice: "€14.50",
+      period: "per month",
+      description: "Perfect for active liquidity providers",
+      pools: `${premiumPlan.includedPools} pools + bundles`,
+      features: [
+        `${premiumPlan.includedPools} pools included`,
+        `+$${premiumPlan.extraBundlePriceUsd} per ${premiumPlan.extraBundlePools} pools`,
+        "Wallet cockpit with stats",
+        "My Positions with claim signals",
+        "RangeBand™ status monitoring",
+        "Token breakdown details",
+        "Email support",
+      ],
+      highlighted: false,
     },
-    [address, isConnected],
-  );
-
-  // Fetch positions when wallet connects
-  React.useEffect(() => {
-    if (!address || !isConnected) {
-      setPositions(null);
-      setSummary(null);
-      setPositionsError(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    void loadPositions(controller.signal);
-
-    return () => {
-      controller.abort();
-    };
-  }, [address, isConnected, loadPositions]);
-
-  const handleRetry = React.useCallback(() => {
-    void loadPositions();
-  }, [loadPositions]);
-
-  // Calculate summary (use API summary if available, otherwise calculate client-side)
-  const calculatedSummary = summary;
-  
-  // Recommended tier based on Active + Inactive only (Archived excluded)
-  const recommendedCount = calculatedSummary ? calculatedSummary.active + calculatedSummary.inactive : 0;
-  const tierRecommended = nextTierFor(recommendedCount);
-
-  // Set initial pool count to recommended tier when positions load (only once)
-  React.useEffect(() => {
-    if (calculatedSummary && calculatedSummary.total > 0 && !hasAutoSet) {
-      setPaidPools(tierRecommended);
-      setHasAutoSet(true);
-      
-      // Select Active and Inactive pools by default (exclude Ended/Archived)
-      // ✅ Use .category field from API (no more inline calculations!)
-      if (positions && positions.length > 0) {
-        const activeAndInactiveIds = new Set(
-          positions
-            .filter(p => p.category === 'Active' || p.category === 'Inactive')
-            .map(p => p.marketId)
-        );
-        setSelectedPoolIds(activeAndInactiveIds);
-      }
-    }
-  }, [calculatedSummary, tierRecommended, hasAutoSet, positions]);
-
-  const poolsCost = calcPoolsCost(paidPools);
-  const notifCost = calcNotifCost(paidPools, notificationsEnabled);
-  const totalCost = calcTotal(paidPools, notificationsEnabled);
-
-  // Calculate capacity feedback (only count Active + Inactive; Archived excluded)
-  const getCapacityFeedback = (): string | null => {
-    if (!calculatedSummary || recommendedCount === 0) return null;
-
-    const active = calculatedSummary.active;
-    const inactive = calculatedSummary.inactive;
-    // Only count pools that generate value (Active + Inactive)
-    const valueGeneratingPools = active + inactive;
-
-    if (paidPools >= valueGeneratingPools) {
-      // Can manage everything that matters with room to spare
-      const extra = paidPools - valueGeneratingPools;
-      if (extra === 0) {
-        return `You can manage all your pools (${active} active, ${inactive} inactive).`;
-      }
-      return `You can manage all your pools (${active} active, ${inactive} inactive) with room for ${extra} more.`;
-    } else if (paidPools >= active) {
-      // Can manage all active + some inactive
-      const inactiveCount = paidPools - active;
-      if (inactiveCount === 0) {
-        return `You can manage all ${active} active pools. Select ${nextTierFor(active + 1)} to include inactive pools.`;
-      } else if (inactiveCount === inactive) {
-        return `You can manage all your pools (${active} active, ${inactive} inactive).`;
-      }
-      return `You can manage all ${active} active pools and ${inactiveCount} inactive pool${inactiveCount === 1 ? '' : 's'}.`;
-    } else {
-      // Can only manage some active pools
-      return `You can manage only ${paidPools} of your ${active} active pools. Select ${nextTierFor(active)} to manage all active pools${inactive > 0 ? ` and ${Math.min(inactive, nextTierFor(active) - active)} inactive` : ''}.`;
-    }
-  };
-
-  const capacityFeedback = getCapacityFeedback();
-
-  const handleStepDown = () => {
-    setPaidPools((prev) => Math.max(MIN_POOLS, prev - STEP));
-  };
-
-  const handleStepUp = () => {
-    setPaidPools((prev) => Math.min(MAX_POOLS, prev + STEP));
-  };
-
-  const handleTogglePool = (poolId: string) => {
-    setSelectedPoolIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(poolId)) {
-        newSet.delete(poolId);
-      } else {
-        newSet.add(poolId);
-      }
-      
-      // Auto-adjust paidPools to match selected count
-      const selectedCount = newSet.size;
-      const recommendedTier = nextTierFor(selectedCount);
-      setPaidPools(recommendedTier);
-      
-      return newSet;
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (positions && positions.length > 0) {
-      const allIds = new Set(positions.map((p, idx) => `${p.poolId || p.marketId || idx}`));
-      setSelectedPoolIds(allIds);
-      const recommendedTier = nextTierFor(allIds.size);
-      setPaidPools(recommendedTier);
-    }
-  };
-
-  const handleDeselectAll = () => {
-    setSelectedPoolIds(new Set());
-    setPaidPools(MIN_POOLS);
-  };
-
-  const handleTogglePairGroup = (pairKey: string, poolIds: string[]) => {
-    const allSelected = poolIds.every(id => selectedPoolIds.has(id));
-    setSelectedPoolIds((prev) => {
-      const newSet = new Set(prev);
-      if (allSelected) {
-        // Deselect all in group
-        poolIds.forEach(id => newSet.delete(id));
-      } else {
-        // Select all in group
-        poolIds.forEach(id => newSet.add(id));
-      }
-      
-      // Auto-adjust paidPools
-      const recommendedTier = nextTierFor(newSet.size);
-      setPaidPools(recommendedTier);
-      
-      return newSet;
-    });
-  };
-
-  const handleToggleExpand = (pairKey: string) => {
-    setExpandedPairs((prev) => {
-      const next = new Set(prev);
-      if (next.has(pairKey)) {
-        next.delete(pairKey);
-      } else {
-        next.add(pairKey);
-      }
-      return next;
-    });
-  };
-
-  const selectedCount = selectedPoolIds.size;
-  const allSelected = positions && selectedCount === positions.length;
-
-  const handleSubscribe = () => {
-    const query = new URLSearchParams({
-      paidPools: String(paidPools),
-      addNotifications: notificationsEnabled ? '1' : '0',
-    });
-    router.push(`/sales?${query.toString()}`);
-  };
+    {
+      name: "Pro",
+      price: `$${proPlan.priceMonthlyUsd}`,
+      eurPrice: "€24.20",
+      period: "per month",
+      description: "For professional traders and portfolio managers",
+      pools: `${proPlan.includedPools} pools + bundles`,
+      features: [
+        `${proPlan.includedPools} pools included`,
+        `+$${proPlan.extraBundlePriceUsd} per ${proPlan.extraBundlePools} pools`,
+        "6-tile Pro Analytics strip",
+        "Risk & Range Insights",
+        "Portfolio Analytics (concentration, fees)",
+        "Peer benchmarking & rankings",
+        "RangeBand™ alerts included",
+        "Priority support",
+      ],
+      highlighted: true,
+    },
+    {
+      name: "Enterprise",
+      price: "Custom",
+      eurPrice: null,
+      period: "contact us",
+      description: "For teams, desks, and custom integrations",
+      pools: "Custom limits",
+      features: [
+        "Unlimited pools",
+        "Custom API access",
+        "Bespoke reporting",
+        "Dedicated support",
+        "White-label options",
+        "SLA guarantee",
+      ],
+      highlighted: false,
+    },
+  ];
 
   return (
-    <>
+    <div className="min-h-screen relative text-white bg-[#0B1530]">
       <Head>
-        <title>Pricing · LiquiLab</title>
-        <meta
-          name="description"
-          content="Premium at $14.95/month for 5 pools; extra bundles $9.95/5 pools; RangeBand Alerts $2.49/5."
-        />
+        <title>Pricing · Liquilab</title>
+        <meta name="description" content="Choose your plan. Start with a 14-day free trial." />
       </Head>
+      <WaveBackground />
+      <Navigation />
+      
+      <div className="relative z-10 max-w-[1400px] mx-auto px-4 lg:px-8 py-16">
+        {/* Header */}
+        <div className="text-center mb-20">
+          <h1 className="text-5xl font-brand text-white mb-6">
+            Choose your plan
+          </h1>
+          <p className="text-xl font-ui text-white/60 max-w-2xl mx-auto">
+            Start with a 14-day free trial. All plans include non-custodial analytics and RangeBand™ monitoring.
+          </p>
+        </div>
 
-      <div className="relative min-h-screen overflow-hidden text-white">
-        <div className="page-bg" aria-hidden="true" />
+        {/* Pricing Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
+          {plans.map((plan) => (
+            <div
+              key={plan.name}
+              className={`relative rounded-xl border p-8 ${
+                plan.highlighted
+                  ? "bg-[#0F1A36]/95 border-[#3B82F6]"
+                  : "bg-[#0F1A36]/95 border-white/5"
+              }`}
+            >
+              {plan.highlighted && (
+                <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#3B82F6] text-white hover:bg-[#3B82F6] border-0">
+                  Most value
+                </Badge>
+              )}
 
-        <Header currentPage="pricing" showTabs={false} showWalletActions={true} />
-
-        <main className="relative z-10 mx-auto w-[94vw] max-w-3xl px-4 pb-20 pt-14 lg:px-0">
-          {/* Hero Section */}
-          <section className="text-center">
-            <h1 className="font-brand text-5xl font-bold leading-tight text-white sm:text-6xl">
-              Simple pricing
-            </h1>
-            <p className="mx-auto mt-4 max-w-xl font-ui text-base text-white/70 sm:text-lg">
-              Pick your plan in seconds. Adjust anytime.
-            </p>
-          </section>
-
-          {/* Benefits Section */}
-          <section className="mt-12 space-y-6">
-            <h2 className="font-brand text-2xl font-semibold text-center text-white">
-              Why LiquiLab?
-            </h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl bg-white/[0.02] p-6">
-                <div className="mb-3 text-[#1BE8D2]">
-                  <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <h3 className="mb-2 font-brand text-lg font-semibold text-white">
-                  All your pools in one place
+              <div className="mb-8">
+                <h3 className="text-2xl font-brand text-white mb-3 flex items-center gap-2">
+                  {plan.name}
+                  {plan.name === "Pro" && <SparklesIcon size={20} className="text-white" />}
                 </h3>
-                <p className="font-ui text-sm text-white/70">
-                  Enosys, SparkDEX, BlazeSwap — see all your LP positions unified in a single dashboard.
-                </p>
+                <p className="text-white/50 font-ui">{plan.description}</p>
               </div>
-              
-              <div className="rounded-xl bg-white/[0.02] p-6">
-                <div className="mb-3 text-[#1BE8D2]">
-                  <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
+
+              <div className="mb-8">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl text-white font-mono numeric">{plan.price}</span>
+                  <span className="text-white/40 font-ui">/ {plan.period}</span>
                 </div>
-                <h3 className="mb-2 font-brand text-lg font-semibold text-white">
-                  RangeBand™ visualization
-                </h3>
-                <p className="font-ui text-sm text-white/70">
-                  See pool health at a glance — in range, near boundary, or out of range.
-                </p>
+                {plan.eurPrice && (
+                  <p className="font-ui text-white/40 mt-2 text-[11px]">
+                    Charged in EUR, shown in USD for reference
+                  </p>
+                )}
+                {!plan.eurPrice && plan.name === "Enterprise" && (
+                  <p className="font-ui text-white/40 mt-2 text-[11px]">
+                    Flexible billing terms available
+                  </p>
+                )}
               </div>
-              
-              <div className="rounded-xl bg-white/[0.02] p-6">
-                <div className="mb-3 text-[#1BE8D2]">
-                  <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+
+              <div className="mb-8 p-4 bg-[#0B1530]/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="font-ui text-white/40">Pool capacity</span>
+                  <span className="font-ui text-white/95">{plan.pools}</span>
                 </div>
-                <h3 className="mb-2 font-brand text-lg font-semibold text-white">
-                  Real-time metrics
-                </h3>
-                <p className="font-ui text-sm text-white/70">
-                  Live TVL, 24h fees, incentives, and APR — always up to date.
-                </p>
               </div>
-              
-              <div className="rounded-xl bg-white/[0.02] p-6">
-                <div className="mb-3 text-[#1BE8D2]">
-                  <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
+
+              <ul className="space-y-4 mb-10">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-3">
+                    <Check className="size-5 text-[#1BE8D2] mt-0.5 flex-shrink-0" />
+                    <span className="text-white/60 font-ui text-sm">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {plan.name === "Enterprise" ? (
+                <Button
+                  className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-ui"
+                  as="a"
+                  href="mailto:sales@liquilab.io"
+                >
+                  Contact sales
+                </Button>
+              ) : (
+                <GlobalCtaButton 
+                  className="mt-4 w-full"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Comparison Table */}
+        <ComparisonTable />
+
+        {/* Add-ons */}
+        <div className="bg-[#0F1A36]/95 border border-white/10 rounded-xl p-6 sm:p-8 mt-20">
+          <div className="flex flex-col sm:flex-row items-start gap-6">
+            <div className="w-12 h-12 bg-[#3B82F6]/20 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Gauge className="size-6 text-[#3B82F6]" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-brand text-white/95 mb-2 text-lg">
+                RangeBand™ Alerts Add-on
+              </h3>
+              <p className="font-ui text-white/70 mb-4 text-sm sm:text-base">
+                Get instant notifications when your positions move near or out of range. 
+                Stay proactive with real-time alerts for better liquidity management. 
+                Available as add-on for Premium plans (included in Pro).
+              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-4 mb-1">
+                  <span className="font-ui text-white/95 text-2xl font-mono numeric">
+                    ${pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle}
+                  </span>
+                  <span className="font-ui text-white/40">per 5 pools</span>
+                  <Button variant="ghost" className="h-8 px-3 text-xs border-[#1BE8D2] text-[#1BE8D2] hover:bg-[#1BE8D2]/10 font-ui">
+                    Add to plan
+                  </Button>
                 </div>
-                <h3 className="mb-2 font-brand text-lg font-semibold text-white">
-                  Optional notifications
-                </h3>
-                <p className="font-ui text-sm text-white/70">
-                  Get email alerts when pools go near or out of range — never miss a rebalance.
+                <p className="font-ui text-white/40 text-[11px]">
+                  Charged in EUR, shown in USD for reference
                 </p>
               </div>
             </div>
-          </section>
-
-          {/* Your Personal Plan Section */}
-          <section
-            className="mt-12 rounded-3xl px-8 py-10 backdrop-blur-xl sm:px-12"
-            style={{ background: 'rgba(10, 15, 28, 0.85)' }}
-          >
-            <h2 className="mb-6 font-brand text-3xl font-semibold text-center text-white">
-              Your personal plan
-            </h2>
-
-            {!isConnected ? (
-              <div className="space-y-6 text-center">
-                <p className="font-ui text-base text-white/80">
-                  Connect your wallet to see exactly how many pools you can manage and get your personalized quote.
-                </p>
-                <div className="flex justify-center">
-                  <WalletConnect />
-                </div>
-                <p className="font-ui text-sm text-white/60">
-                  We&apos;ll scan your wallet for LP positions on Flare (Enosys, SparkDEX, BlazeSwap)
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-10">
-                {/* Pricing Explainer */}
-                <div className="space-y-4 border-b border-white/10 pb-8">
-                  <h3 className="font-brand text-xl font-semibold text-white">
-                    How it works
-                  </h3>
-                  <p className="font-ui text-base leading-relaxed text-white/80">
-                    Premium: <strong className="tabular-nums">{formatUSD(premiumPlan.priceMonthlyUsd)}</strong> for{' '}
-                    <strong className="tabular-nums">{premiumPlan.includedPools}</strong> pools. Extra bundles:{' '}
-                    <strong className="tabular-nums">{formatUSD(premiumPlan.extraBundlePriceUsd)}</strong> per{' '}
-                    <strong className="tabular-nums">{premiumPlan.extraBundlePools}</strong> pools. Alerts add-on:{' '}
-                    <strong className="tabular-nums">{formatUSD(pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle)}</strong> per{' '}
-                    <strong className="tabular-nums">{pricingConfig.rangebandAlerts.bundlePools}</strong>.
-                  </p>
-                  <ul className="space-y-2.5 font-ui text-sm leading-relaxed text-white/70">
-                    <li className="flex items-start gap-2">
-                      <span className="mt-0.5 text-[#1BE8D2]" aria-hidden="true">•</span>
-                      <span><strong className="text-white">Notifications Add-on +25%</strong> — email alerts for Near/Out of Range</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="mt-0.5 text-[#1BE8D2]" aria-hidden="true">•</span>
-                      <span>New pools auto-added within capacity; <strong className="text-white">upgrade anytime</strong></span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="mt-0.5 text-[#1BE8D2]" aria-hidden="true">•</span>
-                      <span><strong className="text-white">14-day free trial. Cancel anytime.</strong></span>
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Quote Section */}
-                <div className="space-y-6">
-                  <h3 className="font-brand text-xl font-semibold text-white">
-                    Your pools
-                  </h3>
-
-                  {loadingPositions ? (
-                    <div className="rounded-xl bg-white/[0.02] p-8 text-center">
-                      <p className="font-ui text-sm text-white/70">Loading your pools...</p>
-                    </div>
-                  ) : calculatedSummary && calculatedSummary.total > 0 ? (
-                    <div className="space-y-6">
-                      {/* Summary + Your Plan combined */}
-                      <div className="rounded-xl bg-[#3B82F6]/5 p-6">
-                        {/* Pool selector header */}
-                        <div className="mb-6 flex items-center justify-between">
-                          <div>
-                            <h3 className="font-brand text-lg font-semibold text-white">
-                              Select pools to manage
-                            </h3>
-                            <p className="mt-1 font-ui text-sm text-white/60">
-                              <strong className="tnum text-white">{calculatedSummary.active}</strong> active · <strong className="tnum text-white">{calculatedSummary.inactive}</strong> inactive
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <p className="font-ui text-xs text-white/60">
-                              <span className="tnum">{selectedCount}</span> of <span className="tnum">{positions?.length || 0}</span> selected
-                            </p>
-                            <button
-                              type="button"
-                              onClick={allSelected ? handleDeselectAll : handleSelectAll}
-                              className="font-ui text-xs font-semibold text-[#3B82F6] transition hover:text-[#60A5FA]"
-                            >
-                              {allSelected ? 'Deselect all' : 'Select all'}
-                            </button>
-                          </div>
-                        </div>
-                      
-                      {/* Pool lists */}
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Active pools - left column */}
-                          <div>
-                            <p className="mb-1 font-ui text-xs font-semibold text-[#3B82F6]">
-                              Active ({calculatedSummary?.active || 0})
-                            </p>
-                            <p className="mb-3 font-ui text-[10px] text-white/50">
-                              TVL, Rewards
-                            </p>
-                            <div className="max-h-[300px] space-y-1 overflow-y-auto">
-                              {(() => {
-                                if (!positions) return null;
-                                
-                                // ✅ Use .category field from API (already filtered & sorted!)
-                                const activePools = positions.filter(p => p.category === 'Active');
-                                
-                                // Helper to extract token symbols
-                                const getTokenSymbol = (token: string | { symbol?: string } | undefined): string => {
-                                  if (!token) return '?';
-                                  if (typeof token === 'string') return token;
-                                  if (typeof token === 'object' && token.symbol) return token.symbol;
-                                  return '?';
-                                };
-                                
-                                // Group pools by token pair
-                                const grouped = new Map<string, (PositionRow & { _idx: number })[]>();
-                                activePools.forEach((pool, idx) => {
-                                  const token0 = getTokenSymbol(pool.token0?.symbol || pool.token0);
-                                  const token1 = getTokenSymbol(pool.token1?.symbol || pool.token1);
-                                  const pairKey = `${token0}/${token1}`;
-                                  
-                                  if (!grouped.has(pairKey)) {
-                                    grouped.set(pairKey, []);
-                                  }
-                                  grouped.get(pairKey)!.push({ ...pool, _idx: idx });
-                                });
-                                
-                                // Sort groups by total TVL (high to low)
-                                const sortedGroups = Array.from(grouped.entries()).sort((a, b) => {
-                                  const tvlA = a[1].reduce((sum, p) => sum + (p.tvlUsd || 0), 0);
-                                  const tvlB = b[1].reduce((sum, p) => sum + (p.tvlUsd || 0), 0);
-                                  return tvlB - tvlA;
-                                });
-                                
-                                // Render groups
-                                return sortedGroups.map(([pairKey, pools]) => {
-                                  const isSinglePool = pools.length === 1;
-                                  const totalTvl = pools.reduce((sum, p) => sum + (p.tvlUsd || 0), 0);
-                                  const poolIds = pools.map(p => `${p.poolId || p.marketId || p._idx}`);
-                                  const allSelected = poolIds.every(id => selectedPoolIds.has(id));
-                                  const isExpanded = expandedPairs.has(pairKey);
-                                  
-                                  const [token0, token1] = pairKey.split('/');
-                                  
-                                  if (isSinglePool) {
-                                    // Render single pool as before
-                                    const pool = pools[0];
-                                    const poolId = `${pool.poolId || pool.marketId || pool._idx}`;
-                                    const isSelected = selectedPoolIds.has(poolId);
-                                    const provider = pool.provider || pool.dexName || 'unknown';
-                                    const tvl = pool.tvlUsd || 0;
-                                    const rawMarketId = pool.poolId || pool.marketId || pool._idx;
-                                    const marketId = typeof rawMarketId === 'string' && rawMarketId.includes(':')
-                                      ? rawMarketId.split(':').pop()
-                                      : rawMarketId;
-                                    
-                                    return (
-                                      <label
-                                        key={poolId}
-                                        className={`flex items-center gap-2 rounded px-2 py-1.5 transition cursor-pointer ${
-                                          isSelected ? 'bg-[#3B82F6]/8' : 'bg-transparent hover:bg-white/5'
-                                        }`}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={isSelected}
-                                          onChange={() => handleTogglePool(poolId)}
-                                          className="h-3 w-3 rounded border-white/20 bg-white/5 text-[#1BE8D2] focus:ring-1 focus:ring-[#1BE8D2]/50 focus:ring-offset-0"
-                                        />
-                                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                          <div className="flex items-center -space-x-1.5">
-                                            <TokenIcon symbol={token0} size={16} />
-                                            <TokenIcon symbol={token1} size={16} />
-                                          </div>
-                                          <div className="flex-1 min-w-0">
-                                            <p className="font-brand text-xs font-semibold text-white truncate">
-                                              {token0}/{token1}
-                                            </p>
-                                            <p className="font-ui text-[10px] text-white/50 truncate">
-                                              {provider} #{marketId}
-                                            </p>
-                                          </div>
-                                        </div>
-                                        <p className="tnum font-ui text-[10px] text-white/60">
-                                          ${tvl >= 1000 ? `${(tvl / 1000).toFixed(1)}k` : tvl.toFixed(0)}
-                                        </p>
-                                      </label>
-                                    );
-                                  }
-                                  
-                                  // Render grouped pair
-                                  return (
-                                    <div key={pairKey} className="space-y-0.5">
-                                      {/* Group header */}
-                                      <div
-                                        className={`flex items-center gap-2 rounded px-2 py-1.5 transition ${
-                                          allSelected ? 'bg-[#3B82F6]/8' : 'bg-transparent hover:bg-white/5'
-                                        }`}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={allSelected}
-                                          onChange={() => handleTogglePairGroup(pairKey, poolIds)}
-                                          className="h-3 w-3 rounded border-white/20 bg-white/5 text-[#1BE8D2] focus:ring-1 focus:ring-[#1BE8D2]/50 focus:ring-offset-0"
-                                        />
-                                        <div className="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer" onClick={() => handleToggleExpand(pairKey)}>
-                                          <div className="flex items-center -space-x-1.5">
-                                            <TokenIcon symbol={token0} size={16} />
-                                            <TokenIcon symbol={token1} size={16} />
-                                          </div>
-                                          <div className="flex-1 min-w-0">
-                                            <p className="font-brand text-xs font-semibold text-white truncate">
-                                              {token0}/{token1}
-                                            </p>
-                                            <p className="font-ui text-[10px] text-white/50 truncate">
-                                              {pools.length} pools
-                                            </p>
-                                          </div>
-                                        </div>
-                                        <p className="tnum font-ui text-[10px] text-white/60 mr-1">
-                                          ${totalTvl >= 1000 ? `${(totalTvl / 1000).toFixed(1)}k` : totalTvl.toFixed(0)}
-                                        </p>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleToggleExpand(pairKey)}
-                                          className="flex items-center justify-center w-4 h-4 text-white/40 hover:text-white/60 transition"
-                                        >
-                                          <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                          </svg>
-                                        </button>
-                                      </div>
-                                      
-                                      {/* Expanded individual pools */}
-                                      {isExpanded && (
-                                        <div className="ml-6 space-y-0.5">
-                                          {pools.map(pool => {
-                                            const poolId = `${pool.poolId || pool.marketId || pool._idx}`;
-                                            const isSelected = selectedPoolIds.has(poolId);
-                                            const provider = pool.provider || pool.dexName || 'unknown';
-                                            const tvl = pool.tvlUsd || 0;
-                                            const rawMarketId = pool.poolId || pool.marketId || pool._idx;
-                                            const marketId = typeof rawMarketId === 'string' && rawMarketId.includes(':')
-                                              ? rawMarketId.split(':').pop()
-                                              : rawMarketId;
-                                            
-                                            return (
-                                              <label
-                                                key={poolId}
-                                                className={`flex items-center gap-2 rounded px-2 py-1.5 transition cursor-pointer ${
-                                                  isSelected ? 'bg-[#3B82F6]/8' : 'bg-transparent hover:bg-white/5'
-                                                }`}
-                                              >
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isSelected}
-                                                  onChange={() => handleTogglePool(poolId)}
-                                                  className="h-3 w-3 rounded border-white/20 bg-white/5 text-[#1BE8D2] focus:ring-1 focus:ring-[#1BE8D2]/50 focus:ring-offset-0"
-                                                />
-                                                <div className="flex-1 min-w-0">
-                                                  <p className="font-ui text-[10px] text-white/50 truncate">
-                                                    {provider} #{marketId}
-                                                  </p>
-                                                </div>
-                                                <p className="tnum font-ui text-[10px] text-white/60">
-                                                  ${tvl >= 1000 ? `${(tvl / 1000).toFixed(1)}k` : tvl.toFixed(0)}
-                                                </p>
-                                              </label>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                });
-                              })()}
-                            </div>
-                          </div>
-                          
-                          {/* Inactive pools - right column */}
-                          <div>
-                            <p className="mb-1 font-ui text-xs font-semibold text-white/60">
-                              Inactive ({calculatedSummary.inactive})
-                            </p>
-                            <p className="mb-2 font-ui text-[10px] text-white/50">
-                              No TVL, Rewards
-                            </p>
-                            <div className="max-h-[300px] space-y-1 overflow-y-auto">
-                              {positions && positions
-                                // ✅ Use .category field from API (already filtered & sorted!)
-                                .filter(p => p.category === 'Inactive')
-                                .map((pool, idx) => {
-                                  const poolId = `${pool.poolId || pool.marketId || idx}`;
-                                  const isSelected = selectedPoolIds.has(poolId);
-                                  const provider = pool.provider || pool.dexName || 'unknown';
-                                  
-                                  // Safe token extraction - handle both string and object formats
-                                  const getTokenSymbol = (token: string | { symbol?: string } | undefined): string => {
-                                    if (!token) return '?';
-                                    if (typeof token === 'string') return token;
-                                    if (typeof token === 'object' && token.symbol) return token.symbol;
-                                    return '?';
-                                  };
-                                  
-                                  const token0 = getTokenSymbol(pool.token0);
-                                  const token1 = getTokenSymbol(pool.token1);
-                                  
-                                  // ✅ Use .rewardsUsd from API (no more inline calculation!)
-                                  const rewards = pool.rewardsUsd || 0;
-                                  
-                                  // Clean marketId - remove provider prefix for display
-                                  const rawMarketId = pool.poolId || pool.marketId || idx;
-                                  const marketId = typeof rawMarketId === 'string' && rawMarketId.includes(':')
-                                    ? rawMarketId.split(':').pop()
-                                    : rawMarketId;
-                                  
-                                  return (
-                                      <label
-                                        key={poolId}
-                                        className={`flex items-center gap-2 rounded px-2 py-1.5 transition cursor-pointer ${
-                                          isSelected
-                                            ? 'bg-[#3B82F6]/8'
-                                            : 'bg-transparent hover:bg-white/5'
-                                        }`}
-                                      >
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() => handleTogglePool(poolId)}
-                                        className="h-3 w-3 rounded border-white/20 bg-white/5 text-[#1BE8D2] focus:ring-1 focus:ring-[#1BE8D2]/50 focus:ring-offset-0"
-                                      />
-                                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                        <div className="flex items-center -space-x-1.5">
-                                          <TokenIcon symbol={token0} size={16} />
-                                          <TokenIcon symbol={token1} size={16} />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="font-brand text-xs font-semibold text-white truncate">
-                                            {token0}/{token1}
-                                          </p>
-                                          <p className="font-ui text-[10px] text-white/50 truncate">
-                                            {provider} #{marketId}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="text-right">
-                                        <p className="tabular-nums font-ui text-[10px] text-white/60">
-                                          ${rewards >= 1000 ? `${(rewards / 1000).toFixed(1)}k` : rewards.toFixed(0)}
-                                        </p>
-                                        <p className="tabular-nums font-ui text-[9px] text-white/40">
-                                          {(() => {
-                                            const tokenAmount = pool.incentivesTokenAmount || (rewards / 0.016);
-                                            const tokenSymbol = pool.incentivesToken || 'rFLR';
-                                            const formatted = tokenAmount >= 1000 
-                                              ? `${(tokenAmount / 1000).toFixed(1)}K` 
-                                              : Math.round(tokenAmount);
-                                            return `${formatted} ${tokenSymbol}`;
-                                          })()}
-                                        </p>
-                                      </div>
-                                    </label>
-                                  );
-                                })}
-                            </div>
-                          </div>
-                        </div>
-                      
-                      {/* Ended pools - collapsed by default */}
-                      {calculatedSummary && calculatedSummary.archived > 0 && (
-                        <div className="pt-4">
-                          <div className="mb-3">
-                            <button
-                              type="button"
-                              onClick={() => setShowArchived(!showArchived)}
-                              className="flex w-full items-center justify-between rounded px-2 py-1.5 font-ui transition hover:bg-white/5"
-                            >
-                              <div>
-                                <p className="text-xs font-semibold text-white/40">
-                                  Ended ({calculatedSummary.archived})
-                                </p>
-                                <p className="text-[10px] text-white/30">
-                                  No TVL, No Rewards
-                                </p>
-                              </div>
-                              <svg
-                                className={`h-4 w-4 text-white/40 transition-transform ${showArchived ? 'rotate-180' : ''}`}
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </button>
-                          </div>
-                          
-                          {showArchived && (
-                            <div className="max-h-[200px] space-y-1 overflow-y-auto opacity-60">
-                              {positions && positions
-                                // ✅ Use .category field from API (already filtered & sorted!)
-                                .filter(p => p.category === 'Ended')
-                                .map((pool, idx) => {
-                                  const poolId = `${pool.poolId || pool.marketId || idx}`;
-                                  const isSelected = selectedPoolIds.has(poolId);
-                                  const provider = pool.provider || pool.dexName || 'unknown';
-                                  
-                                  const getTokenSymbol = (token: string | { symbol?: string } | undefined): string => {
-                                    if (!token) return '?';
-                                    if (typeof token === 'string') return token;
-                                    if (typeof token === 'object' && token.symbol) return token.symbol;
-                                    return '?';
-                                  };
-                                  
-                                  const token0 = getTokenSymbol(pool.token0);
-                                  const token1 = getTokenSymbol(pool.token1);
-                                  
-                                  const rawMarketId = pool.poolId || pool.marketId || idx;
-                                  const marketId = typeof rawMarketId === 'string' && rawMarketId.includes(':')
-                                    ? rawMarketId.split(':').pop()
-                                    : rawMarketId;
-                                  
-                                  return (
-                                    <label
-                                      key={poolId}
-                                      className={`flex items-center gap-2 rounded px-2 py-1.5 transition cursor-pointer ${
-                                        isSelected
-                                          ? 'bg-white/5'
-                                          : 'bg-transparent hover:bg-white/[0.02]'
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() => handleTogglePool(poolId)}
-                                        className="h-3 w-3 rounded border-white/20 bg-white/5 text-white/40 focus:ring-1 focus:ring-white/30 focus:ring-offset-0"
-                                      />
-                                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                        <div className="flex items-center -space-x-1.5 opacity-50">
-                                          <TokenIcon symbol={token0} size={16} />
-                                          <TokenIcon symbol={token1} size={16} />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="font-brand text-xs font-semibold text-white/50 truncate">
-                                            {token0}/{token1}
-                                          </p>
-                                          <p className="font-ui text-[10px] text-white/30 truncate">
-                                            {provider} #{marketId}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <p className="tnum font-ui text-[10px] text-white/30">
-                                        —
-                                      </p>
-                                    </label>
-                                  );
-                                })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Your plan */}
-                      <div className="pt-4">
-                        <h3 className="mb-2 font-brand text-lg font-semibold text-white">
-                          Your plan: <span className="tnum">{paidPools}</span> pools
-                        </h3>
-                        <p className="font-ui text-sm text-white/80">
-                          {capacityFeedback}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Stepper */}
-                    <div className="rounded-xl bg-white/[0.04] p-6">
-                      <p className="mb-4 font-brand text-sm font-semibold text-white/80">
-                        How many pools would you like to manage?
-                      </p>
-                      <div className="flex items-center justify-center gap-6">
-                        <button
-                          type="button"
-                          onClick={handleStepDown}
-                          disabled={paidPools <= MIN_POOLS}
-                          className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10 font-ui text-2xl text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label="Decrease pool count"
-                        >
-                          −
-                        </button>
-
-                        <div className="text-center">
-                          <div
-                            className="tnum font-brand text-5xl font-bold text-white"
-                            style={{ fontVariantNumeric: 'tabular-nums' }}
-                          >
-                            {paidPools}
-                          </div>
-                          <p className="mt-1 font-ui text-sm text-white/60">pools</p>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={handleStepUp}
-                          disabled={paidPools >= MAX_POOLS}
-                          className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10 font-ui text-2xl text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label="Increase pool count"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Notifications add-on */}
-                    <div className="rounded-xl bg-white/[0.04] p-6">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <h3 className="font-brand text-base font-semibold text-white">
-                              Notifications add-on
-                            </h3>
-                            <p className="mt-1 font-ui text-sm text-white/70">
-                              Get email alerts when a pool turns Near Band or Out of Range.
-                            </p>
-                            <p className="mt-2 font-ui text-xs text-white/50">
-                              +€2.50 per set of 5 pools
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={notificationsEnabled}
-                            onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-                            className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition ${
-                              notificationsEnabled ? 'bg-[#3B82F6]' : 'bg-white/20'
-                            }`}
-                          >
-                            <span
-                              className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
-                                notificationsEnabled ? 'translate-x-5' : 'translate-x-1'
-                              }`}
-                            />
-                            <span className="sr-only">Toggle Notifications</span>
-                          </button>
-                        </div>
-                      </div>
-
-                          {/* Total */}
-                          <div className="rounded-xl bg-white/[0.06] p-6" aria-live="polite" aria-atomic="true">
-                            <div className="space-y-3">
-                              <div className="flex items-baseline justify-between gap-4 font-ui text-sm text-white/70">
-                                <span>
-                                  Pools: <span className="tabular-nums">{paidPools}</span> (base {premiumPlan.includedPools} pools at{' '}
-                                  <span className="tabular-nums">{formatUSD(premiumPlan.priceMonthlyUsd)}</span>, extras in{' '}
-                                  {premiumPlan.extraBundlePools} bundles at <span className="tabular-nums">{formatUSD(premiumPlan.extraBundlePriceUsd)}</span>)
-                                </span>
-                                <span className="tabular-nums font-semibold text-white">
-                                  {formatEUR(poolsCost)}
-                                </span>
-                              </div>
-                              {notificationsEnabled && (
-                                <div className="flex items-baseline justify-between gap-4 font-ui text-sm text-white/70">
-                                  <span>
-                                    Alerts: <span className="tabular-nums">{formatUSD(pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle)}</span> per{' '}
-                                    <span className="tabular-nums">{pricingConfig.rangebandAlerts.bundlePools}</span> pools
-                                  </span>
-                                  <span className="tabular-nums font-semibold text-white">
-                                    {formatEUR(notifCost)}
-                                  </span>
-                                </div>
-                              )}
-                          <div className="pt-3">
-                            <div className="flex items-baseline justify-between gap-4">
-                              <span className="font-brand text-base font-semibold text-white">
-                                Total
-                              </span>
-                              <span
-                                className="tabular-nums font-brand text-3xl font-bold text-white"
-                              >
-                                {formatEUR(totalCost)}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-right font-ui text-sm text-white/60">per month</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* CTA */}
-                      <button
-                        type="button"
-                        onClick={handleSubscribe}
-                        className="w-full rounded-2xl bg-[#3B82F6] px-6 py-4 font-ui text-base font-semibold text-white transition hover:bg-[#2563EB] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B82F6]/60"
-                        aria-label="Continue to checkout"
-                      >
-                        Continue to checkout
-                      </button>
-
-                      {positionsError && (
-                        <div className="mt-3 flex flex-col items-center gap-2">
-                          <p className="text-center font-ui text-xs text-[#FFA500]">
-                            {positionsError}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleRetry}
-                            className="rounded-lg border border-[#FFA500]/40 px-3 py-1 text-xs font-semibold text-[#FFA500] transition hover:border-[#FFA500] hover:text-[#FFD280]"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl bg-white/[0.02] p-8">
-                      <p className="mb-4 text-center font-ui text-base text-white">
-                        No pools found
-                      </p>
-                      <p className="mb-6 text-center font-ui text-sm text-white/60">
-                        We couldn&apos;t detect any LP positions in your wallet. If you have positions on Enosys, SparkDEX or BlazeSwap, try connecting again or check the links below.
-                      </p>
-                      <div className="flex flex-wrap justify-center gap-3">
-                        {Object.entries(PROVIDER_LINKS).map(([name, url]) => (
-                          <a
-                            key={name}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded-lg bg-white/[0.05] px-4 py-2 font-ui text-sm capitalize text-white/80 transition hover:bg-white/10 hover:text-white"
-                          >
-                            {name}
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
           </div>
         </div>
-      )}
-    </section>
 
-          {/* Footer */}
-          <footer className="py-8 text-center">
-            <p className="font-ui text-xs text-white/40">
-              Powered by RangeBand™ — patent pending
-            </p>
-          </footer>
-        </main>
+        {/* Support Links */}
+        <div className="mt-16 mb-16">
+          <div className="flex items-center justify-center gap-3">
+            <Link href="/faq" legacyBehavior passHref>
+              <Button as="a" href="/faq" variant="ghost" className="text-white/70 hover:text-[#3B82F6] font-ui flex items-center gap-2">
+                View FAQ
+                <ArrowRight className="size-4" />
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
-    </>
+      
+      <Footer />
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import type { NextApiRequest } from 'next';
 
-import { getRoleForUser, type Role } from '@/lib/entitlements';
+import { getRoleForUser, getGoldenWalletRole, type Role } from '@/lib/entitlements';
 
 /**
  * Role override helper used by API routes to simulate downstream states.
@@ -49,6 +49,11 @@ export function resolveRole(req: NextApiRequest): RoleResolution {
     }
   }
 
+  const goldenRole = resolveGoldenWalletRole(req);
+  if (goldenRole) {
+    return { role: goldenRole, source: 'session' };
+  }
+
   return {
     role: fallbackRole(req),
     source: 'session',
@@ -69,4 +74,13 @@ function fallbackRole(req: NextApiRequest): ResolvedRole {
     return sessionRole;
   }
   return 'VISITOR';
+}
+
+function resolveGoldenWalletRole(req: NextApiRequest): ResolvedRole | null {
+  const walletParam = req.query?.wallet;
+  const addressParam = req.query?.address;
+  const rawWallet = Array.isArray(walletParam) ? walletParam[0] : walletParam;
+  const rawAddress = Array.isArray(addressParam) ? addressParam[0] : addressParam;
+  const goldenRole = getGoldenWalletRole(rawWallet ?? rawAddress ?? null);
+  return goldenRole ?? null;
 }

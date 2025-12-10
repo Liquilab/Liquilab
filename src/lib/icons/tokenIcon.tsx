@@ -13,29 +13,16 @@ export type TokenIconProps = {
   alt?: string;
 };
 
-function buildLocalIconCandidates(symbol?: string | null, address?: string | null): string[] {
-  const candidates: string[] = [];
+function buildIconCandidates(symbol?: string | null, address?: string | null): string[] {
   const canonical = canonicalSymbol(symbol);
-  
-  if (canonical) {
-    // Try WEBP first (most common format), then PNG, then SVG
-    candidates.push(`/media/tokens/${canonical}.webp`);
-    candidates.push(`/media/tokens/${canonical}.png`);
-    candidates.push(`/media/tokens/${canonical}.svg`);
-  }
-  
+  const slug = canonical ? canonical.toLowerCase() : 'unknown';
+  const params = new URLSearchParams();
   if (address) {
-    const normalizedAddress = address.toLowerCase().startsWith('0x') 
-      ? address.toLowerCase() 
-      : `0x${address.toLowerCase()}`;
-    // Try both webp and png for by-address
-    candidates.push(`/media/tokens/by-address/${normalizedAddress}.webp`);
-    candidates.push(`/media/tokens/by-address/${normalizedAddress}.png`);
+    params.set('address', address.toString());
   }
-  
-  candidates.push(TOKEN_ASSETS.default);
-  
-  return candidates;
+  const query = params.toString();
+  const apiPath = `/api/token-icons/${encodeURIComponent(slug || 'unknown')}${query ? `?${query}` : ''}`;
+  return [apiPath, TOKEN_ASSETS.default];
 }
 
 export function TokenIcon({
@@ -45,10 +32,7 @@ export function TokenIcon({
   className = '',
   alt: altLabel,
 }: TokenIconProps): JSX.Element {
-  const candidates = React.useMemo(
-    () => buildLocalIconCandidates(symbol, address),
-    [symbol, address],
-  );
+  const candidates = React.useMemo(() => buildIconCandidates(symbol, address), [symbol, address]);
 
   const [index, setIndex] = React.useState(0);
   const currentSrc = candidates[index];

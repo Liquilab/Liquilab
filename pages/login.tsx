@@ -22,7 +22,7 @@ export default function Login() {
     <main className="min-h-screen flex items-center justify-center bg-[#0A0F1C] text-white">
       <form onSubmit={onSubmit} className="w-[92%] max-w-[380px] rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
         <div className="flex items-center justify-center mb-4">
-          <img src="/brand/liquilab-mark.svg" alt="LiquiLab" className="h-8" />
+          <img src="/brand/liquilab-mark.svg" alt="Liquilab" className="h-8" />
         </div>
         <h1 className="text-xl font-semibold mb-4 text-center">Preview access</h1>
         <label className="block text-sm text-white/70 mb-2">Password</label>

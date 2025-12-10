@@ -92,7 +92,7 @@ export default function PortfolioPage() {
         <p className="text-sm uppercase tracking-wide text-slate-500">Portfolio & Core Actions</p>
         <h1 className="text-3xl font-semibold text-slate-50">Indexed Positions</h1>
         <p className="text-sm text-slate-400">
-          Live read from LiquiLab indexer. Filter by owner, pool or position (tokenId) to demo the portfolio view.
+          Live read from Liquilab indexer. Filter by owner, pool or position (tokenId) to demo the portfolio view.
         </p>
       </header>
 

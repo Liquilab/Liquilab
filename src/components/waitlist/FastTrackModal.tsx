@@ -22,7 +22,7 @@ export function FastTrackModal({ open, onClose }: FastTrackModalProps) {
           </button>
         </div>
         <p className="font-ui mt-4 text-sm text-liqui-subtext">
-          Send 10&nbsp;USDT to the LiquiLab treasury address and email us your transaction hash. We’ll place you
+          Send 10&nbsp;USDT to the Liquilab treasury address and email us your transaction hash. We’ll place you
           at the front of the queue and activate your Pool Detail beta access as soon as it’s ready.
         </p>
 

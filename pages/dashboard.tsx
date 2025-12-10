@@ -83,7 +83,7 @@ export default function DashboardPage() {
   return (
     <>
       <Head>
-        <title>LiquiLab · Dashboard</title>
+        <title>Liquilab · Dashboard</title>
         <meta
           name="description"
           content="Connect your wallet to review all of your active and inactive liquidity pools, assign your free trial slot, and upgrade capacity in predictable bundles."
@@ -141,7 +141,7 @@ export default function DashboardPage() {
             <section className="rounded-3xl border border-white/10 bg-[rgba(10,15,26,0.85)] px-8 py-14 text-center backdrop-blur-2xl md:px-16">
               <h1 className="font-brand text-3xl font-semibold text-white md:text-4xl">Connect your wallet to load pools</h1>
               <p className="mt-3 font-ui text-sm text-[#B0B9C7] md:text-base">
-                LiquiLab scans Ēnosys and SparkDEX automatically. Your first pools appear here in seconds.
+                Liquilab scans Ēnosys and SparkDEX automatically. Your first pools appear here in seconds.
               </p>
               <div className="mt-6 flex justify-center">
                 <WalletConnect />

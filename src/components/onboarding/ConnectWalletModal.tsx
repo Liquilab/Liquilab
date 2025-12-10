@@ -84,7 +84,7 @@ export default function ConnectWalletModal() {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-brand text-2xl text-white">Connect your wallet</h2>
-        <p className="mt-1 font-ui text-sm text-white/70">Choose a wallet to connect to LiquiLab</p>
+        <p className="mt-1 font-ui text-sm text-white/70">Choose a wallet to connect to Liquilab</p>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           {[

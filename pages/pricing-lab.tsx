@@ -18,6 +18,7 @@ import PackStepper from '@/components/pricing/PackStepper';
 import VariantToggle from '@/components/pricing/VariantToggle';
 import PoolsPreview from '@/components/pricing/PoolsPreview';
 import PoolsTable, { type PoolsTableItem } from '@/components/pools/PoolsTable';
+import { GlobalCtaButton } from '@/components/GlobalCtaButton';
 import {
   ACTIVE_PLAN_ID,
   priceBreakdown,
@@ -392,7 +393,7 @@ function UspsCard() {
   return (
     <Card>
       <h2 className="font-brand text-xl font-semibold text-white">
-        Why teams pick LiquiLab
+        Why teams pick Liquilab
       </h2>
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         {HERO_CHIPS.map((chip) => (
@@ -419,13 +420,7 @@ function PremiumCard() {
         <span className="font-num text-white/90">$14.95</span>/month • RangeBand™ Alerts +{' '}
         <span className="font-num text-white/90">$2.45</span> / 5 pools
       </p>
-      <a
-        href="#personal-plan"
-        className="btn-primary mt-6"
-        aria-label="Subscribe to Premium Plan"
-      >
-        Subscribe now
-      </a>
+      <GlobalCtaButton href="#personal-plan" className="mt-6" />
     </Card>
   );
 }
@@ -488,9 +483,7 @@ function StickyPlanCard({
 
       <div className="mt-5 space-y-3">
         <WalletConnect className="w-full justify-center px-4 py-2.5 text-sm" />
-        <button type="button" className="btn-primary">
-          Start 14-day trial
-        </button>
+        <GlobalCtaButton href="#personal-plan" />
       </div>
     </Card>
   );
@@ -793,7 +786,7 @@ export default function PricingLabPage() {
   return (
     <>
       <Head>
-        <title>Pricing Lab · LiquiLab</title>
+        <title>Pricing Lab · Liquilab</title>
         <meta
           name="description"
           content="Toggle between Pricing layout options A and B to compare hero, plan cards, and personal plan flows."

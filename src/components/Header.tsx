@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import WalletConnect from './WalletConnect';
-import { LiquiLabLogo } from './LiquiLabLogo';
+import { LiquilabLogo } from './LiquilabLogo';
 import { getBrandAsset } from '@/lib/assets';
 
 const BLAZESWAP_ENABLED =
@@ -53,7 +53,7 @@ export default function Header({
           {/* Brand */}
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center">
-              <LiquiLabLogo variant="full" size="sm" theme="dark" />
+              <LiquilabLogo variant="full" size="sm" theme="dark" />
             </Link>
           </div>
 

@@ -5,6 +5,11 @@
  *
  * Deterministic start block selection with per-factory defaults,
  * token mint discovery, and checkpoint-aware resume logic.
+ *
+ * Example (Enosys PoolEvent backfill via ANKR for WFLR/USDT0 + FXRP/USDT0):
+ *   cd "$HOME/Projects/Liquilab_staging"
+ *   export ANKR_NODE_URL="https://rpc.ankr.com/flare/cee6b4f8866b7f8afa826f378953ae26eaa74fd174d1d282460e0fbad2b35b01"
+ *   npm run indexer:backfill -- --factory=enosys --streams=nfpm,factories,pools --from=51000000 --to=51900000 --rps=12 --concurrency=25 --blockWindow=25
  */
 
 import { promises as fs } from 'fs';
@@ -64,7 +69,7 @@ function parseArgs(rawArgs: string[]): CliOptions {
   let concurrency: number | undefined;
   let blockWindow: number | undefined;
   let costWeights: string | undefined;
-  const streams = new Set<'nfpm' | 'factories' | 'pools'>(['nfpm']);
+  const streams = new Set<'nfpm' | 'factories' | 'pools'>(['nfpm', 'factories', 'pools']);
 
   for (let i = 0; i < rawArgs.length; i++) {
     const arg = rawArgs[i];
@@ -210,7 +215,7 @@ function splitTokenIds(value?: string): string[] {
 }
 
 function splitStreams(value?: string): ('nfpm' | 'factories' | 'pools')[] {
-  if (!value) return ['nfpm'];
+  if (!value) return ['nfpm', 'factories', 'pools'];
   return value
     .split(',')
     .map((part) => part.trim())
@@ -291,7 +296,9 @@ async function main() {
   const status = await indexer.getStatus('global');
   const checkpoint = options.reset ? null : status.checkpoint;
 
-  const nfpmAddress = indexerConfig.contracts.npm;
+  const nfpmAddress = Array.isArray(indexerConfig.contracts.npm)
+    ? indexerConfig.contracts.npm[0]
+    : indexerConfig.contracts.npm;
   const boundMintLookup =
     options.tokenIds.length > 0
       ? (tokenId: string) =>

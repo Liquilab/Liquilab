@@ -1,89 +1,94 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { queryOrDegrade } from '@/lib/analytics/db';
 
-type PoolRow = {
-  state: string | null;
-  tvl_usd: number | null;
-  fees_24h: number | null;
-  fees_7d: number | null;
-  positions_count: number | null;
-};
+import type { AnalyticsPoolHead, AnalyticsPoolUniverse } from '@/lib/api/analytics';
+import { getPoolHeadMetrics, getPoolUniverseHead } from '@/lib/analytics/db';
 
-const POOL_SQL = `
-WITH base AS (
-  SELECT pool, state, tvl_usd
-  FROM mv_pool_latest_state
-  WHERE pool = $1
-),
-fees24h AS (
-  SELECT pool, COALESCE(SUM(fees_usd_24h), 0) AS fees_24h
-  FROM mv_pool_fees_24h
-  WHERE pool = $1
-  GROUP BY pool
-),
-fees7d AS (
-  SELECT pool, COALESCE(SUM(fees_usd_7d), 0) AS fees_7d
-  FROM mv_pool_fees_7d
-  WHERE pool = $1
-  GROUP BY pool
-),
-positions AS (
-  SELECT pool, COUNT(DISTINCT tokenId)::bigint AS positions_count
-  FROM mv_position_latest_event
-  WHERE pool = $1
-  GROUP BY pool
-)
-SELECT
-  base.state,
-  base.tvl_usd,
-  fees24h.fees_24h,
-  fees7d.fees_7d,
-  positions.positions_count
-FROM base
-LEFT JOIN fees24h ON fees24h.pool = base.pool
-LEFT JOIN fees7d ON fees7d.pool = base.pool
-LEFT JOIN positions ON positions.pool = base.pool
-LIMIT 1;
-`;
+function makeEmptyHead(): AnalyticsPoolHead {
+  return {
+    state: 'empty',
+    tvl: 0,
+    fees24h: 0,
+    fees7d: 0,
+    incentives24h: 0,
+    incentives7d: 0,
+    positionsCount: 0,
+  };
+}
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+function makeEmptyUniverse(): AnalyticsPoolUniverse {
+  return {
+    pair: {
+      token0Symbol: '',
+      token1Symbol: '',
+    },
+    summary: {
+      tvlUsd: 0,
+      fees24hUsd: 0,
+      fees7dUsd: 0,
+      incentives24hUsd: 0,
+      incentives7dUsd: 0,
+      positionsCount: 0,
+      walletsCount: 0,
+    },
+    segments: [],
+    dexBreakdown: [],
+  };
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const id = req.query.id;
+  const poolAddress = Array.isArray(id) ? id[0]?.toLowerCase() : id?.toLowerCase();
+
+  if (!poolAddress) {
+    return res.status(400).json({ ok: false, degrade: false, error: 'Missing pool id' });
   }
 
-  const { id } = req.query;
-  if (typeof id !== 'string' || !id) {
-    return res.status(400).json({ error: 'Pool ID required' });
-  }
+  const ts = new Date().toISOString();
 
-  const ts = Date.now();
-  const result = await queryOrDegrade<PoolRow>(POOL_SQL, [id.toLowerCase()], 60_000);
+  const [headResult, universeResult] = await Promise.all([
+    getPoolHeadMetrics(poolAddress),
+    getPoolUniverseHead(poolAddress),
+  ]);
 
-  if (!result.ok) {
-    return res.status(200).json({
-      ok: false,
-      degrade: true,
-      ts,
-      pool: {},
-    });
-  }
+  const degrade = Boolean(headResult.degrade || universeResult.degrade);
+  const headMetrics = headResult.metrics;
+  const head: AnalyticsPoolHead = headMetrics
+    ? {
+        state: degrade ? 'warming' : 'ok',
+        tvl: headMetrics.tvlUsd ?? 0,
+        fees24h: headMetrics.fees24hUsd ?? 0,
+        fees7d: headMetrics.fees7dUsd ?? 0,
+        incentives24h: headMetrics.incentives24hUsd ?? 0,
+        incentives7d: headMetrics.incentives7dUsd ?? 0,
+        positionsCount: headMetrics.positionsCount ?? 0,
+      }
+    : makeEmptyHead();
 
-  const row = result.rows?.[0];
-  const poolPayload = {
-    state: row?.state ?? 'unknown',
-    tvl: Number(row?.tvl_usd ?? 0),
-    fees24h: Number(row?.fees_24h ?? 0),
-    fees7d: Number(row?.fees_7d ?? 0),
-    positionsCount: Number(row?.positions_count ?? 0),
+  const universeRaw: AnalyticsPoolUniverse = (universeResult.universe as AnalyticsPoolUniverse | null) ?? makeEmptyUniverse();
+  const { pair, summary, segments } = universeRaw;
+  const safeUniverse: AnalyticsPoolUniverse = {
+    pair,
+    summary: {
+      tvlUsd: summary.tvlUsd ?? 0,
+      fees24hUsd: summary.fees24hUsd ?? 0,
+      fees7dUsd: summary.fees7dUsd ?? 0,
+      incentives24hUsd: summary.incentives24hUsd ?? 0,
+      incentives7dUsd: summary.incentives7dUsd ?? 0,
+      positionsCount: summary.positionsCount ?? 0,
+      walletsCount: summary.walletsCount ?? 0,
+    },
+    segments,
   };
 
-  return res.status(200).json({
-    ok: true,
-    degrade: false,
+  const payload = {
+    ok: Boolean(headResult.ok && universeResult.ok),
+    degrade,
     ts,
-    pool: poolPayload,
-  });
+    pool: {
+      head,
+      universe: safeUniverse,
+    },
+  };
+
+  return res.status(200).json(payload);
 }

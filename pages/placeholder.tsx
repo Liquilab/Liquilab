@@ -36,7 +36,7 @@ export default function Placeholder() {
   return (
     <>
       <Head>
-        <title>LiquiLab — Preview Access</title>
+        <title>Liquilab — Preview Access</title>
       </Head>
 
       <main 
@@ -148,7 +148,7 @@ export default function Placeholder() {
           {/* Footer Note */}
           <div className="mt-8 text-center">
             <p className="text-xs text-gray-500">
-              © {new Date().getFullYear()} LiquiLab. All rights reserved.
+              © {new Date().getFullYear()} Liquilab. All rights reserved.
             </p>
           </div>
         </div>

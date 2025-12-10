@@ -4,9 +4,17 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const MEDIA_TOKENS_DIR = path.join(ROOT, 'public', 'media', 'tokens');
+const TOKEN_DEFAULT_PATH = path.join(ROOT, 'public', 'media', 'tokens', 'token-default.svg');
 const LEGACY_ICONS_DIR = path.join(ROOT, 'public', 'icons');
-const REQUIRED_SYMBOLS = ['flr', 'usd0', 'usdce', 'fxrp', 'joule'];
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function listFiles(dirPath) {
   try {
@@ -16,39 +24,18 @@ async function listFiles(dirPath) {
   }
 }
 
-function findMatch(files, symbol) {
-  const prefix = symbol.toLowerCase();
-  return files.find((file) => file.toLowerCase().startsWith(prefix)) ?? null;
-}
-
 async function main() {
-  const mediaFiles = await listFiles(MEDIA_TOKENS_DIR);
+  const hasDefaultIcon = await pathExists(TOKEN_DEFAULT_PATH);
   const legacyFiles = await listFiles(LEGACY_ICONS_DIR);
 
-  const report = REQUIRED_SYMBOLS.map((symbol) => ({
-    symbol,
-    media: findMatch(mediaFiles, symbol),
-    legacy: findMatch(legacyFiles, symbol),
-  }));
+  const result = {
+    ok: hasDefaultIcon,
+    hasDefaultIcon,
+    legacyIconsPresent: legacyFiles.length > 0,
+  };
 
-  const missingSymbols = report.filter((entry) => !entry.media && !entry.legacy).map((entry) => entry.symbol);
-  const ok = mediaFiles.length > 0 || legacyFiles.length > 0;
-
-  console.log(
-    JSON.stringify(
-      {
-        ok,
-        hasMediaTokens: mediaFiles.length > 0,
-        hasLegacyIcons: legacyFiles.length > 0,
-        report,
-        missingSymbols,
-      },
-      null,
-      2,
-    ),
-  );
-
-  process.exit(ok ? 0 : 1);
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(hasDefaultIcon ? 0 : 1);
 }
 
 main().catch((error) => {

@@ -1,3 +1,9 @@
+Test wallets
+Pro Account: 0x57d294d815968f0efa722f1e8094da65402cd951
+Premium Account: 0x88ef07c79443efdf569c6e22aa21501d1702a8f7
+
+
+
 V3 adressen
 
 

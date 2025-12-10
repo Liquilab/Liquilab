@@ -6,7 +6,7 @@
 import { createPublicClient, http, fallback } from 'viem';
 import { flare } from 'viem/chains';
 import { getUsdPriceNow } from '@/services/tokenRegistry';
-import { fetchTokenIconBySymbol } from '@/services/tokenIconService';
+import { getTokenIconUrl } from '@/services/tokenIconService';
 import { 
   getRangeStatus, 
   getRangeWidthPct, 
@@ -445,8 +445,8 @@ async function enrichWithIcons(pools: PoolSnapshot[]): Promise<PoolSnapshot[]> {
   return Promise.all(
     pools.map(async (pool) => {
       const [token0Icon, token1Icon] = await Promise.all([
-        fetchTokenIconBySymbol(pool.token0Symbol).catch(() => null),
-        fetchTokenIconBySymbol(pool.token1Symbol).catch(() => null),
+        getTokenIconUrl(pool.token0Symbol, pool.token0Address).catch(() => null),
+        getTokenIconUrl(pool.token1Symbol, pool.token1Address).catch(() => null),
       ]);
 
       return {
@@ -524,4 +524,3 @@ export async function getTopPoolsByTVL(config: ScanConfig): Promise<ScanResult> 
     },
   };
 }
-

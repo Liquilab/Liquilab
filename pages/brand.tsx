@@ -399,10 +399,10 @@ export default function BrandSystemPage() {
   return (
     <>
       <Head>
-        <title>LiquiLab Brand & Design System</title>
+        <title>Liquilab Brand & Design System</title>
         <meta
           name="description"
-          content="LiquiLab’s living design system. Everything you see here is the source of truth for UI and docs."
+          content="Liquilab’s living design system. Everything you see here is the source of truth for UI and docs."
         />
       </Head>
       <div className="relative min-h-screen text-white">
@@ -413,13 +413,13 @@ export default function BrandSystemPage() {
           <section className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-3">
               <p className="font-ui text-xs uppercase tracking-[0.3em] text-white/55">
-                LiquiLab design system
+                Liquilab design system
               </p>
               <h1 className="font-brand text-4xl font-semibold text-white md:text-5xl">
                 Calm by default. Bright when needed.
               </h1>
               <p className="max-w-xl font-ui text-sm text-white/70">
-                This page is LiquiLab&apos;s living design system. Everything you see here is the source of truth for UI,
+                This page is Liquilab&apos;s living design system. Everything you see here is the source of truth for UI,
                 docs, and how we review future product changes.
               </p>
             </div>

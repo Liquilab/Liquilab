@@ -5,8 +5,8 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 
-import { LiquiLabLogo } from '@/components/LiquiLabLogo';
-import { Button } from '@/components/ui/Button';
+import { LiquilabLogo } from '@/components/LiquilabLogo';
+import { Button } from '@/components/ui/button';
 import { ProgressSteps } from '@/components/ui/ProgressSteps';
 import {
   ALERTS_PRICE_PER_BUNDLE_USD,
@@ -221,14 +221,14 @@ export default function CheckoutPage() {
   return (
     <>
       <Head>
-        <title>Checkout · LiquiLab</title>
+        <title>Checkout · Liquilab</title>
       </Head>
 
       <div className="relative min-h-screen overflow-hidden text-white">
         <div className="page-bg" aria-hidden="true" />
         <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-4xl flex-col px-6 pb-20 pt-10 sm:px-10">
           <header className="flex items-center justify-between">
-            <LiquiLabLogo variant="full" size="sm" theme="dark" />
+            <LiquilabLogo variant="full" size="sm" theme="dark" />
             <Link
               href="/login"
               className="text-sm font-semibold text-white/80 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
@@ -408,7 +408,7 @@ export default function CheckoutPage() {
                             value={company}
                             onChange={(event) => setCompany(event.target.value)}
                             className="h-11 rounded-xl border border-white/15 bg-black/30 px-4 text-sm text-white placeholder:text-white/30 focus:border-[#3B82F6] focus:outline-none focus:ring-2 focus:ring-[#60A5FA]/40"
-                            placeholder="LiquiLab BV"
+                            placeholder="Liquilab BV"
                           />
                         </div>
                         <div className="flex flex-col gap-2">

@@ -6,7 +6,7 @@ export default function FastForwardSuccessPage() {
   return (
     <>
       <Head>
-        <title>LiquiLab · Fast-Track Pending Approval</title>
+        <title>Liquilab · Fast-Track Pending Approval</title>
       </Head>
       <main className="min-h-screen bg-liqui-navy text-white">
         <Header showTabs={false} />

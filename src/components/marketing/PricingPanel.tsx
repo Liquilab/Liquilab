@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import {
   ANNUAL_MULTIPLIER,
   FREE_POOLS,
@@ -77,7 +77,7 @@ export function PricingPanel({ detectedPools = null }: PricingPanelProps) {
           <Button
             as="a"
             href="/connect"
-            aria-label="Start with your free pool on LiquiLab"
+            aria-label="Start with your free pool on Liquilab"
           >
             {COPY.startFreeCta}
           </Button>

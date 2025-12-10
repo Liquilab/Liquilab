@@ -17,6 +17,7 @@ import { FactoryScanner } from './factoryScanner';
 import { PoolScanner, type PoolScanResult } from './poolScanner';
 import { PoolRegistry } from './poolRegistry';
 import { normalizeScanResult } from '../lib/indexer/scan';
+import { updatePoolStatesForPools } from './poolStateUpdater';
 
 export interface IndexOptions {
   fromBlock?: number;
@@ -430,6 +431,26 @@ export class IndexerCore {
 
     if (!dryRun && scanResult.rows.length > 0) {
       writeStats = await this.writer.writePoolEvents(scanResult.rows);
+
+      // Update PoolState for pools that had events
+      // Only update if we wrote events (to avoid unnecessary RPC calls)
+      if (writeStats.written > 0) {
+        const affectedPools = Array.from(new Set(scanResult.rows.map((r) => r.pool)));
+        try {
+          const poolStateResult = await updatePoolStatesForPools(affectedPools, {
+            batchSize: 5, // Smaller batch to avoid RPC rate limits
+            delayMs: 200,
+          });
+          if (poolStateResult.updated > 0) {
+            console.log(
+              `[INDEXER] Updated PoolState for ${poolStateResult.updated} pools (${poolStateResult.failed} failed)`
+            );
+          }
+        } catch (error) {
+          // Don't fail the entire index operation if PoolState update fails
+          console.warn('[INDEXER] PoolState update failed (non-fatal):', error);
+        }
+      }
     }
 
     if (!dryRun) {

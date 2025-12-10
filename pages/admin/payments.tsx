@@ -136,7 +136,7 @@ export default function AdminPaymentsPage() {
   return (
     <>
       <Head>
-        <title>LiquiLab · Admin Payments</title>
+        <title>Liquilab · Admin Payments</title>
       </Head>
       <main className="min-h-screen bg-liqui-navy text-white font-ui">
         <Header showTabs={false} />

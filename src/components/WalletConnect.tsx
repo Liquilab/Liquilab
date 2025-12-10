@@ -277,7 +277,7 @@ export default function WalletConnect({ className, onWalletConnected, onWalletDi
               <div>
                 <h2 className="font-brand text-2xl font-semibold text-white">Connect your wallet</h2>
                 <p className="mt-2 font-ui text-sm text-white/60">
-                  Choose a wallet to connect to LiquiLab
+                  Choose a wallet to connect to Liquilab
                 </p>
               </div>
               <button

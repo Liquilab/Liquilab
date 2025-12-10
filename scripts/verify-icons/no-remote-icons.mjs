@@ -13,7 +13,9 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
 
-const REMOTE_PATTERN = /static\.dexscreener\.com/i;
+const REMOTE_BLOCK_PATTERN = /static\.dexscreener\.com/i;
+const REMOTE_ICON_URL = /(https?:\/\/[^\s"'`<>()]*?(token-icons|coins\/images)[^\s"'`<>()]*)/gi;
+const ALLOWED_REMOTE_HOSTS = new Set(['assets.coingecko.com']);
 // Legacy path: /icons/ (not /media/icons/ which is our fallback)
 const LEGACY_PATTERN = /\/icons\//;
 
@@ -53,8 +55,22 @@ async function scanDirectory(dirPath, relativePath = '') {
         try {
           const content = await fs.readFile(fullPath, 'utf8');
           
-          if (REMOTE_PATTERN.test(content)) {
+          if (REMOTE_BLOCK_PATTERN.test(content)) {
             results.remoteRefs.push(relPath);
+          }
+
+          const remoteMatches = content.matchAll(REMOTE_ICON_URL);
+          for (const match of remoteMatches) {
+            try {
+              const url = new URL(match[0]);
+              if (!ALLOWED_REMOTE_HOSTS.has(url.hostname)) {
+                results.remoteRefs.push(relPath);
+                break;
+              }
+            } catch {
+              results.remoteRefs.push(relPath);
+              break;
+            }
           }
           
           const legacyMatches = content.match(LEGACY_PATTERN);
@@ -106,4 +122,3 @@ main().catch((e) => {
   console.error('❌ Fatal error:', e);
   process.exit(1);
 });
-

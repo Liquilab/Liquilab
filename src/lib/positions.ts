@@ -7,8 +7,13 @@ type PositionRow = {
   dailyFeesUsd?: number;
   // Incentives (rFLR, APS, etc.)
   incentivesUsd?: number;
-  rflrRewardsUsd?: number;
-  rflrUsd?: number;
+  incentivesBreakdown?: {
+    tokenSymbol: string;
+    amount: string;
+    amountUsd: number;
+  }[];
+  rflrRewardsUsd?: number; // legacy
+  rflrUsd?: number; // legacy
   // Total rewards (should be fees + incentives, but we calculate it ourselves)
   rewardsUsd?: number;
   providerSlug?: string;

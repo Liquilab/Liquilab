@@ -211,14 +211,13 @@ async function main() {
   });
 
   const sanitizedRpc = sanitizeRpcUrl(indexerConfig.rpc.url);
-  const streams = options.factoryProvided ? ['nfpm', 'factories', 'pools'] : ['nfpm'];
+  // Always follow NFPM + factories + pools to maintain PoolEvent coverage across all dexes.
+  const streams = ['nfpm', 'factories', 'pools'] as const;
   let poolCount: number | undefined;
-  if (options.factoryProvided) {
-    try {
-      poolCount = (await indexer.getKnownPools()).length;
-    } catch (error) {
-      console.warn('[follower] Unable to load pool registry for log payload:', error);
-    }
+  try {
+    poolCount = (await indexer.getKnownPools()).length;
+  } catch (error) {
+    console.warn('[follower] Unable to load pool registry for log payload:', error);
   }
   const startLog: StartLogPayload = {
     mode: 'follower',

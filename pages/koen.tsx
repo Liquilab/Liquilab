@@ -190,7 +190,7 @@ export default function KoenDashboard() {
   return (
     <>
       <Head>
-        <title>Koen — Personal dashboard · LiquiLab</title>
+        <title>Koen — Personal dashboard · Liquilab</title>
         <meta
           name="description"
           content="Inspect Koen’s liquidity positions on Ēnosys and SparkDEX with RangeBand™ insights."
