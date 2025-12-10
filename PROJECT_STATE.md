@@ -65,6 +65,8 @@
 
 ## Working Agreements
 - Always add an 'Advies' line when a better option exists (see `docs/PROMPTING_STANDARD.md`).
+- Data-first pipeline playbook (Incentives & analytics): see dedicated section below for the mandatory 3-phase workflow (goal/golden pools, source validation before code, pipeline only after data proof) and hard stop rules on empty/404 sources.
+- MVP SSoT: PoolEvent + current 7d-MV chain remains the production source of truth; any deep refactor must consult `docs/DATA_ARCHITECTURE_V2_GOAL.md` first.
 
 ---
 
@@ -110,6 +112,7 @@
   - `PositionEvent` — Mint/Increase/Decrease/Collect (per tokenId & pool).  
   - `PositionTransfer` — ERC721 transfers across owners.  
   - `SyncCheckpoint` — per-stream progress (keys: `NPM:global`, `FACTORY:enosys|sparkdex`, `POOLS:all`, etc).  
+  - `PoolState` — **Current on-chain reserves SSoT** (per pool). Stores `reserve0_raw`/`reserve1_raw` from direct token balance reads (not event reconstruction), `dex` tag (`enosys-v3`/`sparkdex-v3`), `last_block_number`, `updated_at`. Populated via `scripts/backfill-pool-state.ts` and kept in sync by indexer follower. Used by `mv_pool_reserves_now` for Universe TVL aggregation. **(INDEXER-POOLSTATE)**  
   - `analytics_market`, `analytics_position`, `analytics_position_snapshot`, `metrics_daily_*` — derived KPI tables for TVL, APY, wallet adoption.  
   - Supporting tables: `PoolStateSnapshot`, `PositionSnapshot`, `User`, `Wallet`.
 - **Relationships:**  
@@ -138,6 +141,52 @@
 - **`mv_position_day_stats(position_id, date, price_open, price_close, range_lower_price, range_upper_price, tvl_usd_avg, fees_usd_earned, fees_usd_claimed, time_in_range_pct)`** — Daily position performance. **(SP2-D03)**
 - **`mv_position_events_recent(position_id, ts, event_type, token0_delta, token1_delta, fees_usd, incentives_usd, tx_hash)`** — Recent position events (7d window). **(SP2-D04)**
 - **`mv_position_lifetime_v1(token_id, pool_address, nfpm_address, dex, first_event_ts, last_event_ts, event_count, last_known_owner)`** — Lifetime v3 LP positions (Enosys + SparkDEX v3 on Flare), one row per tokenId. Used for W3 Cross-DEX coverage comparison (74,857 positions; 8,594 wallets). Verifier: `npm run verify:data:lifetime-vs-w3`. **(SP2-D11)**
+- **`mv_pool_reserves_now(pool_address, dex, token0_address, token1_address, reserve0_raw, reserve1_raw, last_block_number, updated_at)`** — Current on-chain reserves per pool (SSoT for Pool Universe TVL). Exposes `PoolState` data for analytics consumption. PoolState is populated via on-chain reads (not event reconstruction), ensuring accurate "current reserves" even if events are missing. Used by analytics repo for Universe Total TVL aggregation. MV uses PoolState DB column names (pool_address, token0_address, reserve0_raw, ...) instead of Prisma field names. **(INDEXER-POOLSTATE)**
+
+- **PoolUniversePage guardrails:** Pool Universe React page must never return `null`; empty/error/warming states must render `DataStateBanner`/placeholder so users never see only the background when data is missing or warming. **(SP2-FE-POOL-UNIVERSE)**
+- **Providers import/export fixed:** `_app.tsx` and `src/providers.tsx` now use matching default export for `Providers`; `DataStateBanner` and `WarmingPlaceholder` export defaults to avoid `Element type is invalid` runtime errors. **(SP2-FE-POOL-UNIVERSE)**
+
+### Universe Head — Metric Definitions (Pro View)
+
+- **Total TVL**
+  - Definition: Sum of **current liquidity across all pools for this pair** (Enosys, SparkDEX, future providers), in USD.
+  - Semantics:
+    - Per pool: use current token reserves from the PoolState SSoT (`mv_pool_reserves_now`); `TVL_pool = reserve0_now * price(token0) + reserve1_now * price(token1)`.
+    - Pair TVL: `Total TVL = Σ TVL_pool` over all pools for the pair.
+    - Snapshot (“now in the pool”), not PositionEvent flow aggregates.
+  - UX: Head shows USD value + % change vs previous period (24H/7D/30D/90D). “Across N pools on Enosys + SparkDEX” is short text/tooltip; no separate tile.
+
+- **Accrued Fees (window)**
+  - Definition: LP-relevant swap fees generated across all pools for this pair in the selected window (24H/7D/30D/90D), in USD.
+  - Semantics: Use fee MVs (e.g., `mv_pool_fees_24h`, `mv_pool_fees_7d`), convert to USD per pool, sum across pair. Market-level; per-LP collected/uncollected is account/position scope.
+  - UX: Tile shows USD amount + % change vs previous period for the same window. Subtitle detail lives in a tooltip.
+
+- **Incentives (window)**
+  - Definition: DEX/protocol rewards (e.g., rFLR/FLR/APS) accruing to LPs in this pair for the selected window, in USD.
+  - Semantics: Sum all configured incentive streams for the pair’s pools over the window; convert rewards to USD.
+  - UX: Tile shows USD amount + % change vs previous period. A separate “Incentives breakdown” section (below head) covers split by DEX/token; head stays minimal with tooltips.
+
+- **Active Positions**
+  - Definition: Count of active v3 LP positions (NFTs) across all pools for this pair.
+  - Semantics: From lifetime position SSoT (e.g., `mv_position_lifetime_v1` or derived active MV); count distinct (tokenId, nfpmAddress) with current liquidity > 0 / not closed in any pool of the pair.
+  - UX: Tile shows count + % change vs previous period; “active” aligned with Active LP Wallets definition.
+
+- **Active LP Wallets**
+  - Definition: Distinct wallets that **currently hold at least one active LP position** in this pair.
+  - Semantics: From same SSoT, restrict to active positions in any pool of the pair; `COUNT(DISTINCT last_known_owner)`.
+  - UX: Tile shows count + % change vs previous period; tooltip clarifies it’s a snapshot of wallets with exposure now (not “wallets with events in last 7d”).
+
+- **APR (Base vs Total)**
+  - Definition: Illustrative yield based on selected window and current TVL.
+  - Semantics:
+    - Base APR (fees-only): e.g., 7D → `(fees7dUsd * 365 / 7) / tvlUsd`; 24H → `(fees24hUsd * 365) / tvlUsd`; others analogous.
+    - Total APR (fees + incentives): `(fees_windowUsd + incentives_windowUsd)` annualised / tvlUsd.
+    - APR is illustrative, not a guaranteed APY.
+  - UX: Tile shows one main APR (Total APR: fees+incentives) with a subline for Base APR. Badge reflects APR change vs previous period for the same window. Updates when the head period toggle changes.
+
+- **Period toggle (24H/7D/30D/90D)**
+  - Single central toggle drives: Accrued Fees, Incentives, APR calculations, and all “change vs previous period” badges.
+  - Tile subtitles stay minimal; full definitions live in tooltips on info icons to keep the head visually quiet.
 
 **Indices:** `(wallet_address)` and `(position_id,date)`; refresh ≤60s/MV.  
 **Verifiers:** `npm run verify:mv` checks row counts and column names.  
@@ -1600,6 +1649,33 @@ npm run icons:fetch -- --only-missing --concurrency=8
 
 ---
 
+## Target Data Architecture v2 — Facts & Aggregates (Design-only, post-grant)
+
+This is a documentation-only “North Star” for a future v2. **No code/schema changes now; the current MVP SSoT stays the existing MV-based pipeline.**
+
+- **Today (v1/MVP SSoT):**
+  - TVL via `PoolState` + `mv_pool_reserves_now` (on-chain reserves).
+  - Fees 24h/7d via `mv_pool_fees_24h/7d` from `PoolEvent` swaps.
+  - Incentives via `rewards_enosys_rflr` / `rewards_sparkdex_distributor` + their MVs.
+  - APR from fees (incentives-ready); positions/wallets from NFPM `PositionEvent`/`PositionTransfer`.
+  - Flare follower uses Flare RPC (small window); ANKR only for explicit backfills (never for the live follower).
+
+- **Target (v2, post-grant): canonical facts + daily aggregates:**
+  - `fact_swap` — all swaps; `fee_usd`/`volume_usd` computed at ingestion (fee tier + prices).
+  - `fact_reward` — all incentives (Enosys API, SparkDEX TD, future sources) with a `source` enum.
+  - `fact_pool_snapshot` — periodic TVL snapshots from `PoolState`/on-chain reads (`reserve*`, `tvl_usd`).
+  - `fact_position_snapshot` — later: per-position value snapshots from NFPM/`PositionEvent` for IL/APR.
+  - `agg_pool_daily` — per pool per day: `fees_usd`, `volume_usd`, `incentives_usd`, `avg_tvl_usd`, `swap_count`, `position_count`, ≥90d horizon. (Optional) `agg_position_daily` for position/wallet/IL stats.
+  - **Windows:** wall-clock only (timestamp filters, e.g., `timestamp >= now() - interval '7 days'` for 7d/24h/30d/90d).
+  - **SSoT:** TVL = `PoolState`/`fact_pool_snapshot`; activity/incentives = `fact_swap`/`fact_reward`; IL/APR-per-position = `fact_position_snapshot` (future).
+
+- **Fit to constraints & tools:**
+  - Flare follower stays on Flare RPC; ANKR backfills only to repair gaps into the same fact tables.
+  - Existing backfill/debug scripts remain useful; when we migrate, they will read/write the fact + aggregate tables.
+  - v2 is an evolution/simplification of v1 MVs; v1 remains production SSoT until an explicit cut-over.
+
+- **Scope note:** Design-only; no schema/code/backfill changes in MVP.
+
 ## Changelog — 2025-11-13
 
 ### Homepage UI Restore from d9030cc2
@@ -1706,6 +1782,8 @@ npm run icons:fetch -- --only-missing --concurrency=8
 ## Changelog — 2025-11-13
 
 ### Data Enrichment Consolidation & Analytics Endpoints
+
+- [2025-12-09] RpcScanner: provider-aware blockWindow caps (Flare 25 / ANKR 2000 / generic 1000); Enosys backfill (factory pools, CLI-tunable blockWindow/rps/concurrency) and `debug:enosys:events` emit per-pool Swap/Mint/Burn/Collect counts with 7d status.
 
 **Problem:** Need consolidated enrichment MVs, analytics endpoints with TTL & degrade-mode, and weekly report generator.
 
@@ -1974,3 +2052,266 @@ npm run icons:fetch -- --only-missing --concurrency=8
 
 <!-- CHANGELOG_ARCHIVE_INDEX -->
 See archives in /docs/changelog/.
+
+---
+
+## Changelog — 2025-12-07
+
+- SP2-FE-POOL-UNIVERSE-API-CONTRACT: `/api/analytics/pool/[id]` now always returns a non-null `pool.universe` object when `ok=true`; missing data is represented by an empty summary (zeros) and empty arrays instead of `universe=null`, keeping the API contract consistent for consumers.
+- SP2-FE-POOL-UNIVERSE-API-SCHEMA: Public Pool Universe API shape now includes only `pair`, `summary`, and `segments`; fields like `poolsCount` and `dexBreakdown` are removed from the response, and the UI derives pool counts from `segments` to satisfy strict verify:api:analytics expectations.
+- SP2-DATA-UNIVERSE-BUSY-DIAG: Added `scripts/debug/universe-busy-pair.mts` to inspect PoolEvent, mv_pool_fees_24h/7d, and mv_wallet_lp_7d for busy pairs (e.g., WFLR/FXRP) so any unexpected 0-fees/0-wallets can be diagnosed from raw data.
+- SP2-DATA-UNIVERSE-BUSY-DIAG-FIX: Updated `scripts/debug/universe-busy-pair.mts` to drop the non-existent `fee` column from its queries, keeping the read-only diagnostics focused on swaps, fee MVs, and wallet MVs against the current schema.
+- SP2-DATA-UNIVERSE-WALLETS-COLUMN-FIX: Adjusted all mv_wallet_lp_7d queries (Universe + debug) to use the correct pool column exposed by the view so wallet counts run without column errors.
+- SP2-DATA-UNIVERSE-WALLETS-PER-PAIR: Active LP Wallets for Pool Universe is now computed directly from PositionEvent/PositionTransfer over the last 7 days for all pools in the pair (distinct wallets), instead of attempting to filter mv_wallet_lp_7d (which has no pool column).
+- SP2-DATA-UNIVERSE-WALLETS-LIFETIME: Active LP Wallets is now based on lifetime positions: walletsCount counts distinct last_known_owner values from `mv_position_lifetime_v1` for all pools in the pair, representing wallets with active (non-closed) positions per pair.
+- SP2-DATA-POSITION-LIFETIME-OWNER: Updated `mv_position_lifetime_v1` to derive `last_known_owner` from owner or recipient fields so lifetime owners are populated even when owner is empty, enabling accurate Active LP Wallets counts.
+- SP2-DATA-POSITION-LIFETIME-OWNER-SSOT-ALIGN: Aligned the SSoT definition for `mv_position_lifetime_v1` (create script + doc) to derive `last_known_owner` via CASE(owner, recipient) while grouping only by (`tokenId`, `nfpmAddress`) and aggregating `primary_pool`, preventing duplicate rows and enabling reliable lifetime owner counts for Active LP Wallets.
+- SP2-DATA-POSITION-LIFETIME-OWNER-STABLE: Added explicit DROP/CREATE for `mv_position_lifetime_v1` using the minimal CASE(owner, recipient) aggregation grouped by (`tokenId`, `nfpmAddress`) with `primary_pool` aggregated, to avoid duplicate-key refresh failures and keep lifetime owners populated for Active LP Wallets.
+
+- 2025-12-07: Pool Universe updates — verify:api:analytics now treats empty head + non-null universe payloads as valid, and slug routing normalises USDT0/USD₮0 so /pool/wflr-usdt0 and /pool/fxrp-usdt0 resolve to canonical Enosys base pools.
+
+- 2025-12-07: Pool Universe TVL now sourced from mv_pool_reserves_now (current PoolState reserves) in head/universe metrics; mv_pool_liquidity kept for flow/PNL analytics only.
+
+- 2025-12-07: SP2-DATA-INCENTIVES-GENERIC — Replaced legacy `rflrRewardsUsd` with a generic incentives model (`incentivesUsd` + optional breakdown) in `src/types/positions.ts` and mapped legacy rFLR values into the generic fields in `src/lib/positions` and `src/lib/positions/server`.
+- 2025-12-07: SP2-DATA-INCENTIVES-SSOT — Refined `src/indexer/config/stakingContracts.ts` into a typed SSoT (`StakingRewardsConfig`) covering Enosys API-based rFLR rewards and SparkDEX TokenDistributor rewards (SPX + rFLR) using distributor `0xc2DF11C68f86910B99EAf8acEd7F5189915Ba24F`.
+- 2025-12-07: SP2-DATA-INCENTIVES-MAP — Documented the incentives enrichment/analytics gaps (no incentives MVs, analytics return fees/TVL only) and a stepwise wiring plan in HANDOVER_TO_GPT.md to ingest rFLR/SPX rewards, aggregate per window, and expose incentivesUsd/breakdown via analytics APIs (no code changes yet).
+- 2025-12-08: SPARKDEX-INCENTIVES-MAP — Mapped the current SparkDEX ingestion → DB → analytics path: TokenDistributor rewards (SPX/rFLR) are configured but not ingested; no rewards tables/MVs exist; analytics head/universe returns TVL/fees/positions/wallets only. See HANDOVER_TO_GPT.md “SparkDEX Incentives Mapping — 2025-12-08” for details.
+- 2025-12-09: SPARKDEX-INCENTIVES-DESIGN — Documented a TokenDistributor rewards staging + 24h/7d aggregation design (SPX/rFLR) and the current SparkDEX pipeline in HANDOVER_TO_GPT.md; no code/schema changes yet.
+- 2025-12-10: SPARKDEX-INCENTIVES-DB — Added DB-only layer for SparkDEX TokenDistributor rewards: staging table `rewards_sparkdex_distributor` plus aggregation MVs `mv_sparkdex_rewards_24h`/`mv_sparkdex_rewards_7d` (amount_usd placeholder=0 pending price integration). No indexer/analytics/UI changes in this run.
+- 2025-12-11: SPARKDEX-INCENTIVES-PIPELINE — Implemented TokenDistributor ingestion (writes to `rewards_sparkdex_distributor`) and head-level analytics incentives for SparkDEX pools (incentives24h/incentives7d computed via prices; incentivesBreakdown7d returned). MVs unchanged (amount_usd placeholder=0); universe/segments and Enosys/position-level incentives remain TODO.
+
+## Changelog — 2025-12-08
+- Added Enosys rFLR rewards DB layer: staging table migration `db/migrations/20251212_enosys_rflr_rewards.sql` and aggregation views `mv_enosys_rewards_24h` / `mv_enosys_rewards_7d` (DB-only; ingestion/analytics wiring deferred).
+
+## Changelog — 2025-12-08 (Enosys ingestion)
+- Implemented Enosys rFLR rewards ingestion + USD pricing via `scripts/indexer-staking.mts` (API from `stakingContracts.ts`), writing to `rewards_enosys_rflr` and feeding `mv_enosys_rewards_24h` / `mv_enosys_rewards_7d`. Analytics/UI joins remain TODO.
+
+## Changelog — 2025-12-08 (API incentives)
+- Aligned Pool Universe API payload and client typings to expose incentives fields with safe defaults, passing through analytics-provided incentives (SparkDEX + Enosys) for head/universe; no DB/indexer changes.
+
+## Changelog — 2025-12-08 (SparkDEX incentives fix)
+- Fixed SparkDEX incentives helper in `src/lib/analytics/db.ts` to query `mv_sparkdex_rewards_24h/7d` with fixed view names (no dynamic table-name parameters), keeping incentives degrade-safe when MVs are empty; WFLR pools may still show zero incentives until rewards tables/MVs are populated.
+
+## Changelog — 2025-12-08 (Enosys incentives fix)
+- Fixed Enosys incentives helper in `src/lib/analytics/db.ts` to query `mv_enosys_rewards_24h/7d` with fixed view names (no dynamic table-name parameters), making incentives degrade-safe for Enosys pools even when rewards MVs are empty.
+
+## Changelog — 2025-12-08 (UI Button casing)
+- Normalized all Button imports to `@/components/ui/button` (lowercase) and removed the uppercase path; affected pages/components include account, checkout, connect, partners, pricing, pricing panel, CTA button, rangeband, and billing dashboard. Case-sensitive builds should no longer fail on missing Button modules.
+
+## Changelog — 2025-12-08 (Button SSoT restore)
+- Restored canonical Button component at `src/components/ui/button.tsx` so imports from `@/components/ui/button` and `./ui/button` resolve; fixes module-not-found errors after removing the uppercase variant.
+
+## Changelog — 2025-12-08 (WalletPro/connect build fixes)
+- Added `getWalletPortfolioAnalytics` export in `src/lib/api/analytics.ts` to satisfy WalletProPage imports and align with positions API; resolved build-time missing export errors. Connect page should now build without React error 130 once dependencies resolve.
+
+## Changelog — 2025-12-08 (Universe debug script)
+- Updated `scripts/debug/universe-busy-pair.mts` to align with current MV schemas (fees/reserves/lifetime), add schema-mismatch guards, and produce a stable stXRP/FXRP universe debug report without 42703 errors.
+
+## Changelog — 2025-12-08 (Staking indexer chunking)
+- Hardened `scripts/indexer-staking.mts` with CLI range logging and chunked SparkDEX TokenDistributor scans (20-block windows) to avoid RPC “too many blocks” errors; Enosys ingestion unchanged, summaries clarified.
+
+## Changelog — 2025-12-08 (Data-first pipeline playbook)
+- Added a standing SSoT section documenting the 3-phase data-first workflow for incentives/analytics: define goals + golden pools with acceptance bands; validate sources (logs/API) before code; build pipelines only after data proof; hard-stop on empty/404 sources; every new pipeline ticket must list golden pools, DEX reference values, acceptance bands, and sources.
+
+## Changelog — 2025-12-08 (Golden pairs TVL/fees SSoT)
+- Defined golden pairs (STXRP/FXRP, WFLR/USDT0, FXRP/USDT0 across Enosys + SparkDEX) and added `scripts/debug/universe-golden-pairs.mts` with npm run debug:universe:golden as the SSoT tool for TVL/fees coverage per golden pool.
+- Generalized swap-fee MVs (`mv_pool_fees_24h/7d`) to cover all v3 pools using swap-based fees (fee_tier/1_000_000); aligns with golden-pair validation and analytics helpers.
+
+---
+
+## Data-first pipeline playbook (Incentives & analytics)
+
+**Purpose:** Prevent building pipelines on empty or unverified sources. Mandatory for incentives (SparkDEX/Enosys) and any new data pipeline.
+
+**Phase A — Goal & golden samples**
+- One-line measurable goal per metric (e.g., “Enosys stXRP/FXRP 24h/7d fees within ±20% of Enosys UI”).
+- Select 2–3 golden pools per DEX (e.g., stXRP/FXRP, WFLR/USDT0) with concrete DEX UI values (TVL, fees, incentives/APR where applicable).
+- Define acceptance bands per metric (TVL ±5–10%, fees/incentives ±20%, etc.).
+
+**Phase B — Source validation before code**
+- On-chain (e.g., TokenDistributor): run small, targeted eth_getLogs/viem scans around a known reward period or tx hash. Success = ≥1 real event with expected topic for a golden pool. If logs=0 in well-chosen windows, treat as SOURCE problem and stop; escalate with Koen for updated address/tx reference.
+- Off-chain/API (e.g., Enosys rFLR API): curl the exact URL, inspect raw JSON. Success = HTTP 200 with pool-attributed rewards or schema confirmed by Koen. If 404/empty/undocumented, stop and treat as SOURCE problem; request alternate URL/version/docs.
+
+**Phase C — Pipeline after data proof**
+- Only after Phase B is green: design staging/MVs based on observed payload/log shape (no guessing); insert a minimal sample and verify with `SELECT * FROM rewards_* LIMIT 5` for a golden pool.
+- Build analytics join helpers by first querying the MV directly for golden pools; then wire helpers/APIs.
+- Validate pool-level metrics vs DEX UI for golden pools (TVL, fees 24h/7d, incentives if present) and declare “ready” only when within acceptance bands.
+
+**Hard rules**
+- Empty/404 sources in a well-chosen window = stop and escalate as “missing/broken data source” (no further pipeline coding).
+- Every new data/incentives ticket must list: golden pools (addresses + DEX), reference DEX values, acceptance bands per metric, and intended sources (contract/API/docs).
+- This playbook overrides prior implicit habits; use it before touching migrations, MVs, or indexer code.
+
+### Golden Pairs & TVL/Fees SSoT
+- STXRP/FXRP — Enosys: `0xa4cE7dAfC6fB5acEEDd0070620b72aB8f09b0770`, SparkDEX: `0x5fD4139cC6fDFddbd4Fa74ddf9aE8f54BC87C555`
+- WFLR/USDT0 — Enosys: `0x3C2a7B76795E58829FAAa034486D417dd0155162`, SparkDEX: `0x2860db7a2b33b79e59ea450ff43b2dc673a22d3d`, SparkDEX (large): `0x63873f0d7165689022feef1b77428df357b33dcf`
+- FXRP/USDT0 — Enosys: `0x686f53F0950Ef193C887527eC027E6A574A4DbE1`, SparkDEX: `0x88d46717b16619b37fa2dfd2f038defb4459f1f7`
+- TVL SSoT: `mv_pool_reserves_now` (PoolState). Fees SSoT: `mv_pool_fees_24h` / `mv_pool_fees_7d` (swap-based). Debug SSoT: `scripts/debug/universe-golden-pairs.mts` via `npm run debug:universe:golden`; WARN_* flags indicate coverage gaps to fix before APR/incentives changes.
+- SparkDEX tail backfill: `backfill:sparkdex:tail` scans SparkDEX factory pools limited to golden allowlist, per-pool fromBlock=max(last_swap_block, 40,000,000) → latestBlock with defaults blockWindow=5000, rps=24, concurrency=8 (CLI overridable); uses RpcScanner provider caps (ANKR preferred).
+- SparkDEX fee audit: `debug:sparkdex:fees-audit` reports swaps7d/window flag, mv_pool_fees_24h/7d presence, and head fees for the four SparkDEX golden pools; WARN_FEES_ZERO when swaps are in-window but fees stay zero.
+- SP2 – Incentives in Universe (Enosys + SparkDEX): Pool head + Universe summaries now include incentives24hUsd/incentives7dUsd (Enosys rFLR via mv_enosys_rewards_24h/7d with amount_usd; SparkDEX TokenDistributor priced at query time). Golden pairs are the calibration set; zero incentives with reward rows trigger WARN in debug scripts.
+- Staking RPC & Defaults: Staking indexer prefers `ANKR_NODE_URL` (fallback `FLARE_RPC_URL`), provider caps (Flare ≤30, ANKR 2000, generic 1000) with effectiveBlockWindow=min(requested, cap). Defaults for staking: blockWindow=5000, rps=25, concurrency=12 (CLI overridable).
+
+## Changelog — 2025-12-08 (UI Button casing)
+- Unified Button component casing to `src/components/ui/button.tsx` and updated Navigation, WalletProPage, and PoolUniverseDexTable imports to use the canonical path, preventing case-sensitive build warnings.
+
+## Changelog — 2025-12-08 (Fees analytics alignment)
+- Aligned pool fee analytics to the current `mv_pool_fees_24h/7d` schema (fees0/fees1) inside `computeFeesUsd`, preventing 42703 errors and ensuring fees24hUsd/fees7dUsd resolve for golden pools (STXRP/FXRP, WFLR/USDT0, FXRP/USDT0 across Enosys + SparkDEX) via `debug:universe:golden`.
+
+## Changelog — 2025-12-08 (PoolEvent coverage — Enosys)
+- Root cause: PoolEvent scanning used only PoolCreated rows as the pool universe; follower/backfill defaulted to NFPM-only streams. Enosys WFLR/USDT0 (`0x3C2a7B...`) and FXRP/USDT0 (`0x686f53...`) never entered PoolEvent, so fees stayed zero despite active trading.
+- Fix: PoolRegistry now unions `Pool` table + PoolCreated to build the pool list/min block; follower/backfill defaults now include nfpm + factories + pools. Golden debug script now reports PoolEvent swap/mint/burn/collect counts and block range.
+- Backfill route: run `npm run indexer:backfill -- --factory=enosys --streams=nfpm,factories,pools --from <start>` (or follower equivalent) to repopulate PoolEvent for Enosys pools, then refresh fee MVs; verify via `npm run debug:universe:golden` with PoolEvent coverage counts.
+- ANKR routing: indexer config now honors `RPC_BASE` / `ANKR_NODE_URL` (preferred) over `FLARE_RPC_URL`. Example Enosys PoolEvent backfill (ANKR):  
+  `cd "$HOME/Projects/Liquilab_staging" && export ANKR_NODE_URL="https://rpc.ankr.com/flare/cee6b4f8866b7f8afa826f378953ae26eaa74fd174d1d282460e0fbad2b35b01" && npm run indexer:backfill -- --factory=enosys --streams=nfpm,factories,pools --from=51000000 --to=51900000 --rps=12 --concurrency=25 --blockWindow=25`
+
+## Changelog — 2025-12-08 (RPC provider-aware block windows)
+- RpcScanner now uses provider-aware block window limits: Flare public RPC remains clamped to 30 (safe 25), ANKR Flare RPC allows large windows (up to 20000), generic RPCs default to 1000. Backfill/follower/staking runs on ANKR will no longer be silently clamped to 25 when a larger blockWindow is requested via env/CLI.
+
+## SparkDEX Fees Audit — 2025-12-08
+- Golden SparkDEX pools audited via `scripts/debug/sparkdex-fees-audit.mts` (PoolEvent + mv_pool_fees_* + head metrics):
+  - STXRP/FXRP SparkDEX `0x5fD4139cC6fDFddbd4Fa74ddf9aE8f54BC87C555`: swaps=303, mv_pool_fees_24h/7d rows absent (null), head fees24hUsd/fees7dUsd = 0 → WARN_FEES_ZERO.
+  - WFLR/USDT0 SparkDEX `0x2860db7a2b33b79e59ea450ff43b2dc673a22d3d`: swaps=31,878, mv fees null, head fees=0 → WARN_FEES_ZERO.
+  - WFLR/USDT0 SparkDEX (big) `0x63873f0d7165689022feef1b77428df357b33dcf`: swaps=724,899, mv fees null, head fees=0 → WARN_FEES_ZERO.
+  - FXRP/USDT0 SparkDEX `0x88d46717b16619b37fa2dfd2f038defb4459f1f7`: swaps=219,745, mv fees null, head fees=0 → WARN_FEES_ZERO.
+- Conclusion: PoolEvent coverage is healthy for SparkDEX golden pools, but mv_pool_fees_24h/7d contain no rows for these pools, leading to zero fees in analytics. Structural MV or ingestion-to-MV issue remains; SparkDEX fee/APR not trustworthy until mv_pool_fees_* are populated for SparkDEX pools.
+
+## Changelog — 2025-12-09 (Fees MVs for Enosys + SparkDEX)
+- Updated `mv_pool_fees_24h/7d` to aggregate swap-based fees from PoolEvent + Pool.fee for all Enosys and SparkDEX v3 pools (abs(amount)*fee/1e6), windowed by latest block (24h: 7200 blocks, 7d: 50400 blocks), with unique indexes on pool.
+- Debug scripts aligned: `universe-golden-pairs.mts` now factors swap counts into WARN_FEES_ZERO; `sparkdex-fees-audit.mts` status only warns when swaps>0 and fees remain zero.
+
+## Changelog — 2025-12-09 (SparkDEX PoolEvent tail backfill tool)
+- Added `scripts/backfill-sparkdex-tail.mts` and npm script `backfill:sparkdex:tail` to backfill SparkDEX PoolEvent per pool from last Swap block → latest, bypassing checkpoints. Intended to fill gaps (e.g., 51.46M→latest) so fee MVs can populate for SparkDEX pools.
+
+## Changelog — 2025-12-09 (Enosys PoolEvent backfill)
+- Added `scripts/backfill-enosys-pools.mts` with npm script `backfill:enosys:pools` to backfill Enosys PoolEvent per pool from last Swap block (or pool.startBlock) to latest using provider-aware scanning (ANKR preferred). Intended to fill gaps for WFLR/USDT0 and FXRP/USDT0 Enosys so swap-based fee MVs can populate.
+- Updated `scripts/debug/check-enosys-pool-events.mts` to report swap/mint/burn/collect counts, min/max block, and 7d window status for Enosys golden pools.
+
+## Changelog — 2025-12-09 (RPC blockWindow CLI + caps)
+- RpcScanner now respects requested blockWindow from CLI/caller, clamping only to provider caps (Flare public ~25/30, ANKR 20000, generic 1000). Removed the implicit 25000 requested window; clamp logs show requested/providerCap/effective. Enosys backfill threads blockWindow to scanner.
+
+### Open actions (Incentives)
+- Extend analytics services to surface incentivesUsd + breakdown for pools/positions using the new incentives model.
+- Expose incentives fields on pool/position analytics APIs and validate on a rewarded pool (e.g., WFLR/FXRP).
+- SparkDEX: TokenDistributor incentives (SPX/rFLR) still not ingested/exposed; follow the documented staging + 24h/7d aggregation design in HANDOVER_TO_GPT.md.
+- SparkDEX follow-ups: improve pool mapping for TokenDistributor events, add USD pricing into MVs (amount_usd), wire incentives into universe/segments, and extend to Enosys + position-level incentives.
+- Enosys: rFLR rewards ingestion + USD pricing is live into `rewards_enosys_rflr` → `mv_enosys_rewards_24h/7d`; analytics/UI wiring remains pending.
+- Remaining: per-segment incentives and position-level incentives (Enosys + SparkDEX) not yet wired. SparkDEX incentives helper now uses fixed MV names (mv_sparkdex_rewards_24h/7d) to avoid MV name parameter errors; safe even when rewards MVs are empty.
+- PoolEvent coverage: backfill PoolEvent for Enosys pools (WFLR/USDT0, FXRP/USDT0, and any others) using the updated backfill/follower defaults (nfpm + factories + pools). Confirm swap counts and block ranges via `npm run debug:universe:golden` coverage output before trusting fee MVs.
+
+
+RUN_LOG.md rules:
+  • Log alleen gebeurtenissen die daadwerkelijk zijn uitgevoerd.
+  • Gebruik timestamps in Europe/Amsterdam tijdzone als `YYYY-MM-DDTHH:MM CET` (of CEST).
+  • Schrijf nooit regels met datums/tijden in de toekomst.
+  • Plannen / volgende stappen horen in PROJECT_STATE.md (Open actions), niet als OK/WIP/HALT in RUN_LOG.
+
+## Changelog — 2025-12-09T12:00 CET
+- Implemented provider-aware fixed blockWindow capping in RpcScanner and wired Enosys PoolEvent backfill (`backfill:enosys:pools`) + coverage debug (`debug:enosys:events`); no backfill run in this commit.
+
+## Changelog — 2025-12-09T12:30 CET
+- SparkDEX tail backfill hardened: SparkDEX factory + golden-pool allowlist, fromBlock=max(last_swap_block, 40,000,000) → latestBlock, defaults blockWindow=5000/rps=24/concurrency=8, CLI overrides allowed.
+- SparkDEX fee audit upgraded: `debug:sparkdex:fees-audit` now checks swaps7d/window flags, mv_pool_fees_24h/7d rows, head fees24hUsd/fees7dUsd, and flags WARN_FEES_ZERO in-window (non-zero swaps) for the four golden SparkDEX pools. No backfill run in this commit.
+
+## Changelog — 2025-12-09T13:00 CET
+- Pool Universe now aggregates incentives24hUsd/incentives7dUsd across pair pools (Enosys rFLR MVs + SparkDEX TokenDistributor pricing). API/types expose incentives on universe summary; `debug:universe-golden-pairs.mts` prints incentives with ZERO_WITH_REWARDS vs ZERO_NO_REWARDS statuses. No backfill run in this commit.
+
+## Changelog — 2025-12-09T13:20 CET
+- Staking RPC defaults updated: ANKR-first RPC selection with provider-aware blockWindow caps; staking defaults blockWindow=5000/rps=25/concurrency=12 (CLI overridable). indexer-staking now logs rpc/cap/window and uses capped chunking; no staking backfill run in this commit.
+
+## Changelog — 2025-12-09T13:40 CET
+- Staking indexer default range now starts ~90 days back (latestBlock - ~650k, bounded by genesis) instead of genesis startBlock when no --from provided; keeps defaults blockWindow=5000/rps=25/concurrency=12 and ANKR-first RPC.
+
+## Changelog — 2025-12-09
+- Documented V2 "fact + daily aggregate" data architecture as a future goal; MVP continues on current PoolEvent + 7d-MV chain (see `docs/DATA_ARCHITECTURE_V2_GOAL.md`).
+
+## Changelog — 2025-12-09T21:00 CET
+- SP2-FE-POOL-UNIVERSE: Fixed invalid PoolUniverse section exports (removed placeholder `PoolUniverseXyz` stubs and stray `…` characters, aligned all section components to single default exports). `/pool/stxrp-fxrp` and `/pool/fxrp-usdt0` routes now render without "Element type is invalid" errors.
+
+## Changelog — 2025-12-10T08:00 CET
+- SP2-FE-RANGEBAND-CONNECT: Fixed GlobalCtaButton export/import mismatch (added named export alongside default for consistency; all imports now use named `{ GlobalCtaButton }` pattern). Fixed `/connect` invalid React element error by ensuring all imported components (PricePill, PoolRowPreview, ProgressSteps, LiquilabLogo) have proper exports. Build now completes successfully.
+
+## Changelog — 2025-12-10T09:00 CET
+- SP2-FE-DASHBOARD-CHECKOUT: Verified all component exports/imports for /dashboard, /brand, /pricing-lab, /connect, /checkout pages. All components (Button, ProgressSteps, PricePill, PoolRowPreview, LiquilabLogo, Header, Hero, DemoPools, PoolsGrid, PremiumCard, PoolsTable, etc.) have correct named/default exports matching their import patterns. Build errors persist on /checkout and /connect during prerendering; requires further investigation of SSR/client-side component resolution.
+
+## Changelog — 2025-12-10T10:00 CET
+- SP2-FE-POOL-UNIVERSE: Verified all Pool Universe component exports/imports; all section components (PoolUniverseHead, PoolUniverseDexSection, PoolUniverseFeesAprSection, PoolUniverseLpPopulationSection, PoolUniverseRangebandSection, PoolUniverseWalletFlowsSection, PoolUniverseMarketContext, PoolUniverseKpiGrid) have correct default exports matching their default imports in PoolUniversePage.tsx. DataSourceDisclaimer has correct named export matching named import. All components verified to render without React error #130.
+
+## Changelog — 2025-12-10T11:00 CET
+- SP2-FE-POOL-UNIVERSE: Implemented data-aware Universe head with 6 KPI tiles (TVL, Fees 24h/7d, Incentives 7d, Positions, Wallets, APR), central time-range toggle (24h/7d/30d/90d with 7d proxy for 30/90), APR derived from TVL+fees+incentives (24h→365×, 7d→52×), and null/empty/degrade-safe rendering to prevent crashes on /pool/[poolAddress].
+
+## Changelog — 2025-12-10T12:00 CET
+- SP2-FE-GLOBAL-CTA: Fixed GlobalCtaButton React "invalid element type" error by removing legacy Next.js Link pattern (legacyBehavior/passHref) and using modern Link wrapper. Component now renders correctly in Navigation, Hero, RangeBandPage, and PremiumCard, eliminating 500 errors on '/' and '/pool/*' routes.
+
+## Changelog — 2025-12-10T13:00 CET
+- SP2-FE-GLOBAL-CTA: Removed GlobalCtaButton from all runtime usage (Navigation, Hero, RangeBandPage, PremiumCard) and replaced with direct Button+Link combinations to eliminate persistent "invalid element type" errors. GlobalCtaButton.tsx file remains but is no longer imported anywhere in the component tree.
+
+## Changelog — 2025-12-10T14:00 CET
+- SP2-FE-NAVIGATION: Fixed invalid element type error at Navigation.tsx:87 by removing unsupported `size="sm"` prop from Button and replacing Button-inside-Link pattern with directly styled Link elements to avoid invalid HTML nesting. Navigation now renders correctly without undefined component errors.
+
+## Changelog — 2025-12-10T15:00 CET
+- SP2-FE-GLOBAL-CTA: Fixed GlobalCtaButton invalid element type error by replacing Button with `as="a"` (which caused undefined component error) with direct Next.js Link component styled as a button. This matches the pattern used in Navigation.tsx and Hero.tsx, ensuring consistent client-side routing and eliminating the "invalid element type" error at GlobalCtaButton.tsx:16. Homepage and Pool Universe routes now render without 500 errors.
+
+## Changelog — 2025-12-10T16:00 CET
+- SP2-FE-NAVIGATION: Fixed invalid element type error at Navigation.tsx:100 by replacing Button component (used with DropdownMenuTrigger `asChild`) with native `<button>` element. The Button forwardRef component was not compatible with Radix UI's Slot cloning mechanism, causing undefined component error. Native button with matching styling now works correctly with `asChild` prop.
+
+## Changelog — 2025-12-10T17:00 CET
+- SP2-FE-RANGEBAND: Fixed invalid element type error on /rangeband route by replacing all Button components used within Link elements with direct Link components styled as buttons. This eliminates the invalid HTML nesting (button inside anchor) and ensures consistent Next.js client-side routing. All CTAs on RangeBandPage now use Link elements with Button styling classes.
+
+## Changelog — 2025-12-10T18:00 CET
+- SP2-FE-NAVIGATION: Fixed invalid element type error at Navigation.tsx:183 in mobile menu by replacing Button component (used within Link) with direct Link element styled as button. Removed unused Button import. Navigation now consistently uses Link elements for all navigation CTAs, eliminating invalid HTML nesting and undefined component errors.
+
+## Changelog — 2025-12-10T19:00 CET
+- SP2-FE-NAVIGATION: Improved desktop navigation layout by centering nav items between Logo and Right Side Actions using flex-1 justify-center. Added default export to Navigation component for import consistency. Desktop navigation is now clearly visible in header (not hidden in hamburger menu).
+
+## Changelog — 2025-12-10T20:00 CET
+- SP2-FE-BUTTON-VARIANTS: Fixed invalid element type errors on /account and other pages by replacing all Button `variant="outline"` with `variant="ghost"` (the only valid ghost-style variant). Button component only supports 'primary' | 'ghost' | 'cta' variants. Fixed in pages/account.tsx, pages/partners.tsx, and src/components/CookieBanner.tsx. Added default export to Button component for import consistency.
+
+## Changelog — 2025-12-10T21:00 CET
+- SP2-FE-BUTTON-EXPORT: Added default export to Button component (src/components/ui/button.tsx) to ensure consistent imports. Button now has both named export (`export const Button`) and default export (`export default Button`) for maximum compatibility.
+
+## Changelog — 2025-12-10T22:00 CET
+- SP2-FE-BUTTON-REFACTOR: Refactored Button component to remove React.forwardRef wrapper which was causing undefined component errors. Button is now a simple function component with both named and default exports. This should resolve the "Element type is invalid (got: undefined)" errors on /account and other pages.
+
+## Changelog — 2025-12-10T23:00 CET
+- SP2-FE-BUTTON-FIX: Fixed critical issue where src/components/ui/button.tsx was 0 bytes (empty file), causing all Button imports to be undefined. Rewrote Button component file completely. Changed account.tsx to use default import (`import Button from`) instead of named import for consistency. This should finally resolve the undefined Button component errors.
+
+Zet bijvoorbeeld deze TODO-sectie in je PROJECT_STATE.md:
+
+### TODO — Ecosystem intel (Enosys & SparkDEX Telegram)
+
+Doel  
+Zorg dat Liquilab structureel op de hoogte blijft van belangrijke aankondigingen uit de officiële Enosys- en SparkDEX-kanalen (nieuwe pools, fee-/incentive-wijzigingen, RPC/API changes), zonder ruis.
+
+1) Korte termijn — handmatig + slim gebruik van Telegram
+- [ ] Join / bevestig de juiste kanalen:
+  - Enosys: official / announcements channel.
+  - SparkDEX: official / announcements channel.
+- [ ] Zet notificaties per kanaal:
+  - Mute general noise, alleen alerts voor nieuwe posts / mentions.
+- [ ] Maak privé-kanaal `LiquiLab – Ecosystem Intel`:
+  - [ ] Forward relevante berichten (nieuwe pools, incentives, RPC/API changes) naar dit kanaal met een korte eigen notitie.
+  - [ ] Gebruik dit kanaal als “source of truth” voor ecosysteemnieuws (handig voor reviews/grant-rapportage).
+
+2) Middel termijn — semi-automatische keyword alerts (zonder eigen code)
+- [ ] Zoek een Telegram-bot/dienst die:
+  - [ ] Bepaalde keywords detecteert in Enosys/SparkDEX announcement-kanalen (bijv. `WFLR`, `FXRP`, `APS`, `rewards`, `incentives`, `APR`, `TVL`, `fee`, `maintenance`, `RPC`).
+  - [ ] Een DM of bericht in `LiquiLab – Ecosystem Intel` stuurt wanneer een bericht deze keywords bevat.
+- [ ] Optioneel: instellen van een 1× per dag “digest” (samenvatting) van relevante berichten.
+
+3) Lange termijn — Liquilab Ecosystem Intel bot (na MVP / grant)
+- [ ] Ontwerp een kleine “Ecosystem Intel” service (Node/TS op Railway) die:
+  - [ ] Via Telegram Bot API Enosys/SparkDEX announcement-kanalen leest.
+  - [ ] Berichten labelt op:
+    - `dex = enosys | sparkdex`
+    - `topic = rewards | pools | rpc | governance | maintenance | marketing`
+    - `priority = high | medium | low`
+  - [ ] Belangrijke events opslaat in een Postgres-tabel (bijv. `ecosystem_intel_events`).
+  - [ ] Een dagelijkse digest post naar `Liquilab – Ecosystem Intel` (bijv. 09:00 CET).
+  - [ ] Directe alerts stuurt voor high-priority items (bijv. RPC deprecations, contract upgrades).
+- [ ] Integreren met roadmap/alerts:
+  - [ ] Koppel high-priority intel aan TODO’s / tickets (bijv. “aanpassen incentives pipeline”, “RPC endpoint updaten”).
+  - [ ] Gebruik golden pairs als sanity check zodra een wijziging impact heeft op TVL/fees/incentives.
+
+Notitie  
+Deze TODO pas oppakken na stabilisatie van de huidige TVL/fees/incentives-keten; prioriteit ligt nu bij MVP (Liquidity Pools) en grant-aanvraag.

@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 
 import PackStepper from '@/components/pricing/PackStepper';
 import { priceBreakdown, type PriceBreakdownResult } from '@/lib/billing/pricing';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 type PremiumCardProps = {
   showExtras?: boolean;
@@ -153,9 +155,11 @@ export default function PremiumCard({ showExtras = true, fullWidth = false }: Pr
 
       <div className="space-y-3">
         <div className="divider" />
-        <a href="/sales/offer" className="btn-primary">
-          Start 14-day free trial
-        </a>
+        <Link href="/sales/offer">
+          <Button className="w-full bg-[#3B82F6] text-white hover:bg-[#2563EB] font-brand font-medium shadow-lg shadow-blue-500/20">
+            Start 14-day Pro trial
+          </Button>
+        </Link>
         <p className="font-ui text-xs text-white/60">
           After trial: $14.95/mo for 5 pools. Each extra 5-pool bundle: +$9.95/mo. RangeBand™ Alerts:
           $2.49 per 5-pool pack. Taxes extra. Cancel any time.

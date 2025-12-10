@@ -12,6 +12,15 @@ import { getEventTopics } from './abis';
 import { RateLimiter } from './lib/rateLimiter';
 import { CostMeter, type CostSummary } from './metrics/costMeter';
 
+type RpcScannerOverrides = {
+  rpcUrl?: string;
+  rps?: number;
+  concurrency?: number;
+  blockWindow?: number;
+};
+
+const DEFAULT_REQUESTED_BLOCK_WINDOW = 1000;
+
 export interface ScanOptions {
   fromBlock: number;
   toBlock: number;
@@ -19,6 +28,7 @@ export interface ScanOptions {
   tokenIds?: string[];
   dryRun?: boolean;
   topics?: string[];
+  blockWindow?: number;
 }
 
 export interface ScanResult {
@@ -38,39 +48,45 @@ export class RpcScanner {
   private rateLimiter: RateLimiter;
   private costMeter: CostMeter;
   private config: ReturnType<typeof loadIndexerConfigFromEnv>;
-  
-  // Flare RPC hard limit: 30 blocks max per eth_getLogs call
-  private static readonly FLARE_MAX_BLOCKS = 30;
-  private static readonly FLARE_SAFE_WINDOW = 25; // Use 25 to stay safely under limit
+  private providerCap: number;
+  private rpcUrl: string;
+  private requestedBlockWindow: number;
+  private rps: number;
 
-  constructor() {
+  private static getProviderCap(rpcUrl: string): number {
+    const url = rpcUrl.toLowerCase();
+    if (url.includes('flare-api.flare.network')) {
+      return 25;
+    }
+    if (url.includes('rpc.ankr.com/flare')) {
+      return 2000;
+    }
+    return 1000;
+  }
+
+  constructor(overrides?: RpcScannerOverrides) {
     this.config = loadIndexerConfigFromEnv();
+    this.rpcUrl = overrides?.rpcUrl ?? this.config.rpc.url;
+    this.providerCap = RpcScanner.getProviderCap(this.rpcUrl);
+    this.requestedBlockWindow =
+      overrides?.blockWindow ?? this.config.rpc.blockWindow ?? DEFAULT_REQUESTED_BLOCK_WINDOW;
     
     this.client = createPublicClient({
       chain: flare,
-      transport: http(this.config.rpc.url, {
+      transport: http(this.rpcUrl, {
         timeout: this.config.rpc.requestTimeout,
       }),
     });
 
-    this.currentConcurrency = this.config.rpc.concurrency;
-    // HARDEN: Clamp block window to Flare's 30-block limit (use 25 for safety)
-    this.currentBlockWindow = Math.min(
-      this.config.rpc.blockWindow,
-      RpcScanner.FLARE_SAFE_WINDOW
-    );
-    
-    if (this.config.rpc.blockWindow > RpcScanner.FLARE_SAFE_WINDOW) {
-      console.warn(
-        `[RPC] ⚠ Block window ${this.config.rpc.blockWindow} exceeds Flare limit (30). Clamped to ${RpcScanner.FLARE_SAFE_WINDOW}`
-      );
-    }
+    this.rps = overrides?.rps ?? this.config.rpc.rps;
+    this.currentConcurrency = overrides?.concurrency ?? this.config.rpc.concurrency;
+    this.currentBlockWindow = Math.min(this.requestedBlockWindow, this.providerCap);
     
     this.limit = pLimit(this.currentConcurrency);
     
     this.rateLimiter = new RateLimiter({
-      rps: this.config.rpc.rps,
-      burst: this.config.rpc.rps * 2,
+      rps: this.rps,
+      burst: this.rps * 2,
     });
     
     this.costMeter = new CostMeter(this.config.cost);
@@ -79,6 +95,14 @@ export class RpcScanner {
   async scan(options: ScanOptions): Promise<ScanResult> {
     const startTime = Date.now();
     const { fromBlock, toBlock, contractAddress, tokenIds, dryRun, topics } = options;
+    const requestedWindow =
+      options.blockWindow ?? this.requestedBlockWindow ?? DEFAULT_REQUESTED_BLOCK_WINDOW;
+    const effectiveBlockWindow = Math.min(requestedWindow, this.providerCap);
+    this.currentBlockWindow = effectiveBlockWindow;
+
+    console.log(
+      `[RPC] Init: rpc=${this.rpcUrl} requestedBlockWindow=${requestedWindow} providerCap=${this.providerCap} effectiveBlockWindow=${effectiveBlockWindow}`,
+    );
 
     if (fromBlock > toBlock) {
       throw new Error(`Invalid range: fromBlock (${fromBlock}) > toBlock (${toBlock})`);
@@ -86,17 +110,11 @@ export class RpcScanner {
 
     const addresses = Array.isArray(contractAddress) ? contractAddress : [contractAddress];
     const ranges = this.createChunkRanges(fromBlock, toBlock, this.currentBlockWindow);
-    
-    // Verify ranges don't exceed Flare limit
-    const maxRangeSize = Math.max(...ranges.map(r => r.to - r.from + 1));
-    if (maxRangeSize > RpcScanner.FLARE_MAX_BLOCKS) {
-      console.error(
-        `[RPC] 🚨 CRITICAL: Some ranges exceed Flare limit! Max range size: ${maxRangeSize} blocks`
-      );
-    }
-    
+
+    const maxRangeSize = Math.max(...ranges.map((r) => r.to - r.from + 1));
+
     console.log(
-      `[RPC] Scanning ${fromBlock}→${toBlock} (${ranges.length} chunks, window=${this.currentBlockWindow}, max_range=${maxRangeSize}, concurrency=${this.currentConcurrency}, rps=${this.config.rpc.rps})`
+      `[RPC] Scanning ${fromBlock}→${toBlock} (${ranges.length} chunks, window=${this.currentBlockWindow}, max_range=${maxRangeSize}, concurrency=${this.currentConcurrency}, rps=${this.rps})`
     );
 
     const results = await Promise.all(
@@ -140,7 +158,6 @@ export class RpcScanner {
     const { from, to } = range;
     let attempt = 0;
     let delay = this.config.retry.initialDelayMs;
-    let currentWindow = this.currentBlockWindow;
 
     while (attempt < this.config.retry.maxAttempts) {
       try {
@@ -148,15 +165,19 @@ export class RpcScanner {
         
         const eventTopics = topics ?? getEventTopics(this.config.events);
         const addressChunks = this.chunkAddresses(addresses, 20);
+        const topicsParam =
+          eventTopics.length > 0
+            ? ([eventTopics.map((t) => t as `0x${string}`)] as (`0x${string}` | null)[][])
+            : undefined;
         
         let allLogs: Log[] = [];
         
         for (const addressChunk of addressChunks) {
-          const logs = await this.client.getLogs({
+          const logs = await (this.client as any).getLogs({
             address: addressChunk.map((addr) => addr as `0x${string}`),
             fromBlock: BigInt(from),
             toBlock: BigInt(to),
-            topics: eventTopics.length > 0 ? [eventTopics.map((t) => t as `0x${string}`)] : undefined,
+            topics: topicsParam,
           });
           allLogs.push(...logs);
         }
@@ -182,16 +203,6 @@ export class RpcScanner {
           console.log(`[RPC] ✓ ${from}→${to} (${filteredLogs.length} logs)`);
         }
 
-        // Adaptive window: slowly increase on success (but never exceed Flare limit)
-        if (currentWindow < this.config.rpc.blockWindow) {
-          const newWindow = Math.min(
-            currentWindow + 100,
-            this.config.rpc.blockWindow,
-            RpcScanner.FLARE_SAFE_WINDOW // Never exceed Flare limit
-          );
-          this.currentBlockWindow = newWindow;
-        }
-
         this.onSuccess();
         return { logs: filteredLogs, retriesUsed: attempt };
       } catch (error: any) {
@@ -199,32 +210,6 @@ export class RpcScanner {
         this.onFailure();
 
         const errorMsg = error?.message || String(error);
-        const errorDetails = error?.cause?.message || error?.details || '';
-        const fullError = `${errorMsg} ${errorDetails}`.toLowerCase();
-        
-        // Detect Flare RPC 30-block limit error
-        const isFlareLimit = 
-          fullError.includes('maximum is set to 30') ||
-          fullError.includes('requested too many blocks') ||
-          (error?.code === -32000 && fullError.includes('30'));
-        
-        const isTooLarge = errorMsg.includes('response too large') || errorMsg.includes('exceeds');
-        const isRateLimit = errorMsg.includes('429') || errorMsg.includes('rate limit');
-
-        // CRITICAL: If Flare limit error, aggressively reduce window to 25 or less
-        if (isFlareLimit) {
-          currentWindow = Math.min(currentWindow, RpcScanner.FLARE_SAFE_WINDOW);
-          this.currentBlockWindow = currentWindow;
-          console.error(
-            `[RPC] 🚨 Flare RPC 30-block limit hit! Reducing window to ${currentWindow} (${from}→${to}, ${to - from + 1} blocks)`
-          );
-        } else if (isTooLarge || isRateLimit) {
-          currentWindow = Math.max(Math.floor(currentWindow / 2), 10);
-          // Ensure we never exceed Flare limit even after reduction
-          currentWindow = Math.min(currentWindow, RpcScanner.FLARE_SAFE_WINDOW);
-          this.currentBlockWindow = currentWindow;
-          console.warn(`[RPC] ⚠ Reducing block window to ${currentWindow} (${from}→${to})`);
-        }
 
         const isLastAttempt = attempt >= this.config.retry.maxAttempts;
         if (isLastAttempt) {
@@ -283,29 +268,15 @@ export class RpcScanner {
   }
 
   private createChunkRanges(from: number, to: number, chunkSize: number): Array<{ from: number; to: number }> {
-    // HARDEN: Never exceed Flare's 30-block limit
-    const safeChunkSize = Math.min(chunkSize, RpcScanner.FLARE_SAFE_WINDOW);
+    const safeChunkSize = Math.min(chunkSize, this.providerCap);
     
     const ranges: Array<{ from: number; to: number }> = [];
     let current = from;
 
     while (current <= to) {
       const end = Math.min(current + safeChunkSize - 1, to);
-      const actualSize = end - current + 1;
-      
-      // Double-check: ensure range never exceeds Flare limit
-      if (actualSize > RpcScanner.FLARE_MAX_BLOCKS) {
-        console.error(
-          `[RPC] 🚨 CRITICAL: Range ${current}→${end} (${actualSize} blocks) exceeds Flare limit! Splitting...`
-        );
-        // Force split at Flare limit
-        const safeEnd = current + RpcScanner.FLARE_SAFE_WINDOW - 1;
-        ranges.push({ from: current, to: Math.min(safeEnd, to) });
-        current = Math.min(safeEnd, to) + 1;
-      } else {
-        ranges.push({ from: current, to: end });
-        current = end + 1;
-      }
+      ranges.push({ from: current, to: end });
+      current = end + 1;
     }
 
     return ranges;

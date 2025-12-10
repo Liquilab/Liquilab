@@ -22,6 +22,10 @@
     "indexer:backfill": "tsx scripts/indexer-backfill.ts",
     "indexer:backfill:ankr": "node -r tsconfig-paths/register scripts/indexer/backfill-ankr.mjs",
     "indexer:backfill:railway": "tsx scripts/indexer-backfill.ts --stream=nfpm --rps=2 --concurrency=2 --blockWindow=25",
+    "backfill:pool:state": "tsx scripts/backfill-pool-state.ts",
+    "backfill:sparkdex:tail": "tsx scripts/backfill-sparkdex-tail.mts",
+    "backfill:enosys:pools": "tsx scripts/backfill-enosys-pools.mts",
+    "debug:enosys:events": "tsx scripts/debug/check-enosys-pool-events.mts",
     "indexer:follow": "tsx scripts/indexer-follower.ts",
     "indexer:follow:railway": "tsx scripts/indexer-follower.ts --factory=all",
     "indexer:staking": "tsx scripts/indexer-staking.mts",
@@ -100,7 +104,12 @@
     "icons:fetch": "node scripts/icons/fetch-dex-icons.mjs",
     "icons:probe": "node scripts/verify-icons/remote-probe.mjs",
     "icons:test:topic": "node scripts/verify-icons/topic-matches.mjs --rpc=$FLARE_RPC_PRIMARY --factory=$FACT --from=$FROM --to=$TO",
-    "tokens:build": "node scripts/build-tokens.mjs"
+    "tokens:build": "node scripts/build-tokens.mjs",
+    "debug:universe:busy": "tsx scripts/debug/universe-busy-pair.mts",
+    "debug:universe:pairs:wallets": "tsx scripts/debug/universe-pairs-wallets.mts",
+    "debug:universe:fxrp-usdt0": "tsx scripts/debug/universe-fxrp-usdt0.mts",
+    "debug:universe:golden": "tsx scripts/debug/universe-golden-pairs.mts",
+    "debug:sparkdex:fees-audit": "tsx scripts/debug/sparkdex-fees-audit.mts"
   },
   "dependencies": {
     "@ankr.com/ankr.js": "^0.6.1",
@@ -162,4 +171,3 @@
     "vitest": "^4.0.7"
   }
 }
-

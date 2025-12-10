@@ -4,72 +4,72 @@
  * Update deze file met de juiste contract addresses zodra bekend.
  */
 
-export interface StakingContractConfig {
-  address: string;
-  dex: 'enosys-v3' | 'sparkdex-v3';
-  type: 'masterchef' | 'gauge' | 'custom' | 'api';
-  rewardToken: string;        // Address van reward token
-  rewardTokenSymbol?: string;
-  startBlock: number;         // Block waar staking begon
-  apiUrl?: string;            // Optional: API endpoint voor rewards (Enosys rFLR)
-  poolMapping?: {             // Mapping van farm PID → LP pool address
+export type StakingDex = 'enosys-v3' | 'sparkdex-v3';
+export type StakingType = 'masterchef' | 'gauge' | 'custom' | 'api';
+
+export interface StakingRewardsConfig {
+  id: string;                    // Stable key for this reward source
+  dex: StakingDex;
+  type: StakingType;
+  description?: string;
+  poolIdentifier?: string;       // Pool/pair key or address (if applicable)
+  rewardToken: string;           // Address of reward token (placeholder allowed)
+  rewardTokenSymbol: string;     // e.g. "rFLR", "SPX"
+  distributorAddress?: string;   // TokenDistributor contract (for on-chain rewards)
+  apiUrl?: string;               // API endpoint (for Enosys rFLR API)
+  startBlock: number;            // Block where rewards started
+  poolMapping?: {                // For masterchef-style configs
     [pid: string]: string;
   };
 }
 
-export const STAKING_CONTRACTS: StakingContractConfig[] = [
-  // ENOSYS rFLR REWARDS (API-based, geen on-chain scanning nodig)
+export const STAKING_REWARDS: StakingRewardsConfig[] = [
+  // ENOSYS rFLR REWARDS (via Flare Portal Emissions - monthly distribution)
+  // Rewards accrue to Enosys LP positions and are distributed monthly via Flare's emissions system.
+  // Contract: https://flare-explorer.flare.network/address/0x0Bf36BC05301F1F049634f6937FDD6d35E8D60c3
+  // Note: The old Enosys API (v3.dex.enosys.global/api/flr/v2/stats/rflr) is deprecated (404).
   {
-    address: 'enosys-rflr-api', // Pseudo-address voor API source
+    id: 'enosys-rflr-flare-emissions',
     dex: 'enosys-v3',
-    type: 'api',
-    rewardToken: '0x0000000000000000000000000000000000000000', // Placeholder (rFLR is wrapped FLR)
+    type: 'custom',
+    description: 'Enosys rFLR rewards via Flare Portal Emissions (monthly)',
+    rewardToken: '0x0000000000000000000000000000000000000000', // WFLR (rFLR is wrapped FLR)
     rewardTokenSymbol: 'rFLR',
-    startBlock: 29_837_200, // Enosys V3 launch
-    apiUrl: 'https://v3.dex.enosys.global/api/flr/v2/stats/rflr', // Per-position API
+    distributorAddress: '0x0Bf36BC05301F1F049634f6937FDD6d35E8D60c3', // Flare Distributor for Enosys
+    startBlock: 29_837_200,
   },
 
   // SPARKDEX SPX REWARDS (On-chain via TokenDistributor)
   {
-    address: '0xc2DF11C68f86910B99EAf8acEd7F5189915Ba24F', // TokenDistributor contract
+    id: 'sparkdex-spx-token-distributor',
     dex: 'sparkdex-v3',
-    type: 'custom', // Custom distributor pattern (not standard MasterChef)
+    type: 'custom', // Custom distributor pattern (TokenDistributor)
+    description: 'SparkDEX SPX rewards via TokenDistributor',
     rewardToken: '0x657097cC15fdEc9e383dB8628B57eA4a763F2ba0', // SPRK token
     rewardTokenSymbol: 'SPX',
-    startBlock: 29_837_200, // SparkDEX V3 launch
+    distributorAddress: '0xc2DF11C68f86910B99EAf8acEd7F5189915Ba24F',
+    startBlock: 29_837_200,
   },
 
   // SPARKDEX rFLR REWARDS (via TokenDistributor - same contract, different token)
   {
-    address: '0xc2DF11C68f86910B99EAf8acEd7F5189915Ba24F', // TokenDistributor contract
+    id: 'sparkdex-rflr-token-distributor',
     dex: 'sparkdex-v3',
     type: 'custom',
+    description: 'SparkDEX rFLR rewards via TokenDistributor',
     rewardToken: '0x0000000000000000000000000000000000000000', // Placeholder for rFLR
     rewardTokenSymbol: 'rFLR',
+    distributorAddress: '0xc2DF11C68f86910B99EAf8acEd7F5189915Ba24F',
     startBlock: 29_837_200,
   },
-
-  // ENOSYS STAKING CONTRACT (indien gevonden - voor on-chain verification)
-  // {
-  //   address: '0x...', // Enosys MasterChef/Farm contract
-  //   dex: 'enosys-v3',
-  //   type: 'masterchef',
-  //   rewardToken: '0x...', // ENOSYS token address (if exists)
-  //   rewardTokenSymbol: 'ENOSYS',
-  //   startBlock: 29_837_200,
-  //   poolMapping: {
-  //     '0': '0x686f53F0950Ef193C887527eC027E6A574A4DbE1', // PID 0 = FXRP-USDT pool
-  //     // ... meer pools
-  //   }
-  // },
 ];
 
 /**
  * Helper: Find staking config by contract address
  */
-export function getStakingConfig(address: string): StakingContractConfig | undefined {
-  return STAKING_CONTRACTS.find(
-    (c) => c.address.toLowerCase() === address.toLowerCase()
+export function getStakingConfig(address: string): StakingRewardsConfig | undefined {
+  return STAKING_REWARDS.find(
+    (c) => c.distributorAddress?.toLowerCase() === address.toLowerCase()
   );
 }
 
@@ -77,7 +77,7 @@ export function getStakingConfig(address: string): StakingContractConfig | undef
  * Helper: Get pool address from staking event metadata
  */
 export function resolvePoolFromStakingEvent(
-  config: StakingContractConfig,
+  config: StakingRewardsConfig,
   eventName: string,
   decodedArgs: Record<string, any>
 ): string | null {

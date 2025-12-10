@@ -3,6 +3,7 @@
 import Link from 'next/link';
 
 import { InlineReal } from '@/components/rangeband/InlineReal';
+import { Button } from '@/components/ui/button';
 
 const rangeProps = {
   min: 0.95,
@@ -44,12 +45,10 @@ export function Hero() {
           <InlineReal defaultStrategy="BAL" />
         </div>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/pricing"
-            className="btn-primary inline-flex items-center justify-center px-6 py-3 text-sm font-semibold"
-            aria-label="Start 14 day trial"
-          >
-            Start 14 day trial
+          <Link href="/pricing">
+            <Button className="bg-[#3B82F6] text-white hover:bg-[#2563EB] font-brand font-medium shadow-lg shadow-blue-500/20">
+              Start 14-day Pro trial
+            </Button>
           </Link>
           <a href="#demo" className="btn-ghost" aria-label="See demo pools">
             See How It Works

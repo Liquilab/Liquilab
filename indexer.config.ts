@@ -64,9 +64,15 @@ export interface IndexerConfig {
   };
 }
 
+export const RPC_URL =
+  process.env.RPC_BASE ||
+  process.env.ANKR_NODE_URL ||
+  process.env.FLARE_RPC_URL ||
+  'https://flare-api.flare.network/ext/bc/C/rpc';
+
 const BASE_CONFIG: IndexerConfig = {
   rpc: {
-    url: process.env.FLARE_RPC_URL || 'https://flare-api.flare.network/ext/bc/C/rpc',
+    url: RPC_URL,
     batchSize: 1000,
     maxConcurrency: 12,
     minConcurrency: 4,
@@ -184,3 +190,7 @@ export function loadIndexerConfigFromEnv(overrides?: Partial<IndexerConfig>): In
 export const indexerConfig = loadIndexerConfigFromEnv();
 
 export type IndexerConfigType = typeof indexerConfig;
+
+export function selectRpcUrl(): string {
+  return RPC_URL;
+}
