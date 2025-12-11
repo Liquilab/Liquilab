@@ -65,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     : makeEmptyHead();
 
   const universeRaw: AnalyticsPoolUniverse = (universeResult.universe as AnalyticsPoolUniverse | null) ?? makeEmptyUniverse();
-  const { pair, summary, segments } = universeRaw;
+  const { pair, summary, segments, dexBreakdown } = universeRaw;
   const safeUniverse: AnalyticsPoolUniverse = {
     pair,
     summary: {
@@ -77,7 +77,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       positionsCount: summary.positionsCount ?? 0,
       walletsCount: summary.walletsCount ?? 0,
     },
-    segments,
+    segments: segments ?? [],
+    dexBreakdown: dexBreakdown ?? [],
   };
 
   const payload = {

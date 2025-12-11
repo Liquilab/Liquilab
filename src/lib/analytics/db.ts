@@ -81,8 +81,9 @@ export interface PoolUniverseHead {
     dex: DexName;
     feeTierBps: number | null;
     tvlUsd: number;
+    fees24hUsd?: number;
     fees7dUsd: number;
-    incentives7dUsd: number;
+    incentives7dUsd?: number;
     positionsCount: number;
   }>;
 }
@@ -1418,7 +1419,9 @@ export async function getPoolUniverseHead(poolAddress: string): Promise<PoolUniv
         dex,
         feeTierBps,
         tvlUsd: poolTvlUsd,
+        fees24hUsd: poolFees24h,
         fees7dUsd: poolFees7d,
+        incentives7dUsd: poolIncentives7d,
         positionsCount: poolPositions,
       });
 

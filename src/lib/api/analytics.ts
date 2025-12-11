@@ -32,8 +32,11 @@ export type AnalyticsPoolUniverseSegment = {
   dex: DexName | string;
   feeTierBps: number | null;
   tvlUsd: number;
+  fees24hUsd?: number;
   fees7dUsd: number;
+  incentives7dUsd?: number;
   positionsCount: number;
+  walletsCount?: number;
 };
 
 export type AnalyticsPoolUniverseSummary = {
@@ -46,6 +49,15 @@ export type AnalyticsPoolUniverseSummary = {
   walletsCount: number;
 };
 
+export type AnalyticsPoolUniverseDexBreakdown = {
+  dex: DexName;
+  tvlUsd: number;
+  fees7dUsd: number;
+  incentives7dUsd: number;
+  positionsCount: number;
+  poolsCount: number;
+};
+
 export type AnalyticsPoolUniverse = {
   pair: {
     token0Symbol: string;
@@ -53,6 +65,7 @@ export type AnalyticsPoolUniverse = {
   };
   summary: AnalyticsPoolUniverseSummary;
   segments: AnalyticsPoolUniverseSegment[];
+  dexBreakdown?: AnalyticsPoolUniverseDexBreakdown[];
 };
 
 export type AnalyticsPoolData = {

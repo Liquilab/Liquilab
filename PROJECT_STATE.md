@@ -2276,6 +2276,12 @@ RUN_LOG.md rules:
 ## Changelog — 2025-12-10T23:00 CET
 - SP2-FE-BUTTON-FIX: Fixed critical issue where src/components/ui/button.tsx was 0 bytes (empty file), causing all Button imports to be undefined. Rewrote Button component file completely. Changed account.tsx to use default import (`import Button from`) instead of named import for consistency. This should finally resolve the undefined Button component errors.
 
+## Changelog — 2025-12-11
+- SP3-WALLET-PRO: Fixed /wallet route returning 404 by creating pages/wallet/index.tsx with proper Next.js page structure. Page uses useSubscriptionTier hook to gate access: PRO/ENTERPRISE → WalletProPage, others → WalletUpgradePage. Created src/hooks/useSubscriptionTier.ts (fetches from /api/entitlements) and src/components/wallet/WalletUpgradePage.tsx (upgrade CTA component). Route now returns HTTP 200.
+
+## Changelog — 2025-12-11T14:00 CET
+- SP2-FE-POOL-UNIVERSE: Rebuilt Pool Universe frontend for /pool/[tokenId] to match SP2 Universe specification. Implemented complete Rustig layout with: (1) Universe head with 6 KPI tiles (TVL, Fees 24h/7d, Incentives 7d, Positions, Wallets, APR) + time-range toggle (24h/7d/30d/90d), (2) Liquidity Venues table (DEX, Fee Tier, TVL, Fees, Incentives, APR, Positions, Wallets), (3) LP Population section (positions/wallets counts, positions-per-wallet ratio, DEX distribution), (4) RangeBand™ Yield & Efficiency section (total APR, yield composition band), (5) Wallet Flows & Notable Moves section (placeholder for future flows data), (6) Pool Intel — Web Signals section (wired to PoolIntelCard), (7) Context Card with smart-static insights (Market Structure, Yield Drivers, Participant Behavior). All sections handle loading/empty/degrade states gracefully. Universe head APR calculation: 24h→365×, 7d→52× (30d/90d use 7d proxy). Components use real analytics data from /api/analytics/pool/[id] SSoT. Updated src/lib/analytics/db.ts to include fees24hUsd and incentives7dUsd in segments. Route supports both pool addresses and pair slugs (e.g., /pool/stxrp-fxrp). All 7 golden pools verified to render without React errors.
+
 Zet bijvoorbeeld deze TODO-sectie in je PROJECT_STATE.md:
 
 ### TODO — Ecosystem intel (Enosys & SparkDEX Telegram)

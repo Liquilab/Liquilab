@@ -79,7 +79,7 @@ function MetricTile({ label, subLabel, value, changePct, tooltip, highlight }: T
     <div className={`rounded-xl border p-5 transition-all duration-300 ${
       highlight 
         ? 'border-[#3B82F6]/40 bg-[#0B1530]/80 shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)]' 
-        : 'border-white/5 bg-[#0B1530]/60 hover:border-white/10'
+        : 'border-white/5 bg-[#0B1530]/90 hover:border-white/10'
     }`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-0.5">
@@ -280,7 +280,7 @@ export default function PoolUniverseHead({
   ];
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0B1530]/40 p-6 backdrop-blur-sm md:p-8">
+    <div className="rounded-2xl border border-white/10 bg-[#0B1530]/90 p-6 backdrop-blur-sm md:p-8">
       {/* Header */}
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">

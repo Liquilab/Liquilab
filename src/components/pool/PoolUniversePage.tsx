@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -9,8 +11,7 @@ import PoolUniverseDexSection from '@/components/pool/universe/PoolUniverseDexSe
 import PoolUniverseFeesAprSection from '@/components/pool/universe/PoolUniverseFeesAprSection';
 import PoolUniverseHead, { type TimeRange, type PoolUniverseHeadMetrics } from '@/components/pool/universe/PoolUniverseHead';
 import PoolUniverseLpPopulationSection from '@/components/pool/universe/PoolUniverseLpPopulationSection';
-import PoolUniverseMarketContext from '@/components/pool/universe/PoolUniverseMarketContext';
-import PoolUniverseRangebandSection from '@/components/pool/universe/PoolUniverseRangebandSection';
+import PoolUniverseContextSection from '@/components/pool/universe/PoolUniverseContextSection';
 import PoolUniverseWalletFlowsSection from '@/components/pool/universe/PoolUniverseWalletFlowsSection';
 import WarmingPlaceholder from '@/components/WarmingPlaceholder';
 import {
@@ -106,20 +107,30 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
   }, [universe?.segments]);
 
   if (loading && !response) {
-    return <WarmingPlaceholder />;
+    return (
+      <div className="relative text-white">
+        <WarmingPlaceholder />
+      </div>
+    );
   }
 
   if (error) {
     // Note: DataStateBanner does not accept error prop, but we show error state here.
     return (
+      <div className="relative text-white">
         <div className="flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-             <p>{error}</p>
+          <p>{error}</p>
         </div>
+      </div>
     );
   }
 
   if (!response) {
-    return <DataStateBanner state="empty" />;
+    return (
+      <div className="relative text-white">
+        <DataStateBanner state="empty" />
+      </div>
+    );
   }
 
   if (process.env.NODE_ENV !== 'production' && response && (!head || !universe)) {
@@ -148,7 +159,7 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
   const pairLabel = token0Symbol && token1Symbol ? `${token0Symbol} / ${token1Symbol}` : formatPoolAddress(poolAddress);
 
   return (
-    <div className="space-y-8 font-sans">
+    <div className="relative space-y-8 font-sans text-white">
       <div className="flex items-center justify-between">
          <Link href="/" className="inline-flex items-center gap-2 text-sm font-medium text-white/60 transition-colors hover:text-[#3B82F6]">
             <ArrowLeft className="size-4" />
@@ -158,6 +169,7 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
 
       <DataStateBanner state={dataState} />
 
+      {/* 1. Universe head */}
       <PoolUniverseHead
         token0Symbol={token0Symbol}
         token1Symbol={token1Symbol}
@@ -170,32 +182,57 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
         loading={loading}
       />
 
-      <section className="rounded-xl border border-white/10 bg-[#0B1530]/70 p-4 md:p-6">
+      {/* 2. Liquidity Venues (DEX & Fee Tiers) */}
+      <PoolUniverseDexSection segments={sortedSegments} timeRange={timeRange} />
+
+      {/* 3. LP Population */}
+      <PoolUniverseLpPopulationSection 
+        positionsCount={headMetrics?.positionsCount ?? null}
+        walletsCount={headMetrics?.walletsCount ?? null}
+        segments={sortedSegments}
+        degrade={degrade}
+        loading={loading}
+      />
+
+      {/* 4. RangeBand™ Yield & Efficiency */}
+      <PoolUniverseFeesAprSection 
+        tvlUsd={headMetrics?.tvlUsd ?? null}
+        fees24hUsd={headMetrics?.fees24hUsd ?? null}
+        fees7dUsd={headMetrics?.fees7dUsd ?? null}
+        incentives24hUsd={headMetrics?.incentives24hUsd ?? null}
+        incentives7dUsd={headMetrics?.incentives7dUsd ?? null}
+        timeRange={timeRange}
+        degrade={degrade}
+        loading={loading}
+      />
+
+      {/* 5. Wallet Flows & Notable Moves */}
+      <PoolUniverseWalletFlowsSection 
+        poolAddress={poolAddress}
+        degrade={degrade}
+        loading={loading}
+      />
+
+      {/* 6. Pool Intel — Web Signals */}
+      <section className="rounded-xl border border-white/10 bg-[#0B1530]/90 p-4 md:p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="text-base font-semibold text-white/95">Pool Intel</h3>
+            <h3 className="text-base font-semibold text-white/95">Pool Intel — Web Signals</h3>
             <p className="text-xs text-white/50">Web signals, news, and community cues for this pair</p>
           </div>
-          <div className="text-sm font-medium text-white/60">{pairLabel}</div>
         </div>
         <div className="mt-4">
           <PoolIntelSection pool={null} pair={pairLabel} />
         </div>
       </section>
 
-      <PoolUniverseDexSection segments={sortedSegments} />
-      
-      <div className="grid gap-8 lg:grid-cols-2">
-         <PoolUniverseLpPopulationSection />
-         <PoolUniverseRangebandSection />
-      </div>
-
-      <PoolUniverseFeesAprSection />
-      
-      <div className="grid gap-8 lg:grid-cols-2">
-        <PoolUniverseWalletFlowsSection />
-        <PoolUniverseMarketContext />
-      </div>
+      {/* 7. Context Card */}
+      <PoolUniverseContextSection 
+        universe={universe}
+        segments={sortedSegments}
+        degrade={degrade}
+        loading={loading}
+      />
 
       <DataSourceDisclaimer className="mt-8 border-t border-white/5 pt-6" />
     </div>

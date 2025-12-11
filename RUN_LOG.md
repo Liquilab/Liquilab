@@ -2,6 +2,8 @@
 > All timestamps are Europe/Amsterdam (CET). Recent entries detailed; older periods summarized.
 
 ### Recent (detailed)
+- OK 2025-12-11T14:00 CET SP2-FE-POOL-UNIVERSE: Rebuilt Pool Universe frontend for /pool/[tokenId] matching SP2 Universe spec: head (6 KPI tiles + APR + time-range toggle), Liquidity Venues table, LP Population, RangeBand Yield & Efficiency, Wallet Flows, Pool Intel, Context Card. All sections wired to analytics SSoT with loading/empty/degrade states. Golden pools verified.
+- OK 2025-12-11 CET SP3-WALLET-PRO: Fixed /wallet route 404 by creating pages/wallet/index.tsx with subscription tier gating (PRO/ENTERPRISE → WalletProPage, others → WalletUpgradePage).
 - OK 2025-12-09T12:00 CET ENOSYS-TOOLS: rpcScanner provider caps + backfill:enosys:pools + debug:enosys:events wired (no backfill run).
 - OK 2025-12-09T12:30 CET SPARKDEX-TOOLS: sparkdex tail backfill defaults (5000/24/8) + golden allowlist + fees audit WARN_FEES_ZERO guard (no backfill run).
 - OK 2025-12-09T13:00 CET ANALYTICS: Universe incentives (Enosys rFLR + SparkDEX TD) exposed in head/universe; golden debug reports incentives status (no backfill run).
