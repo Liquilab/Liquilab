@@ -49,7 +49,7 @@ export default function PoolUniverseLpPopulationSection({
         <div className="flex items-center justify-between px-1">
           <h2 className="text-lg font-semibold text-white/90">LP Population</h2>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-[#0B1530]/90 p-8 shadow-xl">
+        <div className="rounded-2xl bg-[#0B1530]/90 p-8 shadow-xl">
           <div className="animate-pulse space-y-4">
             <div className="h-4 w-32 bg-white/10 rounded" />
             <div className="h-8 w-24 bg-white/10 rounded" />
@@ -65,19 +65,19 @@ export default function PoolUniverseLpPopulationSection({
         <div className="flex items-center justify-between px-1">
           <h2 className="text-lg font-semibold text-white/90">LP Population</h2>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-[#0B1530]/90 p-8 shadow-xl">
-          <p className="text-sm text-white/50">LP population data temporarily unavailable.</p>
+        <div className="rounded-2xl bg-[#0B1530]/90 p-8 shadow-xl">
+          <p className="text-sm text-white/50">Metric syncing...</p>
         </div>
       </section>
     );
   }
 
   return (
-    <section className="space-y-4">
+    <section className="flex h-full flex-col space-y-4">
       <div className="flex items-center justify-between px-1">
         <h2 className="text-lg font-semibold text-white/90">LP Population</h2>
       </div>
-      <div className="rounded-2xl border border-white/10 bg-[#0B1530]/90 p-6 shadow-xl">
+      <div className="flex-1 rounded-2xl bg-[#0B1530]/90 p-6 shadow-xl">
         <div className="grid gap-6 md:grid-cols-3">
           <div>
             <div className="text-xs font-medium uppercase tracking-wide text-white/50">Active Positions</div>
@@ -86,13 +86,13 @@ export default function PoolUniverseLpPopulationSection({
             </div>
           </div>
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-white/50">Unique Wallets</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-white/50">Unique Providers</div>
             <div className="mt-2 text-2xl font-bold tabular-nums text-white/90">
               {formatNumber(walletsCount)}
             </div>
           </div>
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-white/50">Positions/Wallet</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-white/50">Avg. Positions per Wallet</div>
             <div className="mt-2 text-2xl font-bold tabular-nums text-white/90">
               {positionsPerWallet ?? '—'}
             </div>
@@ -100,7 +100,7 @@ export default function PoolUniverseLpPopulationSection({
         </div>
 
         {dexDistribution.length > 0 && (
-          <div className="mt-6 border-t border-white/5 pt-6">
+          <div className="mt-6 border-t border-white/[0.02] pt-6">
             <div className="text-xs font-medium uppercase tracking-wide text-white/50 mb-3">DEX Distribution</div>
             <div className="space-y-2">
               {dexDistribution.map(({ dex, positions, pools }) => (

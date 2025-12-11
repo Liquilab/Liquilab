@@ -159,7 +159,7 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
   const pairLabel = token0Symbol && token1Symbol ? `${token0Symbol} / ${token1Symbol}` : formatPoolAddress(poolAddress);
 
   return (
-    <div className="relative space-y-8 font-sans text-white">
+    <div className="relative space-y-10 font-sans text-white">
       <div className="flex items-center justify-between">
          <Link href="/" className="inline-flex items-center gap-2 text-sm font-medium text-white/60 transition-colors hover:text-[#3B82F6]">
             <ArrowLeft className="size-4" />
@@ -185,46 +185,46 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
       {/* 2. Liquidity Venues (DEX & Fee Tiers) */}
       <PoolUniverseDexSection segments={sortedSegments} timeRange={timeRange} />
 
-      {/* 3. LP Population */}
-      <PoolUniverseLpPopulationSection 
-        positionsCount={headMetrics?.positionsCount ?? null}
-        walletsCount={headMetrics?.walletsCount ?? null}
-        segments={sortedSegments}
-        degrade={degrade}
-        loading={loading}
-      />
+      {/* 3. Behaviour & Yield Band (Two-Column Grid) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <PoolUniverseLpPopulationSection 
+          positionsCount={headMetrics?.positionsCount ?? null}
+          walletsCount={headMetrics?.walletsCount ?? null}
+          segments={sortedSegments}
+          degrade={degrade}
+          loading={loading}
+        />
+        <PoolUniverseFeesAprSection 
+          tvlUsd={headMetrics?.tvlUsd ?? null}
+          fees24hUsd={headMetrics?.fees24hUsd ?? null}
+          fees7dUsd={headMetrics?.fees7dUsd ?? null}
+          incentives24hUsd={headMetrics?.incentives24hUsd ?? null}
+          incentives7dUsd={headMetrics?.incentives7dUsd ?? null}
+          timeRange={timeRange}
+          degrade={degrade}
+          loading={loading}
+        />
+      </div>
 
-      {/* 4. RangeBand™ Yield & Efficiency */}
-      <PoolUniverseFeesAprSection 
-        tvlUsd={headMetrics?.tvlUsd ?? null}
-        fees24hUsd={headMetrics?.fees24hUsd ?? null}
-        fees7dUsd={headMetrics?.fees7dUsd ?? null}
-        incentives24hUsd={headMetrics?.incentives24hUsd ?? null}
-        incentives7dUsd={headMetrics?.incentives7dUsd ?? null}
-        timeRange={timeRange}
-        degrade={degrade}
-        loading={loading}
-      />
-
-      {/* 5. Wallet Flows & Notable Moves */}
-      <PoolUniverseWalletFlowsSection 
-        poolAddress={poolAddress}
-        degrade={degrade}
-        loading={loading}
-      />
-
-      {/* 6. Pool Intel — Web Signals */}
-      <section className="rounded-xl border border-white/10 bg-[#0B1530]/90 p-4 md:p-6">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-white/95">Pool Intel — Web Signals</h3>
-            <p className="text-xs text-white/50">Web signals, news, and community cues for this pair</p>
+      {/* 4. Momentum Band (Two-Column Grid) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <PoolUniverseWalletFlowsSection 
+          poolAddress={poolAddress}
+          degrade={degrade}
+          loading={loading}
+        />
+        <section className="flex h-full flex-col space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <div>
+              <h2 className="text-lg font-semibold text-white/90">Off-Chain Signals</h2>
+            </div>
           </div>
-        </div>
-        <div className="mt-4">
-          <PoolIntelSection pool={null} pair={pairLabel} />
-        </div>
-      </section>
+          <div className="flex-1 rounded-2xl bg-[#0B1530]/90 p-6 shadow-xl">
+            <p className="mb-4 text-xs text-white/50">Off-chain signals, news, and community cues for this pair</p>
+            <PoolIntelSection pool={null} pair={pairLabel} />
+          </div>
+        </section>
+      </div>
 
       {/* 7. Context Card */}
       <PoolUniverseContextSection 
@@ -234,7 +234,7 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
         loading={loading}
       />
 
-      <DataSourceDisclaimer className="mt-8 border-t border-white/5 pt-6" />
+      <DataSourceDisclaimer className="mt-8 pt-6" />
     </div>
   );
 }

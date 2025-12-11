@@ -52,13 +52,11 @@ export default function PoolIntelSection({
   }
 
   return (
-    <section id="intel" className="mt-10 space-y-6">
-      <PoolIntelCard
-        tokens={derivedTokens.length === 2 ? derivedTokens : undefined}
-        pair={derivedTokens.length === 2 ? undefined : effectivePair}
-        chain={chain}
-        recency={recency}
-      />
-    </section>
+    <PoolIntelCard
+      tokens={derivedTokens.length === 2 ? derivedTokens : undefined}
+      pair={derivedTokens.length === 2 ? undefined : effectivePair}
+      chain={chain}
+      recency={recency}
+    />
   );
 }

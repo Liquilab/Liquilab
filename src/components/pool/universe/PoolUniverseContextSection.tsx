@@ -103,7 +103,7 @@ export default function PoolUniverseContextSection({
   if (loading) {
     return (
       <section className="space-y-4">
-        <div className="rounded-xl border border-white/10 bg-[#0B1530]/90 p-6">
+        <div className="rounded-xl bg-[#0B1530]/90 p-6">
           <div className="animate-pulse space-y-4">
             <div className="h-5 w-64 bg-white/10 rounded" />
             <div className="grid gap-4 md:grid-cols-3">
@@ -120,9 +120,9 @@ export default function PoolUniverseContextSection({
   if (degrade || !universe) {
     return (
       <section className="space-y-4">
-        <div className="rounded-xl border border-white/10 bg-[#0B1530]/90 p-6">
-          <h3 className="text-base font-semibold text-white/95 mb-4">How This Pool Context Affects Your Position</h3>
-          <p className="text-sm text-white/50">Context insights temporarily unavailable.</p>
+        <div className="rounded-xl bg-[#0B1530]/90 p-6">
+          <h3 className="text-base font-semibold text-white/95 mb-4">Contextual Briefing</h3>
+          <p className="text-sm text-white/50">Metric syncing...</p>
         </div>
       </section>
     );
@@ -130,15 +130,15 @@ export default function PoolUniverseContextSection({
 
   return (
     <section className="space-y-4">
-      <div className="rounded-xl border border-white/10 bg-[#0B1530]/90 p-6">
+      <div className="rounded-xl bg-[#0B1530]/90 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-base font-semibold text-white/95">How This Pool Context Affects Your Position</h3>
+            <h3 className="text-base font-semibold text-white/95">Contextual Briefing</h3>
             <p className="mt-1 text-xs text-white/50">Smart insights derived from on-chain analytics</p>
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+          <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
             <div className="text-sm font-semibold text-white/90 mb-2">Market Structure & Venues</div>
             {insights.marketStructure.length > 0 ? (
               <ul className="space-y-1.5 text-xs text-white/70">
@@ -153,7 +153,7 @@ export default function PoolUniverseContextSection({
               <p className="text-xs text-white/50">No notable market structure patterns detected.</p>
             )}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+          <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
             <div className="text-sm font-semibold text-white/90 mb-2">Yield Drivers & Efficiency</div>
             {insights.yieldDrivers.length > 0 ? (
               <ul className="space-y-1.5 text-xs text-white/70">
@@ -168,7 +168,7 @@ export default function PoolUniverseContextSection({
               <p className="text-xs text-white/50">Yield metrics pending sufficient data.</p>
             )}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+          <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
             <div className="text-sm font-semibold text-white/90 mb-2">Participant Behavior & Flows</div>
             {insights.participantBehavior.length > 0 ? (
               <ul className="space-y-1.5 text-xs text-white/70">
@@ -184,7 +184,7 @@ export default function PoolUniverseContextSection({
             )}
           </div>
         </div>
-        <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-4">
+        <div className="mt-6 flex items-center justify-between border-t border-white/[0.02] pt-4">
           <Link 
             href="/" 
             className="text-sm font-medium text-white/70 transition-colors hover:text-[#3B82F6]"
@@ -195,7 +195,7 @@ export default function PoolUniverseContextSection({
             href="/dashboard" 
             className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
           >
-            View My Position
+            Manage My Position
           </Link>
         </div>
       </div>

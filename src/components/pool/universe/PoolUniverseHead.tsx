@@ -1,8 +1,11 @@
 import React from 'react';
-import { Clock, Info } from 'lucide-react';
+import Image from 'next/image';
+import { Clock, Info, Activity, TrendingUp, DollarSign, Percent, Layers, Users } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { iconCandidates } from '@/lib/icons/symbolMap';
+import { TOKEN_ASSETS } from '@/lib/assets';
 import PoolUniverseKpiGrid from './PoolUniverseKpiGrid';
 
 export type TimeRange = '24h' | '7d' | '30d' | '90d';
@@ -36,6 +39,7 @@ type Tile = {
   changePct?: number | null;
   tooltip: string;
   highlight?: boolean;
+  dimmed?: boolean;
 };
 
 function formatUsd(value: number | null | undefined, digits = 0) {
@@ -63,7 +67,7 @@ function formatPct(value: number | null | undefined, digits = 1) {
   return `${value.toFixed(digits)}%`;
 }
 
-function MetricTile({ label, subLabel, value, changePct, tooltip, highlight }: Tile) {
+function MetricTile({ label, subLabel, value, changePct, tooltip, highlight, dimmed }: Tile) {
   const pctText =
     typeof changePct === 'number' && Number.isFinite(changePct)
       ? `${changePct >= 0 ? '+' : ''}${changePct.toFixed(1)}%`
@@ -76,14 +80,14 @@ function MetricTile({ label, subLabel, value, changePct, tooltip, highlight }: T
       : 'text-white/40';
 
   return (
-    <div className={`rounded-xl border p-5 transition-all duration-300 ${
+    <div className={`rounded-xl p-5 transition-all duration-300 ${
       highlight 
-        ? 'border-[#3B82F6]/40 bg-[#0B1530]/80 shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)]' 
-        : 'border-white/5 bg-[#0B1530]/90 hover:border-white/10'
+        ? 'bg-[#0B1530]/90 shadow-[0_0_20px_-5px_rgba(59,130,246,0.1)] border border-[#3B82F6]/10'
+        : 'bg-[#0B1530]/90 hover:bg-[#0B1530]/95'
     }`}>
       <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-white/50">
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+          <div className={`flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide ${dimmed ? 'text-white/40' : 'text-white/50'}`}>
             <span>{label}</span>
             <TooltipProvider delayDuration={100}>
               <Tooltip>
@@ -104,10 +108,70 @@ function MetricTile({ label, subLabel, value, changePct, tooltip, highlight }: T
           </div>
           {subLabel && <span className="text-[10px] font-medium text-white/30">{subLabel}</span>}
         </div>
-        {pctText ? <span className={`text-xs font-semibold ${pctClass}`}>{pctText}</span> : null}
+        {pctText ? <span className={`text-xs font-semibold ${pctClass} flex-shrink-0`}>{pctText}</span> : null}
       </div>
-      <div className={`mt-3 text-2xl font-bold tracking-tight tnum md:text-3xl ${highlight ? 'text-white' : 'text-white/90'}`}>
+      <div className={`mt-3 text-2xl font-bold tracking-tight tabular-nums md:text-3xl ${dimmed ? 'text-white/40' : highlight ? 'text-white' : 'text-white/90'}`}>
         {value}
+      </div>
+    </div>
+  );
+}
+
+function TokenPairIcon({ token0Symbol, token1Symbol }: { token0Symbol: string | null; token1Symbol: string | null }) {
+  if (!token0Symbol || !token1Symbol) return null;
+
+  const token0Candidates = iconCandidates(token0Symbol);
+  const token1Candidates = iconCandidates(token1Symbol);
+
+  const [token0Index, setToken0Index] = React.useState(0);
+  const [token1Index, setToken1Index] = React.useState(0);
+
+  const handleToken0Error = React.useCallback(() => {
+    setToken0Index((prev) => {
+      if (prev + 1 < token0Candidates.length) return prev + 1;
+      return prev;
+    });
+  }, [token0Candidates.length]);
+
+  const handleToken1Error = React.useCallback(() => {
+    setToken1Index((prev) => {
+      if (prev + 1 < token1Candidates.length) return prev + 1;
+      return prev;
+    });
+  }, [token1Candidates.length]);
+
+  React.useEffect(() => {
+    setToken0Index(0);
+    setToken1Index(0);
+  }, [token0Symbol, token1Symbol]);
+
+  const iconSize = 35; // 30% smaller than 50px
+
+  return (
+    <div className="flex items-center -space-x-3 shrink-0">
+      <div className="relative" style={{ width: iconSize, height: iconSize, minWidth: iconSize, minHeight: iconSize }}>
+        <Image
+          src={token0Candidates[token0Index] || TOKEN_ASSETS.default}
+          alt={token0Symbol}
+          width={iconSize}
+          height={iconSize}
+          className="rounded-full border-2 border-[#0B1530] object-contain bg-[#0B1530]"
+          style={{ width: iconSize, height: iconSize, minWidth: iconSize, minHeight: iconSize }}
+          onError={handleToken0Error}
+          unoptimized
+        />
+      </div>
+      <div className="relative" style={{ width: iconSize, height: iconSize, minWidth: iconSize, minHeight: iconSize }}>
+        <Image
+          src={token1Candidates[token1Index] || TOKEN_ASSETS.default}
+          alt={token1Symbol}
+          width={iconSize}
+          height={iconSize}
+          className="rounded-full border-2 border-[#0B1530] object-contain bg-[#0B1530]"
+          style={{ width: iconSize, height: iconSize, minWidth: iconSize, minHeight: iconSize }}
+          onError={handleToken1Error}
+          unoptimized
+        />
       </div>
     </div>
   );
@@ -144,7 +208,7 @@ function TimeRangeToggle({
 }) {
   const options: TimeRange[] = ['24h', '7d', '30d', '90d'];
   return (
-    <div className="inline-flex rounded-full border border-white/10 bg-white/5 p-1 text-xs font-semibold text-white/70">
+    <div className="inline-flex rounded-lg bg-[#0B1530]/50 p-1 text-xs font-medium text-white/60">
       {options.map((opt) => {
         const active = opt === value;
         return (
@@ -152,8 +216,10 @@ function TimeRangeToggle({
             key={opt}
             type="button"
             onClick={() => onChange(opt)}
-            className={`rounded-full px-3 py-1 transition ${
-              active ? 'bg-[#3B82F6] text-white shadow-[0_0_12px_rgba(59,130,246,0.4)]' : 'hover:bg-white/10'
+            className={`rounded-md px-3 py-1 transition-all ${
+              active 
+                ? 'bg-[#3B82F6] text-white shadow-sm' 
+                : 'hover:text-white hover:bg-white/5'
             }`}
             aria-pressed={active}
           >
@@ -253,6 +319,7 @@ export default function PoolUniverseHead({
       label: `Incentives (${is24h ? '24H' : '7D'})`,
       value: incentivesLabel,
       highlight: (incentivesWindow ?? 0) > 0,
+      dimmed: (incentivesWindow ?? 0) === 0,
       tooltip: is24h
         ? 'External rewards distributed to LPs in the last 24 hours (if any).'
         : 'External rewards distributed to LPs over the last 7 days. 30d/90d views reuse 7d as proxy.',
@@ -265,13 +332,18 @@ export default function PoolUniverseHead({
     },
     {
       label: 'Wallets',
-      subLabel: 'Active LP wallets',
+      subLabel: 'Active LPs (Unique Wallets)',
       value: hasWalletsMetric ? wallets!.toLocaleString('en-US') : '—',
       tooltip: 'Distinct wallet addresses with at least one active LP position in this pair.',
     },
     {
-      label: 'Estimated APR',
-      value: aprLabel,
+      label: 'Annualised Yield',
+      subLabel: is24h ? 'Based on 24h fees' : 'Based on 7d fees',
+      value: (
+        <span className={totalApr !== null && totalApr > 0 ? 'text-[#10B981]' : ''}>
+          {aprLabel}
+        </span>
+      ),
       highlight: (totalApr ?? 0) > 0,
       tooltip: is24h
         ? 'Annualized from 24h fees/incentives relative to TVL (365×).'
@@ -280,18 +352,18 @@ export default function PoolUniverseHead({
   ];
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0B1530]/90 p-6 backdrop-blur-sm md:p-8">
+    <div className="rounded-2xl bg-[#0B1530]/90 p-6 md:p-8">
       {/* Header */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between mb-8">
         <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <h1 className="font-brand text-3xl font-bold text-white md:text-4xl">{title}</h1>
-            <Badge className="border-[#3B82F6]/30 bg-[#3B82F6]/10 text-[#3B82F6] hover:bg-[#3B82F6]/20">
-              Universe
-            </Badge>
+          <div className="flex items-center gap-4">
+            {token0Symbol && token1Symbol && (
+              <TokenPairIcon token0Symbol={token0Symbol} token1Symbol={token1Symbol} />
+            )}
+            <h1 className="font-brand text-3xl font-medium text-white md:text-4xl">{title}</h1>
           </div>
           <p className="text-base text-white/60">
-            Aggregated analytics across {poolsCount} liquidity pools on Flare (Enosys + SparkDEX).
+            Aggregated liquidity analytics across Flare networks.
           </p>
           
           <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-white/60">
@@ -306,9 +378,10 @@ export default function PoolUniverseHead({
                 Degraded data
               </Badge>
             ) : null}
-            <TimeRangeToggle value={timeRange} onChange={onRangeChange} />
           </div>
         </div>
+
+        <TimeRangeToggle value={timeRange} onChange={onRangeChange} />
       </div>
 
       {/* KPI Grid */}
@@ -322,6 +395,7 @@ export default function PoolUniverseHead({
             changePct={tile.changePct} 
             tooltip={tile.tooltip}
             highlight={tile.highlight}
+            dimmed={tile.dimmed}
           />
         ))}
       </PoolUniverseKpiGrid>

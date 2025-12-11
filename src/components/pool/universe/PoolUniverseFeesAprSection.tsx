@@ -79,9 +79,9 @@ export default function PoolUniverseFeesAprSection({
     return (
       <section className="space-y-4">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-lg font-semibold text-white/90">RangeBand™ Yield & Efficiency</h2>
+          <h2 className="text-lg font-semibold text-white/90">Yield Efficiency</h2>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-[#0B1530]/90 p-8 shadow-xl">
+        <div className="rounded-2xl bg-[#0B1530]/90 p-8 shadow-xl">
           <div className="animate-pulse space-y-4">
             <div className="h-6 w-32 bg-white/10 rounded" />
             <div className="h-4 w-48 bg-white/10 rounded" />
@@ -95,33 +95,32 @@ export default function PoolUniverseFeesAprSection({
     return (
       <section className="space-y-4">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-lg font-semibold text-white/90">RangeBand™ Yield & Efficiency</h2>
+          <h2 className="text-lg font-semibold text-white/90">Yield Efficiency</h2>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-[#0B1530]/90 p-8 shadow-xl">
-          <p className="text-sm text-white/50">Yield data temporarily unavailable.</p>
+        <div className="rounded-2xl bg-[#0B1530]/90 p-8 shadow-xl">
+          <p className="text-sm text-white/50">Metric syncing...</p>
         </div>
       </section>
     );
   }
 
   return (
-    <section className="space-y-4">
+    <section className="flex h-full flex-col space-y-4">
       <div className="flex items-center justify-between px-1">
-        <h2 className="text-lg font-semibold text-white/90">RangeBand™ Yield & Efficiency</h2>
+        <h2 className="text-lg font-semibold text-white/90">Yield Efficiency</h2>
       </div>
-      <div className="rounded-2xl border border-white/10 bg-[#0B1530]/90 p-6 shadow-xl">
-        <div className="space-y-6">
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-white/50 mb-1">Total APR</div>
-            <div className="text-3xl font-bold tabular-nums text-white/90">
-              {formatPct(totalApr)}
+      <div className="flex flex-1 flex-col justify-center rounded-2xl bg-[#0B1530]/90 p-6 shadow-xl">
+        {incentivesWindow && incentivesWindow > 0 ? (
+          <div className="space-y-6">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-white/50 mb-1">Fee Efficiency</div>
+              <div className="text-3xl font-bold tabular-nums text-white/90">
+                {formatPct(totalApr)}
+              </div>
+              <div className="mt-1 text-xs text-white/50">
+                Fees + Incentives
+              </div>
             </div>
-            <div className="mt-1 text-xs text-white/50">
-              {incentivesWindow && incentivesWindow > 0 ? 'Incl. rewards' : 'Fees only'}
-            </div>
-          </div>
-
-          {totalApr !== null && totalApr > 0 && (
             <div className="space-y-3">
               <div className="text-xs font-medium uppercase tracking-wide text-white/50">Yield Composition</div>
               <div className="relative h-3 w-full overflow-hidden rounded-full bg-white/5">
@@ -141,16 +140,24 @@ export default function PoolUniverseFeesAprSection({
                   <div className="h-2 w-2 rounded-full bg-[#3B82F6]" />
                   <span className="text-white/70">Fees: {formatPct(baseApr)}</span>
                 </div>
-                {incentivesWindow && incentivesWindow > 0 && (
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-[#1BE8D2]" />
-                    <span className="text-white/70">Incentives: {formatPct(totalApr !== null && baseApr !== null ? totalApr - baseApr : null)}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-[#1BE8D2]" />
+                  <span className="text-white/70">Incentives: {formatPct(totalApr !== null && baseApr !== null ? totalApr - baseApr : null)}</span>
+                </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="text-center">
+            <div className="text-xs font-medium uppercase tracking-wide text-white/50 mb-1">Fee Efficiency</div>
+            <div className="text-3xl font-bold tabular-nums text-white/90">
+              {formatPct(totalApr)}
+            </div>
+            <div className="mt-2 text-xs text-white/50">
+              Yield Source: 100% Organic Fees
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
