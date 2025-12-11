@@ -223,7 +223,6 @@ function ActionLink({ href, children, variant = 'primary', ariaLabel }: ActionLi
     </Link>
   );
 }
-
 function formatUsd(value: number | null | undefined) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   return currencyFormatter.format(value);
@@ -290,3 +289,4 @@ function formatAprDetail(value: number | null, label: string) {
   if (value == null || !Number.isFinite(value)) return null;
   return `${value.toFixed(1)}% ${label}`;
 }
+

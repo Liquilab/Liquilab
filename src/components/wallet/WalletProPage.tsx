@@ -365,5 +365,5 @@ export function WalletProPage() {
     </main>
   );
 }
-
 export default WalletProPage;
+
