@@ -1,3 +1,13 @@
+## Changelog — 2025-12-12 (PHASE3.3-STABLE-PAIR-PARITY)
+- Enforced stable_pair_spot_truth valuation for USDT0 pools in `/api/positions` with per-position valuationMode + warnings surfaced via debug=1. Golden wallet (0x57d...) now shows valuationMode for every position, and Enosys WFLR/USDT0 #28134 evaluates with stable_pair_spot_truth (price01≈0.0126248793, price10≈79.2087). UI remains untouched; verification via `npm run verify`, `npm run build`, and manual `/api/positions?address=0x57d294d815968f0efa722f1e8094da65402cd951&debug=1`.
+- **Files Modified:** `pages/api/positions.ts`, `src/lib/positions/types.ts`.
+
+## Changelog — 2025-12-12 (SP2-STABLE-PAIR-PRICING-SOURCES)
+- Added explicit `pricingSource0/pricingSource1` metadata to `/api/positions` so debug parity checks can see whether stable_pair_spot_truth or registry/external sources priced each side; keeps valuationMode logging intact.
+- **Files Modified:** `pages/api/positions.ts`, `src/lib/positions/types.ts`.
+
+### Phase 3.3 UI Freeze
+- UI components remain frozen until stable-pair parity DoD is signed off. Any visual/layout changes must be filed under a separate Phase 4 task.
 # PROJECT_STATE · LiquiLab Indexer & API (Concise)
 
 > Living document for the LiquiLab Flare V3 indexer stack.  
@@ -201,9 +211,75 @@
 - **PHASE2-WALLET-PRO-UI-PORT:** Ported Wallet Pro "My Positions" page to match figma/src/pages/WalletOverviewPro.tsx pixel-perfect layout. Updated tabs with gradient underline (from-[#3B82F6] to-[#1BE8D2]), added List/Grid toggle buttons matching Figma, refactored table structure to match PoolTableRow exactly (grid-cols-[2fr_1fr_1fr_1fr_1fr], exact spacing/padding). RangeBandPositionBar updated to match Figma "list" variant (centered line with width based on strategy %, dot marker, min/max prices under ends, current price centered). Table rows use positionKey for keys to prevent cross-DEX collisions. No data pipeline changes; UI-only port. Verified npm run build passes; PRO wallet shows positions with correct layout; PREMIUM gating unchanged.
 - **Files Modified:** `src/components/wallet/WalletProPage.tsx` (UI layout port), `src/components/wallet/RangeBandPositionBar.tsx` (Figma list variant), `PROJECT_STATE.md` (this entry).
 
+## Changelog — 2025-12-12 (WALLET-PRO-RUNTIME-FIX)
+- **WALLET-PRO-RUNTIME-FIX:** Fixed WalletProPage render crash caused by invalid toPrecision() arguments. Added safePrecision() helper that normalizes/clamps decimals to [1,100] range, handles null/undefined/NaN inputs. Updated formatTokenAmount to return "0" for zero values (not "—") and safely handle all edge cases. UI-only runtime stability patch; no data/pricing changes.
+- **Files Modified:** `src/components/wallet/WalletProPage.tsx` (safePrecision helper + formatTokenAmount fix), `RUN_LOG.md` (this entry).
+
+## Changelog — 2025-12-12 (PHASE3.1-WALLET-PRO-USD-CORRECTNESS)
+- **PHASE3.1-WALLET-PRO-USD-CORRECTNESS:** Fixed USD conversion correctness: never use missing prices as 0; TVL/fees return null (not wrong numbers) when pricing uncertain; added pool-implied pricing fallback when paired with confident-price token (registry/coingecko/stablecoin/defillama); added pricingSource tracking per token; added debug mode (?debug=1) with per-position breakdown fields; added aggregate counters (missing_price_token_count, positions_with_null_tvlUsd_count, positions_with_null_feesUsd_count, pool_implied_price_used_count). No UI changes.
+- **Files Modified:** `pages/api/positions.ts` (USD conversion rules + pool-implied fallback + debug mode), `src/lib/pricing/prices.ts` (pricingSource tracking).
+
+## Changelog — 2025-12-12 (PH3.x-PRICING-HINTS)
+- Introduced `src/lib/pricing/hints.ts` for priority token metadata (symbol, CoinGecko/DefiLlama IDs, stable overrides) and wired the pricing pipeline to consult these hints before existing CoinGecko/DefiLlama/Ankr fallbacks, adding per-source logging and preserving cache TTL. This reduces “missing price” counts for wallet TVL/fees without touching UI.
+- **Files Modified:** `src/lib/pricing/hints.ts`, `src/lib/pricing/prices.ts`, `RUN_LOG.md`.
+
+## Changelog — 2025-12-12 (PHASE3.2c-VALUATION)
+- Added per-position valuationMode (stable_pair_spot_truth, registry_fallback, external_price, unpriced_null), valuation notes, and effective USD prices with debug logging so Wallet API can surface how TVL/fees were priced; implemented stable-pair spot truth for USDT0 pools (WFLR/USDT0 #28134 now within ±0.05% of Enosys reference). Logs aggregate valuation counts while debug=1 prints per-position breakdowns.
+- **Files Modified:** `pages/api/positions.ts`, `src/lib/positions/types.ts`, `src/lib/pricing/prices.ts`, `RUN_LOG.md`.
+
 ## Changelog — 2025-12-12 (PHASE3-WALLET-PRO-DATA)
 - **PHASE3-WALLET-PRO-DATA:** Data-only hardening for Wallet Pro positions. Added per-DEX counters/logs (mapped/partial/failed, fees/incentives/range stats); TVL/fees now compute with slot0 + feeGrowth deltas per position; incentives tracked per DEX with explicit null warnings; rangeband inversion guard and warnings; pricing pipeline now uses registry hard prices + stablecoins + CoinGecko/Ankr/DefiLlama with cache hit logs and missing-price warnings. No UI changes.
 - **Files Modified:** `pages/api/positions.ts` (data robustness/logging), `src/lib/pricing/prices.ts` (registry + cache logging).
+
+## Changelog — 2025-12-12 (CLEANUP-BRAND-REDIRECT)
+- Added temporary `/brand -> /` redirect via `pages/brand.tsx` (GSSP) to preserve legacy backlinks while the cleanup plan proceeds. No UI components touched.
+
+## Changelog — 2025-12-12 (CLEANUP-PRICING-LAB-REDIRECT)
+- Added temporary `/pricing-lab -> /pricing` redirect via `pages/pricing-lab.tsx` to keep legacy bookmarks alive while the cleanup plan proceeds. No UI components touched.
+
+## Changelog — 2025-12-12 (CLEANUP-PORTFOLIO-NAV)
+- **Files Modified:** `src/components/Navigation.tsx`
+- Topnav “Portfolio” routes to `/wallet` to respect gated wallet experience; verified via `npm run verify`, `npm run build`, and manual nav click.
+
+## Changelog — 2025-12-12 (CLEANUP-PORTFOLIO-REDIRECT)
+- **Files Modified:** `pages/portfolio.tsx`
+- Temporary `/portfolio -> /wallet` redirect (GSSP) preserves bookmarks/backlinks while the wallet experience remains gated; verified via `npm run verify`, `npm run build`, and manual curl (307 → /wallet).
+
+## Changelog — 2025-12-12 (CLEANUP-FASTFORWARD-REDIRECT)
+- **Files Modified:** `pages/fastforward/success.tsx`
+- Temporary `/fastforward/success -> /fastforward/pay?status=success` redirect (GSSP) preserves legacy links while consolidating the flow; verified via `npm run verify`, `npm run build`, and manual curl (307 → /fastforward/pay?status=success).
+
+## Changelog — 2025-12-12 (CLEANUP-SALES-REDIRECT)
+- **Files Modified:** `pages/sales/index.tsx`
+- Temporary `/sales -> /sales/offer` redirect (GSSP) keeps legacy entrypoints alive while funnel is consolidated; verified via `npm run verify`, `npm run build`, and manual curl (307 → /sales/offer).
+
+## Changelog — 2025-12-12 (CLEANUP-LOGIN-REDIRECT)
+- **Files Modified:** `pages/login.tsx`
+- Temporary `/login -> /connect` redirect (GSSP) keeps wallet-first onboarding consistent; verified via `npm run verify`, `npm run build`, and manual curl (307 → /connect).
+
+## Changelog — 2025-12-12 (CLEANUP-DASHBOARD-REDIRECT)
+- **Files Modified:** `pages/dashboard.tsx`
+- Temporary `/dashboard -> /` redirect (GSSP) keeps the MVP funnel lean by routing visitors to the homepage overview; verified via `npm run verify`, `npm run build`, and manual curl (307 → /).
+
+## Changelog — 2025-12-12 (CLEANUP-DEMO-REDIRECT)
+- **Files Modified:** `pages/demo.tsx`
+- Temporary `/demo -> /` redirect (GSSP) keeps the funnel lean while preserving old bookmarks; verified via `npm run verify`, `npm run build`, and manual curl (307 → /).
+
+## Changelog — 2025-12-12 (CLEANUP-KOEN-PAGE-REMOVAL)
+- **Files Modified:** `pages/koen.tsx`
+- Removed the legacy `/koen` page as part of cleanup (content now consolidated elsewhere).
+
+## Changelog — 2025-12-12 (CLEANUP-KOEN-MIDDLEWARE-REDIRECT)
+- **Files Modified:** `middleware.ts`
+- Added middleware rule to redirect `/koen` to `/` (temporary) so old bookmarks keep working; verified via `npm run verify`, `npm run build`, and manual curl (307 → /).
+
+## Changelog — 2025-12-12 (CLEANUP-SUMMARY-PAGE-REMOVAL)
+- **Files Modified:** `pages/summary.tsx`
+- Removed the legacy `/summary` page as part of the cleanup consolidation effort.
+
+## Changelog — 2025-12-12 (CLEANUP-SUMMARY-MIDDLEWARE-REDIRECT)
+- **Files Modified:** `middleware.ts`
+- Added middleware rule to redirect `/summary` to `/` (temporary) to preserve old bookmarks; verified via `npm run verify`, `npm run build`, and manual curl (307 → /).
 
 ## Changelog — 2025-12-11 (SP3-WALLET-PRO My Positions Design Align)
 - **SP3-WALLET-PRO-MY-POSITIONS:** Aligned Wallet Pro "My Positions" view with Figma Portfolio Pro design. Changed page title to "Portfolio Pro" with "Pro" badge. Added tab navigation: "My Positions" (active) and "Performance & Analytics (Pro)" (inactive placeholder). Implemented sort bar above table with Select dropdown (Health Status, TVL, APR, Unclaimed Fees). Refactored positions table to match Figma structure: grid layout with columns (Pool specifications, TVL, Unclaimed fees, Incentives, APR), RangeBand visual per row styled as horizontal line with end ticks and current-price marker, "View Pool Universe →" link per row routing to correct pool address/slug. Removed water-wave background overlay for wallet content (changed pages/wallet/index.tsx to use clean dark background #0B1221 instead of WaveBackground). All table rows derived from live usePositions data via getWalletPortfolioAnalytics; no static demo pools. RangeBandPositionBar updated to match Figma styling (centered band, end ticks, current-price dot with glow animation for in-range). Sort functionality implemented (health status priority, TVL/APR/fees descending). Empty state shows "No Active Positions" with CTA to explore Pool Universe. Build passes successfully.

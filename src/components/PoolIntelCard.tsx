@@ -166,70 +166,52 @@ export function PoolIntelCard({
   const isEmpty = status === 'loaded' && (data?.empty || (data && data.items.length === 0));
 
   return (
-    <section className="card space-y-5">
-      <header className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1">
-            <p className="font-ui text-xs uppercase tracking-[0.25em] text-white/60">Signals</p>
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="font-brand text-xl font-semibold text-white">
-                Pool Intel — Web Signals
-              </h2>
-              {impact?.riskLevel && (
-                <span
-                  className={`inline-flex items-center gap-1 rounded-[8px] px-2.5 py-1 text-xs font-medium text-white ${
-                    impact.riskLevel === 'high'
-                      ? 'bg-red-500/20 text-red-300'
-                      : impact.riskLevel === 'med'
-                        ? 'bg-amber-500/20 text-amber-200'
-                        : 'bg-emerald-500/20 text-emerald-200'
-                  }`}
-                >
-                  <span className="font-num">{RISK_LABELS[impact.riskLevel]}</span>
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="inline-flex items-center rounded-[8px] bg-white/10 p-1 text-xs text-white/70 backdrop-blur">
-            {(['day', 'week'] as IntelRecency[]).map((option) => {
-              const active = localRecency === option;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => {
-                    if (!active) {
-                      setLocalRecency(option);
-                    }
-                  }}
-                  className={`rounded-[6px] px-3 py-1 font-ui font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60A5FA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B1530] ${
-                    active ? 'rounded-[6px] bg-[#3B82F6] text-white' : 'text-white/70 hover:text-white'
-                  }`}
-                  aria-pressed={active}
-                >
-                  {option === 'day' ? 'Day' : 'Week'}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <p className="font-ui text-sm text-white/65">
-          {activeRecency === 'day' ? 'Daily scan' : 'Weekly crawl'} of public sources for {subjectLabel}. Links open in a new tab.
-        </p>
-        {status === 'loaded' && data?.fallback && (
-          <p className="font-ui text-xs text-white/45">
-            Showing extended sources after whitelist returned no recent signals.
-          </p>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        {impact?.riskLevel && (
+          <span
+            className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${
+              impact.riskLevel === 'high'
+                ? 'bg-red-500/20 text-red-300'
+                : impact.riskLevel === 'med'
+                  ? 'bg-amber-500/20 text-amber-200'
+                  : 'bg-emerald-500/20 text-emerald-200'
+            }`}
+          >
+            {RISK_LABELS[impact.riskLevel]}
+          </span>
         )}
-      </header>
+
+        <div className="inline-flex items-center rounded-lg bg-[#0B1530]/50 p-1 text-xs text-white/60">
+          {(['day', 'week'] as IntelRecency[]).map((option) => {
+            const active = localRecency === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => {
+                  if (!active) {
+                    setLocalRecency(option);
+                  }
+                }}
+                className={`rounded-md px-3 py-1 transition ${
+                  active ? 'bg-[#3B82F6] text-white shadow-sm' : 'hover:text-white hover:bg-white/5'
+                }`}
+                aria-pressed={active}
+              >
+                {option === 'day' ? 'Day' : 'Week'}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {status === 'loading' && (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, index) => (
             <div
               key={index}
-              className="rounded-xl bg-white/10 p-4"
+              className="rounded-lg bg-white/5 p-4"
             >
               <div className="h-4 w-3/4 animate-pulse rounded bg-white/10" />
               <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-white/10" />
@@ -240,17 +222,12 @@ export function PoolIntelCard({
       )}
 
       {status === 'error' && (
-        <div className="rounded-xl bg-white/10 p-5 text-white/70">
-          <p className="font-ui text-sm">Could not load pool intel right now.</p>
-          {error && (
-            <p className="mt-2 font-ui text-xs text-white/50">
-              {statusCode ? `[${statusCode}] ${error}` : error}
-            </p>
-          )}
+        <div className="rounded-lg bg-white/5 p-5 text-white/70">
+          <p className="text-sm">Pool intel is temporarily unavailable. On-chain analytics remain up to date.</p>
           <button
             type="button"
             onClick={fetchIntel}
-            className="mt-3 inline-flex items-center justify-center rounded-[10px] bg-[#3B82F6] px-4 py-2 font-ui text-sm font-medium text-white transition hover:bg-[#2563EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60A5FA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B1530]"
+            className="mt-3 inline-flex items-center justify-center rounded-md bg-[#3B82F6] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#2563EB]"
           >
             Retry
           </button>
@@ -258,56 +235,34 @@ export function PoolIntelCard({
       )}
 
       {isEmpty && (
-        <div className="space-y-4 rounded-xl bg-white/10 p-5 text-white/70">
-          <p className="font-ui text-sm">
-            Geen recente signalen voor dit paar. Probeer ‘Day/Week’ of ‘Broaden sources’.
+        <div className="rounded-lg bg-white/5 p-5 text-white/70">
+          <p className="text-sm">
+            No notable web signals for this pair in the selected window.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                if (!allowAny) {
-                  setAllowAny(true);
-                }
-              }}
-              disabled={allowAny}
-              className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Broaden sources
-            </button>
-          </div>
         </div>
       )}
 
       {status === 'loaded' && !isEmpty && items.length > 0 && (
-        <div className="space-y-4">
-          <ul className="space-y-4">
+        <div className="space-y-3">
+          <ul className="space-y-3">
             {items.map((item) => (
               <li key={`${item.url}-${item.publishedAt}`}>
-                <article className="rounded-xl bg-white/10 p-4 transition hover:bg-white/15">
+                <article className="rounded-lg bg-white/5 p-4 transition hover:bg-white/10">
                   <a
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-brand text-lg font-semibold text-white hover:underline"
+                    className="text-base font-semibold text-white hover:underline"
                   >
                     {item.title}
                   </a>
-                  <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-white/60">
-                    <span className="font-ui text-xs uppercase tracking-[0.2em] text-white/50">
-                      {resolveHostname(item)}
-                    </span>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/50">
+                    <span>{resolveHostname(item)}</span>
                     <span>•</span>
-                    <span className="font-num">{new Date(item.publishedAt).toLocaleDateString('en-US')}</span>
-                    {typeof item.relevance === 'number' && (
-                      <>
-                        <span>•</span>
-                        <span className="font-num text-white/65">Relevance {Math.round(item.relevance)}%</span>
-                      </>
-                    )}
+                    <span>{new Date(item.publishedAt).toLocaleDateString('en-US')}</span>
                   </div>
                   {item.snippet && (
-                    <p className="mt-3 font-ui text-sm text-white/80">{item.snippet}</p>
+                    <p className="mt-2 text-sm text-white/70">{item.snippet}</p>
                   )}
                 </article>
               </li>
@@ -315,13 +270,13 @@ export function PoolIntelCard({
           </ul>
 
           {impact?.bullets?.length ? (
-            <div className="space-y-2 rounded-xl bg-white/8 p-4">
-              <p className="font-ui text-sm font-semibold text-white">Impact</p>
-              <ul className="space-y-1">
+            <div className="rounded-lg bg-white/5 p-4">
+              <p className="mb-2 text-sm font-semibold text-white">Impact</p>
+              <ul className="space-y-1.5">
                 {impact.bullets.map((bullet) => (
-                  <li key={bullet} className="flex gap-2 text-sm text-white/80">
-                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
-                    <span className="font-ui">{bullet}</span>
+                  <li key={bullet} className="flex gap-2 text-sm text-white/70">
+                    <span className="mt-1.5 h-1 w-1 rounded-full bg-[#3B82F6]" />
+                    <span>{bullet}</span>
                   </li>
                 ))}
               </ul>
@@ -329,7 +284,7 @@ export function PoolIntelCard({
           ) : null}
         </div>
       )}
-    </section>
+    </div>
   );
 }
 

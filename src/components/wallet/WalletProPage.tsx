@@ -25,6 +25,8 @@ const DEX_LABELS: Record<string, string> = {
   'enosys-v3': 'Enosys',
 };
 
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
 type SortBy = 'health' | 'tvl' | 'apr' | 'fees';
 
 function getDexLabel(value?: string | null) {
@@ -44,6 +46,45 @@ function formatPercent(value: number | null | undefined) {
     return '—';
   }
   return `${value.toFixed(2)}%`;
+}
+
+function getApiTvlUsd(position: PositionRow): number | null {
+  return typeof position.tvlUsd === 'number' && Number.isFinite(position.tvlUsd) ? position.tvlUsd : null;
+}
+
+function getDerivedTvlUsd(position: PositionRow): number | null {
+  const total = position.amountsUsd?.total;
+  return typeof total === 'number' && Number.isFinite(total) ? total : null;
+}
+
+function getApiUnclaimedFeesUsd(position: PositionRow): number | null {
+  return typeof position.unclaimedFeesUsd === 'number' && Number.isFinite(position.unclaimedFeesUsd)
+    ? position.unclaimedFeesUsd
+    : null;
+}
+
+function getDerivedUnclaimedFeesUsd(position: PositionRow): number | null {
+  const claimUsd = position.claim?.usd;
+  return typeof claimUsd === 'number' && Number.isFinite(claimUsd) ? claimUsd : null;
+}
+
+function warnUsdMismatch(label: string, apiValue: number | null, derivedValue: number | null, positionKey?: string) {
+  if (!IS_DEV) return;
+  if (
+    typeof apiValue === 'number' &&
+    apiValue > 0 &&
+    typeof derivedValue === 'number' &&
+    derivedValue > 0
+  ) {
+    const ratio = apiValue > derivedValue ? apiValue / derivedValue : derivedValue / apiValue;
+    if (ratio >= 5) {
+      console.warn(
+        `[WalletProPage] ${label} mismatch (${positionKey ?? 'unknown'}): api=${apiValue.toFixed(
+          2
+        )} derived=${derivedValue.toFixed(2)} ratio=${ratio.toFixed(2)}`
+      );
+    }
+  }
 }
 
 function safePrecision(input: number | null | undefined, fallback: number = 6): number {
@@ -133,13 +174,7 @@ function computePositionAPR(position: PositionRow): number | null {
   
   const annualizedIncentives = (incentivesPerDay || 0) * 365;
   
-  const tvl =
-    typeof position.tvlUsd === 'number' && Number.isFinite(position.tvlUsd)
-      ? position.tvlUsd
-      : typeof position.amountsUsd?.total === 'number' &&
-          Number.isFinite(position.amountsUsd.total)
-        ? position.amountsUsd.total
-        : null;
+  const tvl = getApiTvlUsd(position);
 
   if (
     typeof tvl !== 'number' ||
@@ -169,8 +204,8 @@ function sortPositions(positions: PositionRow[], sortBy: SortBy): PositionRow[] 
       break;
     case 'tvl':
       sorted.sort((a, b) => {
-        const tvlA = typeof a.tvlUsd === 'number' ? a.tvlUsd : a.amountsUsd?.total ?? 0;
-        const tvlB = typeof b.tvlUsd === 'number' ? b.tvlUsd : b.amountsUsd?.total ?? 0;
+        const tvlA = getApiTvlUsd(a) ?? 0;
+        const tvlB = getApiTvlUsd(b) ?? 0;
         return tvlB - tvlA;
       });
       break;
@@ -183,8 +218,8 @@ function sortPositions(positions: PositionRow[], sortBy: SortBy): PositionRow[] 
       break;
     case 'fees':
       sorted.sort((a, b) => {
-        const feesA = typeof a.unclaimedFeesUsd === 'number' ? a.unclaimedFeesUsd : a.claim?.usd ?? 0;
-        const feesB = typeof b.unclaimedFeesUsd === 'number' ? b.unclaimedFeesUsd : b.claim?.usd ?? 0;
+        const feesA = getApiUnclaimedFeesUsd(a) ?? 0;
+        const feesB = getApiUnclaimedFeesUsd(b) ?? 0;
         return feesB - feesA;
       });
       break;
@@ -441,19 +476,17 @@ export function WalletProPage() {
                       const poolLabel = `${position.pair?.symbol0 ?? position.token0?.symbol ?? 'Token0'} / ${position.pair?.symbol1 ?? position.token1?.symbol ?? 'Token1'}`;
                       const feePct = (position.pair?.feeBps ?? position.poolFeeBps ?? 0) / 1000000;
                       const feeDisplay = feePct > 0 ? `${(feePct * 100).toFixed(2)}%` : '—';
-                      const tvl =
-                        typeof position.tvlUsd === 'number' && Number.isFinite(position.tvlUsd)
-                          ? position.tvlUsd
-                          : typeof position.amountsUsd?.total === 'number' &&
-                              Number.isFinite(position.amountsUsd.total)
-                            ? position.amountsUsd.total
-                            : null;
-                      const unclaimedFees =
-                        typeof position.unclaimedFeesUsd === 'number' && Number.isFinite(position.unclaimedFeesUsd)
-                          ? position.unclaimedFeesUsd
-                          : typeof position.claim?.usd === 'number' && Number.isFinite(position.claim.usd)
-                            ? position.claim.usd
-                            : null;
+                      const tvl = getApiTvlUsd(position);
+                      const derivedTvl = getDerivedTvlUsd(position);
+                      warnUsdMismatch('TVL', tvl, derivedTvl, position.positionKey ?? String(position.tokenId));
+                      const unclaimedFees = getApiUnclaimedFeesUsd(position);
+                      const derivedFees = getDerivedUnclaimedFeesUsd(position);
+                      warnUsdMismatch(
+                        'Unclaimed fees',
+                        unclaimedFees,
+                        derivedFees,
+                        position.positionKey ?? String(position.tokenId)
+                      );
                       const incentives =
                         typeof position.incentivesUsd === 'number' && Number.isFinite(position.incentivesUsd)
                           ? position.incentivesUsd
@@ -571,47 +604,36 @@ export function WalletProPage() {
                 </div>
               ) : (
                 /* List View */
-                <div className="bg-[#0F1A36]/95 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
-                  {/* Table Header */}
-                  <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-4 border-b border-white/[0.03]">
-                    <div className="font-light text-white/40 text-sm">Pool specifications</div>
-                    <div className="font-light text-white/40 text-sm">TVL</div>
-                    <div className="font-light text-white/40 text-sm">Unclaimed fees</div>
-                    <div className="font-light text-white/40 text-sm">Incentives</div>
-                    <div className="font-light text-white/40 text-sm">APR</div>
-                  </div>
+              <div className="bg-[#0F1A36]/95 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
+                {/* Table Header */}
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-4 border-b border-white/[0.03]">
+                  <div className="font-light text-white/40 text-sm">Pool specifications</div>
+                  <div className="font-light text-white/40 text-sm">TVL</div>
+                  <div className="font-light text-white/40 text-sm">Unclaimed fees</div>
+                  <div className="font-light text-white/40 text-sm">Incentives</div>
+                  <div className="font-light text-white/40 text-sm">APR</div>
+                </div>
 
-                  {/* Table Rows */}
-                  {loading && positions.length === 0 ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="bg-[#0F1A36]/95 border-b border-white/[0.03] last:border-0 overflow-hidden">
-                        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-5">
-                          <Skeleton className="h-6 w-3/4 bg-white/5" />
-                          <Skeleton className="h-6 w-1/2 bg-white/5" />
-                          <Skeleton className="h-6 w-1/2 bg-white/5" />
-                          <Skeleton className="h-6 w-1/2 bg-white/5" />
-                          <Skeleton className="h-6 w-1/2 bg-white/5" />
-                        </div>
+                {/* Table Rows */}
+                {loading && positions.length === 0 ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="bg-[#0F1A36]/95 border-b border-white/[0.03] last:border-0 overflow-hidden">
+                      <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-5">
+                        <Skeleton className="h-6 w-3/4 bg-white/5" />
+                        <Skeleton className="h-6 w-1/2 bg-white/5" />
+                        <Skeleton className="h-6 w-1/2 bg-white/5" />
+                        <Skeleton className="h-6 w-1/2 bg-white/5" />
+                        <Skeleton className="h-6 w-1/2 bg-white/5" />
                       </div>
-                    ))
-                  ) : (
-                    sortedPositions.map((position, idx) => {
+                    </div>
+                  ))
+                ) : (
+                  sortedPositions.map((position, idx) => {
                      const poolLabel = `${position.pair?.symbol0 ?? position.token0?.symbol ?? 'Token0'} / ${position.pair?.symbol1 ?? position.token1?.symbol ?? 'Token1'}`;
                      const feePct = (position.pair?.feeBps ?? position.poolFeeBps ?? 0) / 1000000;
                      const feeDisplay = feePct > 0 ? `${(feePct * 100).toFixed(2)}%` : '—';
-                     const tvl =
-                       typeof position.tvlUsd === 'number' && Number.isFinite(position.tvlUsd)
-                         ? position.tvlUsd
-                         : typeof position.amountsUsd?.total === 'number' &&
-                             Number.isFinite(position.amountsUsd.total)
-                           ? position.amountsUsd.total
-                           : null;
-                     const unclaimedFees =
-                       typeof position.unclaimedFeesUsd === 'number' && Number.isFinite(position.unclaimedFeesUsd)
-                         ? position.unclaimedFeesUsd
-                         : typeof position.claim?.usd === 'number' && Number.isFinite(position.claim.usd)
-                           ? position.claim.usd
-                           : null;
+                     const tvl = getApiTvlUsd(position);
+                     const unclaimedFees = getApiUnclaimedFeesUsd(position);
                      const incentives =
                        typeof position.incentivesUsd === 'number' && Number.isFinite(position.incentivesUsd)
                          ? position.incentivesUsd
@@ -717,7 +739,7 @@ export function WalletProPage() {
                     );
                   })
                 )}
-                </div>
+              </div>
               )}
             </div>
           )}

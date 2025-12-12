@@ -39,7 +39,7 @@ export function Navigation({ className }: NavigationProps) {
   };
 
   const navItems = [
-    { path: '/portfolio', label: 'Portfolio' },
+    { path: '/wallet', label: 'Portfolio' },
     { path: '/rangeband', label: 'RangeBand™' },
     { path: '/pricing', label: 'Pricing' },
     { path: '/faq', label: 'FAQ' },
