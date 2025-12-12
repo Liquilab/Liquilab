@@ -416,32 +416,186 @@ export function WalletProPage() {
                 </div>
               </div>
 
-              {/* Positions Table */}
-              <div className="bg-[#0F1A36]/95 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
-                {/* Table Header */}
-                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-4 border-b border-white/[0.03]">
-                  <div className="font-light text-white/40 text-sm">Pool specifications</div>
-                  <div className="font-light text-white/40 text-sm">TVL</div>
-                  <div className="font-light text-white/40 text-sm">Unclaimed fees</div>
-                  <div className="font-light text-white/40 text-sm">Incentives</div>
-                  <div className="font-light text-white/40 text-sm">APR</div>
-                </div>
-
-                {/* Table Rows */}
-                {loading && positions.length === 0 ? (
-                  Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="bg-[#0F1A36]/95 border-b border-white/[0.03] last:border-0 overflow-hidden">
-                      <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-5">
-                        <Skeleton className="h-6 w-3/4 bg-white/5" />
-                        <Skeleton className="h-6 w-1/2 bg-white/5" />
-                        <Skeleton className="h-6 w-1/2 bg-white/5" />
-                        <Skeleton className="h-6 w-1/2 bg-white/5" />
-                        <Skeleton className="h-6 w-1/2 bg-white/5" />
+              {/* Positions View */}
+              {viewMode === 'grid' ? (
+                /* Grid View */
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {loading && positions.length === 0 ? (
+                    Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="bg-[#0F1A36]/95 rounded-xl border border-white/10 overflow-hidden">
+                        <div className="p-6">
+                          <Skeleton className="h-6 w-3/4 bg-white/5 mb-4" />
+                          <Skeleton className="h-4 w-1/2 bg-white/5 mb-6" />
+                          <div className="grid grid-cols-2 gap-4 mb-6">
+                            <Skeleton className="h-16 bg-white/5" />
+                            <Skeleton className="h-16 bg-white/5" />
+                            <Skeleton className="h-16 bg-white/5" />
+                            <Skeleton className="h-16 bg-white/5" />
+                          </div>
+                          <Skeleton className="h-32 bg-white/5" />
+                        </div>
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  sortedPositions.map((position, idx) => {
+                    ))
+                  ) : (
+                    sortedPositions.map((position, idx) => {
+                      const poolLabel = `${position.pair?.symbol0 ?? position.token0?.symbol ?? 'Token0'} / ${position.pair?.symbol1 ?? position.token1?.symbol ?? 'Token1'}`;
+                      const feePct = (position.pair?.feeBps ?? position.poolFeeBps ?? 0) / 1000000;
+                      const feeDisplay = feePct > 0 ? `${(feePct * 100).toFixed(2)}%` : '—';
+                      const tvl =
+                        typeof position.tvlUsd === 'number' && Number.isFinite(position.tvlUsd)
+                          ? position.tvlUsd
+                          : typeof position.amountsUsd?.total === 'number' &&
+                              Number.isFinite(position.amountsUsd.total)
+                            ? position.amountsUsd.total
+                            : null;
+                      const unclaimedFees =
+                        typeof position.unclaimedFeesUsd === 'number' && Number.isFinite(position.unclaimedFeesUsd)
+                          ? position.unclaimedFeesUsd
+                          : typeof position.claim?.usd === 'number' && Number.isFinite(position.claim.usd)
+                            ? position.claim.usd
+                            : null;
+                      const incentives =
+                        typeof position.incentivesUsd === 'number' && Number.isFinite(position.incentivesUsd)
+                          ? position.incentivesUsd
+                          : null;
+                      const positionAPR = computePositionAPR(position);
+                      const minPrice = position.rangeMin ?? null;
+                      const maxPrice = position.rangeMax ?? null;
+                      const currentPrice = position.currentPrice ?? null;
+                      const universeLink = getPoolUniverseLink(position);
+
+                      return (
+                        <div key={resolvePoolKey(position, idx)} className="bg-[#0F1A36]/95 rounded-xl border border-white/10 hover:border-[#3B82F6]/50 transition-all cursor-pointer overflow-hidden">
+                          {/* Pool header */}
+                          <div className="p-6">
+                            <div className="flex items-center gap-3 mb-6">
+                              <div className="flex -space-x-2">
+                                <TokenIcon
+                                  symbol={position.pair?.symbol0 ?? position.token0?.symbol}
+                                  address={position.token0?.address}
+                                  size={32}
+                                  className="ring-2 ring-[#0B1221]"
+                                />
+                                <TokenIcon
+                                  symbol={position.pair?.symbol1 ?? position.token1?.symbol}
+                                  address={position.token1?.address}
+                                  size={32}
+                                  className="ring-2 ring-[#0B1221]"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <p className="text-white text-sm">
+                                  {poolLabel}
+                                </p>
+                                <p className="text-white/40 text-xs">
+                                  {getDexLabel(position.dex)} • #{position.tokenId} • {feeDisplay}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Pool details - 2 column grid */}
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-5 mb-6">
+                              {/* Column 1: TVL */}
+                              <div className="flex flex-col gap-1">
+                                <p className="text-white/50 text-xs">TVL</p>
+                                <p className="text-white tabular-nums">{formatCurrency(tvl)}</p>
+                                {(position as any).amount0 != null && (position as any).amount1 != null && (
+                                  <>
+                                    <p className="text-white/40 text-xs tabular-nums">
+                                      {formatTokenAmount((position as any).amount0, 4)} {position.pair?.symbol0}
+                                    </p>
+                                    <p className="text-white/40 text-xs tabular-nums">
+                                      {formatTokenAmount((position as any).amount1, 4)} {position.pair?.symbol1}
+                                    </p>
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Column 2: Incentives */}
+                              <div className="flex flex-col gap-1">
+                                <p className="text-white/50 text-xs">Incentives</p>
+                                <p className="text-white tabular-nums">{formatCurrency(incentives)}</p>
+                                {position.incentivesTokens && position.incentivesTokens.length > 0 && (
+                                  <p className="text-white/40 text-xs tabular-nums">
+                                    {formatTokenAmount(Number(position.incentivesTokens[0].amountPerDay) * 7, 0)} {position.incentivesTokens[0].symbol}
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* Column 1: Unclaimed fees */}
+                              <div className="flex flex-col gap-1">
+                                <p className="text-white/50 text-xs">Unclaimed fees</p>
+                                <p className="text-white tabular-nums">{formatCurrency(unclaimedFees)}</p>
+                                {(position as any).fee0 != null && (position as any).fee1 != null && (
+                                  <>
+                                    <p className="text-white/40 text-xs tabular-nums">
+                                      {formatTokenAmount((position as any).fee0, 4)} {position.pair?.symbol0}
+                                    </p>
+                                    <p className="text-white/40 text-xs tabular-nums">
+                                      {formatTokenAmount((position as any).fee1, 4)} {position.pair?.symbol1}
+                                    </p>
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Column 2: APR */}
+                              <div className="flex flex-col gap-1">
+                                <p className="text-white/50 text-xs">APR</p>
+                                <p className="text-[#10B981] tabular-nums">{formatPercent(positionAPR)}</p>
+                              </div>
+                            </div>
+
+                            {/* Rangeband section */}
+                            <div className="pt-6 pb-2">
+                              <RangeBandPositionBar
+                                minPrice={minPrice}
+                                maxPrice={maxPrice}
+                                currentPrice={currentPrice}
+                                status={position.status}
+                                pairLabel={poolLabel}
+                                strategyLabel={getStrategyLabel(minPrice, maxPrice, currentPrice)}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Universe Link */}
+                          <div className="px-6 pb-5 pt-2 border-t border-white/5">
+                            <Link href={universeLink} className="inline-flex items-center gap-2 text-[#1BE8D2] hover:underline text-sm">
+                              View Pool Universe →
+                            </Link>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+                /* List View */
+                <div className="bg-[#0F1A36]/95 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
+                  {/* Table Header */}
+                  <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-4 border-b border-white/[0.03]">
+                    <div className="font-light text-white/40 text-sm">Pool specifications</div>
+                    <div className="font-light text-white/40 text-sm">TVL</div>
+                    <div className="font-light text-white/40 text-sm">Unclaimed fees</div>
+                    <div className="font-light text-white/40 text-sm">Incentives</div>
+                    <div className="font-light text-white/40 text-sm">APR</div>
+                  </div>
+
+                  {/* Table Rows */}
+                  {loading && positions.length === 0 ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="bg-[#0F1A36]/95 border-b border-white/[0.03] last:border-0 overflow-hidden">
+                        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-5">
+                          <Skeleton className="h-6 w-3/4 bg-white/5" />
+                          <Skeleton className="h-6 w-1/2 bg-white/5" />
+                          <Skeleton className="h-6 w-1/2 bg-white/5" />
+                          <Skeleton className="h-6 w-1/2 bg-white/5" />
+                          <Skeleton className="h-6 w-1/2 bg-white/5" />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    sortedPositions.map((position, idx) => {
                      const poolLabel = `${position.pair?.symbol0 ?? position.token0?.symbol ?? 'Token0'} / ${position.pair?.symbol1 ?? position.token1?.symbol ?? 'Token1'}`;
                      const feePct = (position.pair?.feeBps ?? position.poolFeeBps ?? 0) / 1000000;
                      const feeDisplay = feePct > 0 ? `${(feePct * 100).toFixed(2)}%` : '—';
@@ -563,7 +717,8 @@ export function WalletProPage() {
                     );
                   })
                 )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
