@@ -3,17 +3,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter } from 'next/router';
-import { Copy, RefreshCcw } from 'lucide-react';
+import Link from 'next/link';
+import { RefreshCcw, ExternalLink, ChevronDown, List, LayoutGrid } from 'lucide-react';
 
 import WalletButton from '@/components/WalletButton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/components/ui/utils';
 import { getWalletPortfolioAnalytics, type WalletPortfolioAnalytics } from '@/lib/api/analytics';
 import type { PositionRow } from '@/lib/positions/types';
 import { formatUsd } from '@/utils/format';
+import { RangeBandPositionBar } from './RangeBandPositionBar';
+import { GOLDEN_WALLETS } from '@/config/goldenWallets';
+import { TokenIcon } from '@/lib/icons/tokenIcon';
 
 const numberFormatter = new Intl.NumberFormat('en-US');
 
@@ -22,43 +25,11 @@ const DEX_LABELS: Record<string, string> = {
   'enosys-v3': 'Enosys',
 };
 
-const RANGE_STATUS: Record<NonNullable<PositionRow['status']> | 'fallback', { label: string; className: string }> = {
-  in: {
-    label: 'In range',
-    className: 'border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#86efac]',
-  },
-  near: {
-    label: 'Near band',
-    className: 'border border-[#f97316]/40 bg-[#f97316]/10 text-[#fdba74]',
-  },
-  out: {
-    label: 'Out of range',
-    className: 'border border-[#f43f5e]/40 bg-[#f43f5e]/10 text-[#fda4af]',
-  },
-  unknown: {
-    label: 'Status unavailable',
-    className: 'border border-white/20 text-white/70',
-  },
-  fallback: {
-    label: 'Status unavailable',
-    className: 'border border-white/20 text-white/70',
-  },
-};
-
-function shortenAddress(value: string) {
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
-}
+type SortBy = 'health' | 'tvl' | 'apr' | 'fees';
 
 function getDexLabel(value?: string | null) {
   if (!value) return 'Unknown DEX';
   return DEX_LABELS[value.toLowerCase()] ?? value;
-}
-
-function formatCount(value: number | null | undefined) {
-  if (typeof value !== 'number' || Number.isNaN(value)) {
-    return '—';
-  }
-  return numberFormatter.format(value);
 }
 
 function formatCurrency(value: number | null | undefined) {
@@ -68,22 +39,169 @@ function formatCurrency(value: number | null | undefined) {
   return formatUsd(value ?? 0);
 }
 
-function extractFees(position: PositionRow) {
-  const maybe7d = (position as PositionRow & { fees7dUsd?: number | null }).fees7dUsd;
-  if (typeof maybe7d === 'number' && Number.isFinite(maybe7d)) {
-    return { label: 'Fees (7D)', value: maybe7d } as const;
+function formatPercent(value: number | null | undefined) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return '—';
   }
+  return `${value.toFixed(2)}%`;
+}
 
-  const lifetime =
-    (typeof position.rewardsUsd === 'number' ? position.rewardsUsd : null) ??
-    (typeof position.claim?.usd === 'number' ? position.claim?.usd ?? null : null) ??
-    (typeof position.unclaimedFeesUsd === 'number' ? position.unclaimedFeesUsd : null);
+function safePrecision(input: number | null | undefined, fallback: number = 6): number {
+  let p = Number(input);
+  if (!Number.isFinite(p)) {
+    p = fallback;
+  }
+  p = Math.trunc(p);
+  return Math.max(1, Math.min(100, p));
+}
 
-  return { label: 'Lifetime fees', value: lifetime } as const;
+function formatTokenAmount(value: number | null | undefined, decimals: number = 4): string {
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  const numValue = Number(value);
+  if (!Number.isFinite(numValue)) {
+    return '—';
+  }
+  if (numValue === 0) {
+    return '0';
+  }
+  if (numValue >= 1) {
+    const safeDecimals = safePrecision(decimals, 4);
+    return numValue.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: safeDecimals,
+    });
+  }
+  const safePrec = safePrecision(decimals, 6);
+  return numValue.toPrecision(safePrec);
+}
+
+function getStrategyLabel(rangeMin: number | null, rangeMax: number | null, currentPrice: number | null): string {
+  if (
+    typeof rangeMin !== 'number' ||
+    typeof rangeMax !== 'number' ||
+    typeof currentPrice !== 'number' ||
+    !Number.isFinite(rangeMin) ||
+    !Number.isFinite(rangeMax) ||
+    !Number.isFinite(currentPrice) ||
+    rangeMin >= rangeMax
+  ) {
+    return 'Custom Strategy';
+  }
+  const range = rangeMax - rangeMin;
+  const spreadPct = (range / currentPrice) * 100;
+  if (spreadPct < 12) return `Aggressive (${spreadPct.toFixed(1)}%)`;
+  if (spreadPct <= 35) return `Balanced (${spreadPct.toFixed(1)}%)`;
+  return `Conservative (${spreadPct.toFixed(1)}%)`;
 }
 
 function resolvePoolKey(position: PositionRow, index: number) {
-  return position.tokenId ?? position.marketId ?? `${position.poolAddress ?? 'pool'}-${index}`;
+  return position.positionKey ?? position.tokenId ?? position.marketId ?? `${position.poolAddress ?? 'pool'}-${index}`;
+}
+
+function computeRealizedAPR(fees7dUsd: number | null, totalTvlUsd: number): number | null {
+  if (
+    typeof fees7dUsd !== 'number' ||
+    !Number.isFinite(fees7dUsd) ||
+    fees7dUsd <= 0 ||
+    typeof totalTvlUsd !== 'number' ||
+    !Number.isFinite(totalTvlUsd) ||
+    totalTvlUsd <= 0
+  ) {
+    return null;
+  }
+  return (fees7dUsd / totalTvlUsd) * 52 * 100;
+}
+
+function computePositionAPR(position: PositionRow): number | null {
+  // APR = (Uncollected Fees + Annualized Incentives) / TVL
+  const uncollectedFees =
+    typeof position.unclaimedFeesUsd === 'number' && Number.isFinite(position.unclaimedFeesUsd)
+      ? position.unclaimedFeesUsd
+      : typeof position.claim?.usd === 'number' && Number.isFinite(position.claim.usd)
+        ? position.claim.usd
+        : 0;
+  
+  // Incentives are per day, so annualize: incentivesPerDay * 365
+  const incentivesPerDay =
+    typeof position.incentivesUsdPerDay === 'number' && Number.isFinite(position.incentivesUsdPerDay)
+      ? position.incentivesUsdPerDay
+      : typeof position.incentivesUsd === 'number' && Number.isFinite(position.incentivesUsd)
+        ? position.incentivesUsd / 365 // If it's total incentives, assume it's annual and convert to daily
+        : 0;
+  
+  const annualizedIncentives = (incentivesPerDay || 0) * 365;
+  
+  const tvl =
+    typeof position.tvlUsd === 'number' && Number.isFinite(position.tvlUsd)
+      ? position.tvlUsd
+      : typeof position.amountsUsd?.total === 'number' &&
+          Number.isFinite(position.amountsUsd.total)
+        ? position.amountsUsd.total
+        : null;
+
+  if (
+    typeof tvl !== 'number' ||
+    !Number.isFinite(tvl) ||
+    tvl <= 0
+  ) {
+    return null;
+  }
+
+  const totalYield = (uncollectedFees || 0) + annualizedIncentives;
+  if (totalYield <= 0) {
+    return null;
+  }
+
+  // APR as percentage: (yield / tvl) * 100
+  return (totalYield / tvl) * 100;
+}
+
+function sortPositions(positions: PositionRow[], sortBy: SortBy): PositionRow[] {
+  const sorted = [...positions];
+  switch (sortBy) {
+    case 'health':
+      sorted.sort((a, b) => {
+        const statusOrder = { in: 0, near: 1, out: 2, unknown: 3 };
+        return (statusOrder[a.status ?? 'unknown'] ?? 3) - (statusOrder[b.status ?? 'unknown'] ?? 3);
+      });
+      break;
+    case 'tvl':
+      sorted.sort((a, b) => {
+        const tvlA = typeof a.tvlUsd === 'number' ? a.tvlUsd : a.amountsUsd?.total ?? 0;
+        const tvlB = typeof b.tvlUsd === 'number' ? b.tvlUsd : b.amountsUsd?.total ?? 0;
+        return tvlB - tvlA;
+      });
+      break;
+    case 'apr':
+      sorted.sort((a, b) => {
+        const aprA = computePositionAPR(a) ?? 0;
+        const aprB = computePositionAPR(b) ?? 0;
+        return aprB - aprA;
+      });
+      break;
+    case 'fees':
+      sorted.sort((a, b) => {
+        const feesA = typeof a.unclaimedFeesUsd === 'number' ? a.unclaimedFeesUsd : a.claim?.usd ?? 0;
+        const feesB = typeof b.unclaimedFeesUsd === 'number' ? b.unclaimedFeesUsd : b.claim?.usd ?? 0;
+        return feesB - feesA;
+      });
+      break;
+  }
+  return sorted;
+}
+
+function getPoolUniverseLink(position: PositionRow): string {
+  if (position.poolAddress) {
+    return `/pool/${position.poolAddress}`;
+  }
+  const pair = position.pair;
+  if (pair?.symbol0 && pair?.symbol1) {
+    const slug = `${pair.symbol0.toLowerCase()}-${pair.symbol1.toLowerCase()}`;
+    return `/pool/${slug}`;
+  }
+  return '/pool';
 }
 
 export function WalletProPage() {
@@ -94,20 +212,22 @@ export function WalletProPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [copied, setCopied] = useState(false);
-  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [activeTab, setActiveTab] = useState<'positions' | 'analytics'>('positions');
+  const [sortBy, setSortBy] = useState<SortBy>('tvl');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
-  const queryWallet = router.isReady && typeof router.query.wallet === 'string' ? router.query.wallet : undefined;
+  const queryWallet =
+    router.isReady && typeof router.query.wallet === 'string'
+      ? router.query.wallet
+      : undefined;
   const effectiveAddress = queryWallet ?? address ?? '';
   const viewingOverride = Boolean(queryWallet);
+  const viewingGoldenWallet = useMemo(() => {
+    if (!queryWallet) return null;
+    return GOLDEN_WALLETS.find((gw: { address: string; label: string }) => gw.address.toLowerCase() === queryWallet.toLowerCase()) ?? null;
+  }, [queryWallet]);
 
   useEffect(() => setMounted(true), []);
-
-  useEffect(() => () => {
-    if (copyTimeoutRef.current) {
-      clearTimeout(copyTimeoutRef.current);
-    }
-  }, []);
 
   useEffect(() => {
     if (!effectiveAddress) {
@@ -125,10 +245,15 @@ export function WalletProPage() {
     getWalletPortfolioAnalytics(effectiveAddress, { signal: controller.signal })
       .then((result) => {
         if (!isCurrent) return;
+        console.log(`[WalletProPage] Analytics loaded:`, {
+          positionsCount: result.positions.length,
+          summary: result.summary,
+        });
         setData(result);
       })
       .catch((err) => {
         if (!isCurrent || err.name === 'AbortError') return;
+        console.error(`[WalletProPage] Error loading analytics:`, err);
         setError(err.message ?? 'Failed to load wallet portfolio');
         setData(null);
       })
@@ -149,50 +274,13 @@ export function WalletProPage() {
     setReloadKey((key) => key + 1);
   }, [effectiveAddress]);
 
-  const handleCopy = useCallback(() => {
-    if (!effectiveAddress || typeof navigator === 'undefined' || !navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(effectiveAddress)
-      .then(() => {
-        setCopied(true);
-        if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-        copyTimeoutRef.current = setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => undefined);
-  }, [effectiveAddress]);
-
   const positions = data?.positions ?? [];
-  const summary = data?.summary;
+  const sortedPositions = useMemo(() => sortPositions(positions, sortBy), [positions, sortBy]);
   const hasPositions = positions.length > 0;
 
-  const summaryCards = useMemo(() => {
-    return [
-      {
-        key: 'tvl',
-        label: 'Total TVL',
-        value: formatCurrency(summary?.totalTvlUsd ?? null),
-        subline: 'Across connected wallet',
-      },
-      {
-        key: 'positions',
-        label: 'Active positions',
-        value: formatCount(summary?.activePositions ?? null),
-        subline: `${formatCount(summary?.positionsCount ?? null)} total`,
-      },
-      {
-        key: 'pools',
-        label: 'Pools',
-        value: formatCount(summary?.poolsCount ?? null),
-        subline: 'Unique LP pools',
-      },
-      {
-        key: 'fees',
-        label: summary?.fees7dUsd !== null ? 'Fees (7D)' : 'Lifetime fees',
-        value: formatCurrency((summary?.fees7dUsd ?? summary?.lifetimeFeesUsd) ?? null),
-        subline: summary?.fees7dUsd !== null ? 'Trailing seven days' : 'All-time realized',
-      },
-    ];
-  }, [summary]);
+  useEffect(() => {
+    console.log(`[WalletProPage] Render positions: count=${positions.length}`);
+  }, [positions]);
 
   if (!mounted) {
     return null;
@@ -200,170 +288,337 @@ export function WalletProPage() {
 
   return (
     <main className="relative z-10 mx-auto flex w-full max-w-[1400px] flex-col gap-8 px-4 py-10 sm:px-6 lg:px-10">
-      <section className="rounded-3xl border border-white/10 bg-[#0F1A36]/80 px-6 py-8 shadow-2xl shadow-black/20 sm:px-10">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/40">Portfolio Pro</p>
-            <h1 className="font-brand text-3xl text-white">Your Liquidity Portfolio</h1>
-            {effectiveAddress ? (
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/70">
-                <span className="font-mono text-base text-white">{shortenAddress(effectiveAddress)}</span>
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/20 px-3 py-1 text-xs text-white/80 transition hover:border-white/50 hover:text-white"
-                >
-                  <Copy className="size-3.5" />
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
-                {viewingOverride && (
-                  <Badge variant="outline" className="border-[#3B82F6]/40 text-[#60A5FA]">
-                    URL wallet preview
-                  </Badge>
-                )}
-                {!viewingOverride && (
-                  <Badge variant="outline" className="border-white/20 text-white/70">
-                    {isConnected ? 'Connected' : 'Read-only'}
-                  </Badge>
-                )}
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-white/60">Connect a wallet or pass ?wallet=0x... to preview the Pro experience.</p>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {effectiveAddress && (
+      {/* Header */}
+      <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-white/95 mb-4 text-3xl font-brand">Portfolio Pro</h1>
+        </div>
+        <div className="flex items-center gap-3">
+           <Link href="/" className="text-sm text-white/50 hover:text-white transition-colors mr-4">
+             ← Back to Standard View
+           </Link>
+           {effectiveAddress && (
               <button
                 type="button"
                 onClick={handleReload}
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/15 px-4 py-2 text-sm text-white/70 transition hover:border-white/40 hover:text-white"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70 transition hover:bg-white/10 hover:text-white"
               >
                 <RefreshCcw className={cn('size-4', loading && 'animate-spin')} />
                 Refresh
               </button>
             )}
-            {!isConnected && !viewingOverride && <WalletButton className="h-11 rounded-2xl border border-[#3B82F6]/50 bg-[#3B82F6]/10 px-5 text-sm font-semibold text-white hover:bg-[#3B82F6]/20" />}
-          </div>
         </div>
+      </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {summaryCards.map((card) => (
-            <div
-              key={card.key}
-              className="rounded-2xl border border-white/10 bg-[#0B1530]/80 p-5"
-            >
-              <p className="text-xs uppercase tracking-wide text-white/50">{card.label}</p>
-              <p className="mt-3 text-2xl font-semibold text-white">{card.value}</p>
-              <p className="text-xs text-white/50">{card.subline}</p>
+      {/* Tabs */}
+      <div className="border-b border-white/10 mb-8">
+        <div className="flex gap-0">
+          <button
+            onClick={() => setActiveTab('positions')}
+            className={cn(
+              'relative px-6 py-4 transition-all duration-300',
+              activeTab === 'positions' ? 'text-white/95' : 'text-white/[0.58] hover:text-white/95'
+            )}
+          >
+            <span>My Positions</span>
+            {activeTab === 'positions' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-gradient-to-r from-[#3B82F6] to-[#1BE8D2] rounded-t-full" />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={cn(
+              'relative px-6 py-4 transition-all duration-300',
+              activeTab === 'analytics' ? 'text-white/95' : 'text-white/[0.58] hover:text-white/95'
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <span>Performance & Analytics</span>
+              <Badge className="bg-[#3B82F6]/20 text-[#3B82F6] border-[#3B82F6]/30 text-xs ml-1">
+                Pro
+              </Badge>
             </div>
-          ))}
+            {activeTab === 'analytics' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-gradient-to-r from-[#3B82F6] to-[#1BE8D2] rounded-t-full" />
+            )}
+          </button>
         </div>
-      </section>
+      </div>
 
       {!effectiveAddress ? (
-        <section className="rounded-3xl border border-dashed border-white/20 bg-[#0F1A36]/50 px-6 py-12 text-center">
-          <div className="mx-auto max-w-2xl space-y-4">
-            <h2 className="font-brand text-2xl text-white">Connect your wallet to unlock Portfolio Pro</h2>
-            <p className="text-sm text-white/70">
-              Wallet-level TVL, RangeBand status, and fee capture analytics appear here as soon as you connect a wallet with active LP positions.
-            </p>
-            <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-              <WalletButton className="w-full justify-center rounded-2xl bg-[#3B82F6] px-6 py-3 text-base font-semibold text-white hover:bg-[#60A5FA] sm:w-auto" />
-              <p className="text-xs text-white/60">
-                Tip: add <code className="font-mono">?wallet=0x57d2...5951</code> to the URL to preview the Pro wallet.
-              </p>
-            </div>
-          </div>
-        </section>
+        <div className="rounded-xl border border-dashed border-white/20 bg-[#0F1A36]/50 p-12 text-center">
+          <h2 className="mb-2 text-xl font-medium text-white">Connect wallet to view portfolio</h2>
+          <p className="text-white/50 mb-6">Connect your wallet to see your positions and analytics.</p>
+          <WalletButton className="mx-auto" />
+        </div>
+      ) : !hasPositions && !loading ? (
+        <div className="rounded-xl border border-dashed border-white/20 bg-[#0F1A36]/50 p-12 text-center">
+          <h2 className="mb-2 text-xl font-medium text-white">No Active Positions</h2>
+          <p className="text-white/50 mb-6">Initialize your portfolio by exploring the Pool Universe.</p>
+          <Button 
+            variant="ghost" 
+            className="border border-[#3B82F6]/50 text-[#60A5FA] hover:bg-[#3B82F6]/10"
+            onClick={() => router.push('/pool')}
+          >
+            Explore Pool Universe
+            <ExternalLink className="ml-2 size-4" />
+          </Button>
+        </div>
       ) : (
-        <section className="rounded-3xl border border-white/10 bg-[#0B1530]/70">
-          <div className="flex flex-col gap-2 border-b border-white/10 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <>
+          {activeTab === 'positions' && (
             <div>
-              <h2 className="font-brand text-2xl text-white">Positions overview</h2>
-              <p className="text-sm text-white/60">
-                {hasPositions
-                  ? `${positions.length} position${positions.length === 1 ? '' : 's'} · ${formatCount(summary?.poolsCount ?? null)} pools`
-                  : 'No active liquidity detected'}
-              </p>
-            </div>
-            {error && (
-              <div className="flex flex-col items-start gap-2 text-sm text-red-300 sm:items-end">
-                <span>{error}</span>
-                <Button variant="ghost" className="border border-red-400 text-red-200" onClick={handleReload}>
-                  Retry
-                </Button>
-              </div>
-            )}
-          </div>
-          <div className="px-3 py-4 sm:px-6">
-            {loading && !hasPositions ? (
-              <div className="space-y-4">
-                {Array.from({ length: 4 }).map((_, index) => (
-                  <div key={index} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <Skeleton className="h-6 w-3/4 bg-white/10" />
-                    <Skeleton className="mt-3 h-4 w-1/3 bg-white/5" />
+              {/* Sort Control */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <span className="text-white/70 text-sm">Sort by:</span>
+                  <div className="relative">
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as SortBy)}
+                      className="appearance-none w-[200px] bg-[#0F1A36]/95 border border-white/10 rounded-lg py-2 pl-4 pr-10 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                    >
+                      <option value="health">Health Status</option>
+                      <option value="tvl">TVL (High → Low)</option>
+                      <option value="apr">APR (High → Low)</option>
+                      <option value="fees">Unclaimed Fees</option>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-white/50 pointer-events-none" />
                   </div>
-                ))}
+                </div>
+
+                {/* List/Grid Toggle */}
+                <div className="inline-flex items-center bg-[#0F1A36]/95 border border-white/10 rounded-lg p-1.5 gap-1 shadow-lg">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={cn(
+                      'flex items-center gap-2.5 px-6 py-3 rounded-md transition-all',
+                      viewMode === 'list'
+                        ? 'bg-[#3B82F6] text-white shadow-md'
+                        : 'text-white/70 hover:text-white/95 hover:bg-white/5'
+                    )}
+                  >
+                    <List className="size-5" />
+                    <span>List</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={cn(
+                      'flex items-center gap-2.5 px-6 py-3 rounded-md transition-all',
+                      viewMode === 'grid'
+                        ? 'bg-[#3B82F6] text-white shadow-md'
+                        : 'text-white/70 hover:text-white/95 hover:bg-white/5'
+                    )}
+                  >
+                    <LayoutGrid className="size-5" />
+                    <span>Grid</span>
+                  </button>
+                </div>
               </div>
-            ) : hasPositions ? (
-              <Table className="text-sm text-white/80">
-                <TableHeader>
-                  <TableRow className="border-white/10">
-                    <TableHead className="text-xs uppercase tracking-wide text-white/60">Pool</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-white/60">TVL (USD)</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-white/60">Fees</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-white/60">RangeBand status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {positions.map((position, index) => {
-                    const poolLabel = `${position.pair?.symbol0 ?? position.token0?.symbol ?? 'Token0'} / ${position.pair?.symbol1 ?? position.token1?.symbol ?? 'Token1'}`;
-                    const feePct = (position.pair?.feeBps ?? position.poolFeeBps ?? 0) / 10000;
-                    const fees = extractFees(position);
-                    const tvl = typeof position.tvlUsd === 'number' ? position.tvlUsd : position.amountsUsd?.total ?? null;
-                    const range = RANGE_STATUS[position.status ?? 'fallback'];
+
+              {/* Positions Table */}
+              <div className="bg-[#0F1A36]/95 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
+                {/* Table Header */}
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-4 border-b border-white/[0.03]">
+                  <div className="font-light text-white/40 text-sm">Pool specifications</div>
+                  <div className="font-light text-white/40 text-sm">TVL</div>
+                  <div className="font-light text-white/40 text-sm">Unclaimed fees</div>
+                  <div className="font-light text-white/40 text-sm">Incentives</div>
+                  <div className="font-light text-white/40 text-sm">APR</div>
+                </div>
+
+                {/* Table Rows */}
+                {loading && positions.length === 0 ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="bg-[#0F1A36]/95 border-b border-white/[0.03] last:border-0 overflow-hidden">
+                      <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-5">
+                        <Skeleton className="h-6 w-3/4 bg-white/5" />
+                        <Skeleton className="h-6 w-1/2 bg-white/5" />
+                        <Skeleton className="h-6 w-1/2 bg-white/5" />
+                        <Skeleton className="h-6 w-1/2 bg-white/5" />
+                        <Skeleton className="h-6 w-1/2 bg-white/5" />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  sortedPositions.map((position, idx) => {
+                     const poolLabel = `${position.pair?.symbol0 ?? position.token0?.symbol ?? 'Token0'} / ${position.pair?.symbol1 ?? position.token1?.symbol ?? 'Token1'}`;
+                     const feePct = (position.pair?.feeBps ?? position.poolFeeBps ?? 0) / 1000000;
+                     const feeDisplay = feePct > 0 ? `${(feePct * 100).toFixed(2)}%` : '—';
+                     const tvl =
+                       typeof position.tvlUsd === 'number' && Number.isFinite(position.tvlUsd)
+                         ? position.tvlUsd
+                         : typeof position.amountsUsd?.total === 'number' &&
+                             Number.isFinite(position.amountsUsd.total)
+                           ? position.amountsUsd.total
+                           : null;
+                     const unclaimedFees =
+                       typeof position.unclaimedFeesUsd === 'number' && Number.isFinite(position.unclaimedFeesUsd)
+                         ? position.unclaimedFeesUsd
+                         : typeof position.claim?.usd === 'number' && Number.isFinite(position.claim.usd)
+                           ? position.claim.usd
+                           : null;
+                     const incentives =
+                       typeof position.incentivesUsd === 'number' && Number.isFinite(position.incentivesUsd)
+                         ? position.incentivesUsd
+                         : null;
+                     const positionAPR = computePositionAPR(position);
+                     const minPrice = position.rangeMin ?? null;
+                     const maxPrice = position.rangeMax ?? null;
+                     const currentPrice = position.currentPrice ?? null;
+                     const universeLink = getPoolUniverseLink(position);
 
                     return (
-                      <TableRow key={resolvePoolKey(position, index)} className="border-white/5">
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <div className="flex flex-wrap items-center gap-3 text-white">
-                              <span className="text-base font-semibold">{poolLabel}</span>
-                              <Badge variant="outline" className="border-white/15 text-xs text-white/70">
-                                {getDexLabel(position.dex)}
-                              </Badge>
+                      <div key={resolvePoolKey(position, idx)} className="bg-[#0F1A36]/95 border-b border-white/[0.03] last:border-0 overflow-hidden">
+                        {/* KPI Row */}
+                        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 pt-5 pb-5">
+                          {/* Pool specifications */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex -space-x-2">
+                              <TokenIcon
+                                symbol={position.pair?.symbol0 ?? position.token0?.symbol}
+                                address={position.token0?.address}
+                                size={32}
+                                className="ring-2 ring-[#0B1221]"
+                              />
+                              <TokenIcon
+                                symbol={position.pair?.symbol1 ?? position.token1?.symbol}
+                                address={position.token1?.address}
+                                size={32}
+                                className="ring-2 ring-[#0B1221]"
+                              />
                             </div>
-                            <p className="text-xs text-white/50">
-                              {feePct > 0 ? `${(feePct * 100).toFixed(2)}% fee` : 'Fee tier unknown'} · Token #{position.tokenId ?? '—'}
-                            </p>
+                            <div className="flex flex-col gap-1">
+                              <p className="text-white">{poolLabel}</p>
+                              <p className="text-white/40 text-sm">
+                                {getDexLabel(position.dex)} • #{position.tokenId} • {feeDisplay}
+                              </p>
+                            </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-base font-semibold text-white">{formatCurrency(tvl)}</p>
-                          <p className="text-xs text-white/50">Current position value</p>
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-base font-semibold text-white">{formatCurrency(fees.value)}</p>
-                          <p className="text-xs text-white/50">{fees.label}</p>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={cn('rounded-full px-3 py-1 text-xs font-semibold', range.className)}>{range.label}</Badge>
-                        </TableCell>
-                      </TableRow>
+
+                          {/* TVL */}
+                          <div className="flex flex-col gap-1">
+                            <p className="text-white tabular-nums">{formatCurrency(tvl)}</p>
+                            {(position as any).amount0 != null && (position as any).amount1 != null && (
+                              <div className="text-white/40 text-xs tabular-nums">
+                                <p className="mb-0">{formatTokenAmount((position as any).amount0, 4)} {position.pair?.symbol0}</p>
+                                <p>{formatTokenAmount((position as any).amount1, 4)} {position.pair?.symbol1}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Unclaimed fees */}
+                          <div className="flex flex-col gap-1">
+                            <p className="text-white tabular-nums">{formatCurrency(unclaimedFees)}</p>
+                            {(position as any).fee0 != null && (position as any).fee1 != null && (
+                              <div className="text-white/40 text-xs tabular-nums">
+                                <p className="mb-0">{formatTokenAmount((position as any).fee0, 4)} {position.pair?.symbol0}</p>
+                                <p>{formatTokenAmount((position as any).fee1, 4)} {position.pair?.symbol1}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Incentives */}
+                          <div className="flex flex-col gap-1">
+                            <p className="text-white tabular-nums">{formatCurrency(incentives)}</p>
+                            {position.incentivesTokens && position.incentivesTokens.length > 0 && (
+                              <div className="text-white/40 text-xs tabular-nums">
+                                {position.incentivesTokens.slice(0, 1).map((token, i) => {
+                                  const amount7d = Number(token.amountPerDay) * 7;
+                                  return (
+                                    <p key={i} className={i === 0 ? 'mb-0' : ''}>
+                                      {formatTokenAmount(amount7d, 0)} {token.symbol}
+                                    </p>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* APR */}
+                          <div className="flex flex-col gap-1">
+                            <p className="text-[#10B981] tabular-nums">{formatPercent(positionAPR)}</p>
+                          </div>
+                        </div>
+
+                        {/* RangeBand Row */}
+                        <div className="px-6 pb-7">
+                          <RangeBandPositionBar
+                            minPrice={minPrice}
+                            maxPrice={maxPrice}
+                            currentPrice={currentPrice}
+                            status={position.status}
+                            pairLabel={poolLabel}
+                            strategyLabel={getStrategyLabel(minPrice, maxPrice, currentPrice)}
+                          />
+                        </div>
+
+                        {/* Universe Link */}
+                        <div className="px-6 pb-5 pt-2 border-t border-white/5">
+                          <Link href={universeLink} className="inline-flex items-center gap-2 text-[#1BE8D2] hover:underline text-sm">
+                            View Pool Universe →
+                          </Link>
+                        </div>
+                      </div>
                     );
-                  })}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-white/15 px-6 py-10 text-center text-sm text-white/70">
-                No active LP positions detected for this wallet.
+                  })
+                )}
               </div>
-            )}
-          </div>
-        </section>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div>
+              <div className="mb-8">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h2 className="text-white/95">Portfolio Performance & Analytics</h2>
+                      <Badge className="bg-[#3B82F6]/20 text-[#3B82F6] border-[#3B82F6]/30 text-xs">
+                        Pro
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-white/70 text-sm">
+                        Premium view · Aggregated performance across all your LP positions.
+                      </p>
+                      <Badge variant="outline" className="text-[#10B981] border-[#10B981]/30 text-xs">
+                        Data status: Live
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#0F1A36]/95 p-12 text-center">
+                <h3 className="mb-2 text-lg font-medium text-white">Performance Analytics</h3>
+                <p className="text-white/50">Detailed performance charts coming soon.</p>
+              </div>
+            </div>
+          )}
+        </>
       )}
+
+      {/* Golden Wallets / Context Sidebar would go here if layout allowed side-by-side */}
     </main>
   );
 }
 
-export default WalletProPage;
+function ArrowRight({ className }: { className?: string }) {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      width="24" 
+      height="24" 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      className={className}
+    >
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
+  );
+}

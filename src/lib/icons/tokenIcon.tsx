@@ -2,7 +2,7 @@ import React from 'react';
 import Image from 'next/image';
 import type { Address } from 'viem';
 
-import { canonicalSymbol } from './symbolMap';
+import { canonicalSymbol, iconCandidates } from './symbolMap';
 import { TOKEN_ASSETS } from '@/lib/assets';
 
 export type TokenIconProps = {
@@ -15,14 +15,27 @@ export type TokenIconProps = {
 
 function buildIconCandidates(symbol?: string | null, address?: string | null): string[] {
   const canonical = canonicalSymbol(symbol);
-  const slug = canonical ? canonical.toLowerCase() : 'unknown';
-  const params = new URLSearchParams();
-  if (address) {
-    params.set('address', address.toString());
+  const localCandidates = iconCandidates(symbol);
+  
+  // First try local icons from public/media/tokens
+  const candidates: string[] = [];
+  if (localCandidates.length > 0) {
+    candidates.push(...localCandidates);
   }
-  const query = params.toString();
-  const apiPath = `/api/token-icons/${encodeURIComponent(slug || 'unknown')}${query ? `?${query}` : ''}`;
-  return [apiPath, TOKEN_ASSETS.default];
+  
+  // Fallback to API endpoint if address is provided
+  if (address) {
+    const slug = canonical ? canonical.toLowerCase() : 'unknown';
+    const params = new URLSearchParams();
+    params.set('address', address.toString());
+    const apiPath = `/api/token-icons/${encodeURIComponent(slug || 'unknown')}?${params.toString()}`;
+    candidates.push(apiPath);
+  }
+  
+  // Final fallback to default icon
+  candidates.push(TOKEN_ASSETS.default);
+  
+  return candidates;
 }
 
 export function TokenIcon({
