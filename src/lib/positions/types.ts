@@ -39,6 +39,10 @@ export interface PositionClaimToken {
 
 export interface PositionRow {
   tokenId: string;
+  /** Composite identity to avoid cross-DEX collisions. */
+  positionKey?: string;
+  /** NFPM contract address associated with this position. */
+  nfpm?: string;
   dex: 'enosys-v3' | 'sparkdex-v3';
   poolAddress: string;
   pair: { symbol0: string; symbol1: string; feeBps: number };
@@ -76,12 +80,33 @@ export interface PositionRow {
   rangeMin?: number;
   rangeMax?: number;
   currentPrice?: number;
+  valuationMode?:
+    | 'stable_pair_spot_truth'
+    | 'registry_fallback'
+    | 'external_price'
+    | 'unpriced_null';
+  valuationWarnings?: string[];
+  effectivePrice0Usd?: number | null;
+  effectivePrice1Usd?: number | null;
+  pricingSource0?: string;
+  pricingSource1?: string;
+  /** Debug-only fields surfaced when debug=1 */
+  stableSide?: 'token0' | 'token1';
+  price01?: number | null;
+  price10?: number | null;
+  /** Enrichment status and warnings for degraded data paths. */
+  enrichmentStatus?: 'ok' | 'partial' | 'failed';
+  warnings?: string[];
   token0Icon?: string;
   token1Icon?: string;
   incentivesToken?: string;
   incentivesTokenAmount?: number;
   liquidityShare?: number;
   dailyFeesUsd?: number;
+  amount0?: number;
+  amount1?: number;
+  fee0?: number;
+  fee1?: number;
   dailyIncentivesUsd?: number;
   isDemo?: boolean;
 }

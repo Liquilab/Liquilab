@@ -1,22 +1,17 @@
-'use client';
+import type { GetServerSideProps } from 'next';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+const PortfolioRedirect = () => null;
 
-type PositionRow = {
-  token_id: string;
-  owner_address: string | null;
-  pool_address: string | null;
-  first_block: number | null;
-  last_block: number | null;
-};
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: {
+    destination: '/wallet',
+    permanent: false,
+  },
+});
 
-type ApiResponse = {
-  items: PositionRow[];
-  page: number;
-  per: number;
-  total: number;
-};
+export default PortfolioRedirect;
 
+<<<<<<< HEAD
 const formatAddress = (value?: string | null) => {
   if (!value) return '—';
   const normalized = value.toLowerCase();
@@ -230,3 +225,5 @@ export default function PortfolioPage() {
     </main>
   );
 }
+=======
+>>>>>>> a54508f7 (chore: stabilize pricing and wallet parity)

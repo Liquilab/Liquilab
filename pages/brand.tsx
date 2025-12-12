@@ -1,80 +1,15 @@
-'use client';
+import type { GetServerSideProps } from 'next';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/router';
-import Head from 'next/head';
+const BrandRedirect = () => null;
 
-import Header from '@/components/Header';
-import PoolsTable, { type PoolsTableItem } from '@/components/pools/PoolsTable';
-import PremiumCard from '@/components/pricing/PremiumCard';
-
-const THEME_OPTIONS = [
-  { value: 'v2-dark', label: 'Fresh Oceanic' },
-  { value: 'v2-blond', label: 'Light Wave' },
-] as const;
-
-type ThemeValue = (typeof THEME_OPTIONS)[number]['value'];
-
-const ACCENT_OPTIONS = [
-  { value: 'default', label: 'Electric Blue' },
-  { value: 'wavecyan', label: 'Wave Cyan' },
-] as const;
-
-const THEME_TOKENS: Record<
-  ThemeValue,
-  {
-    label: string;
-    cssVars: Record<string, string>;
-    surfaces: Array<{ name: string; var: string; description: string }>;
-    interactions: Array<{ name: string; var: string; description: string }>;
-  }
-> = {
-  'v2-dark': {
-    label: 'Fresh Oceanic',
-    cssVars: {
-      '--brand-surface': 'rgba(11, 21, 48, 0.92)',
-      '--brand-surface-quiet': 'rgba(11, 21, 48, 0.82)',
-      '--brand-border': 'rgba(255,255,255,0.10)',
-      '--brand-text': '#F8FAFF',
-      '--brand-subtext': 'rgba(255,255,255,0.65)',
-      '--brand-divider': 'rgba(255,255,255,0.06)',
-      '--brand-background': '#05070C',
-    },
-    surfaces: [
-      { name: 'Card / Surface', var: 'var(--brand-surface)', description: 'Primary glass surface' },
-      { name: 'Card Quiet', var: 'var(--brand-surface-quiet)', description: 'Nested content blocks' },
-      { name: 'Divider', var: 'var(--brand-divider)', description: '1px separators' },
-    ],
-    interactions: [
-      { name: 'Primary', var: 'var(--cta-base)', description: 'Electric Blue button' },
-      { name: 'Primary Hover', var: 'var(--cta-hover)', description: 'Hover state' },
-      { name: 'Accent', var: 'var(--accent)', description: 'Accent-only pills / icons' },
-    ],
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: {
+    destination: '/',
+    permanent: false,
   },
-  'v2-blond': {
-    label: 'Light Wave',
-    cssVars: {
-      '--brand-surface': 'rgba(255,255,255,0.82)',
-      '--brand-surface-quiet': 'rgba(255,255,255,0.72)',
-      '--brand-border': 'rgba(15,19,36,0.12)',
-      '--brand-text': '#0B1530',
-      '--brand-subtext': 'rgba(11,21,48,0.64)',
-      '--brand-divider': 'rgba(11,21,48,0.12)',
-      '--brand-background': '#F3F8FF',
-    },
-    surfaces: [
-      { name: 'Card / Surface', var: 'var(--brand-surface)', description: 'Bright glass surface' },
-      { name: 'Card Quiet', var: 'var(--brand-surface-quiet)', description: 'Nested content blocks' },
-      { name: 'Divider', var: 'var(--brand-divider)', description: '1px separators' },
-    ],
-    interactions: [
-      { name: 'Primary', var: 'var(--cta-base)', description: 'Electric Blue button' },
-      { name: 'Primary Hover', var: 'var(--cta-hover)', description: 'Hover state' },
-      { name: 'Accent', var: 'var(--accent)', description: 'Accent-only pills / icons' },
-    ],
-  },
-};
+});
 
+<<<<<<< HEAD
 type BrandSnapshotEntry = {
   dex: string;
   pair: {
@@ -957,3 +892,6 @@ export default function BrandSystemPage() {
     </>
   );
 }
+=======
+export default BrandRedirect;
+>>>>>>> a54508f7 (chore: stabilize pricing and wallet parity)

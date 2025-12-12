@@ -42,12 +42,25 @@ const ALLOW = [
 export function middleware(req: NextRequest) {
   const isProd = process.env.NODE_ENV === 'production';
   const off = process.env.PLACEHOLDER_OFF === '1';
+  const { pathname } = req.nextUrl;
+
+  if (
+    pathname === '/koen' ||
+    pathname.startsWith('/koen/') ||
+    pathname === '/summary' ||
+    pathname.startsWith('/summary/')
+  ) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/';
+    url.search = '';
+    return withSecurityHeaders(NextResponse.redirect(url));
+  }
+
   if (!isProd || off) return withSecurityHeaders(NextResponse.next());
 
   const pass = process.env.PLACEHOLDER_PASS;
   if (!pass) return withSecurityHeaders(NextResponse.next());
 
-  const { pathname } = req.nextUrl;
   if (ALLOW.some((r) => r.test(pathname))) return withSecurityHeaders(NextResponse.next());
 
   const cookie = req.cookies.get('ll_pass')?.value;

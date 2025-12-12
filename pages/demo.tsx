@@ -1,10 +1,15 @@
-'use client';
+import type { GetServerSideProps } from 'next';
 
-import Head from 'next/head';
+const DemoRedirect = () => null;
 
-import Header from '@/components/Header';
-import NetworkMetrics from '@/components/demo/NetworkMetrics';
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: {
+    destination: '/',
+    permanent: false,
+  },
+});
 
+<<<<<<< HEAD
 export default function DemoPage() {
   return (
     <>
@@ -26,3 +31,6 @@ export default function DemoPage() {
     </>
   );
 }
+=======
+export default DemoRedirect;
+>>>>>>> a54508f7 (chore: stabilize pricing and wallet parity)

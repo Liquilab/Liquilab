@@ -1,33 +1,17 @@
-'use client';
+import type { GetServerSideProps } from 'next';
 
-import React from 'react';
-import Head from 'next/head';
-import { useRouter } from 'next/router';
-import { useAccount } from 'wagmi';
-import { useQuery } from '@tanstack/react-query';
+const DashboardRedirect = () => null;
 
-import Header from '@/components/Header';
-import WalletConnect from '@/components/WalletConnect';
-import PricingCalculator from '@/components/billing/PricingCalculator';
-import { PoolsGrid } from '@/components/pools/PoolsGrid';
-import { Hero } from '@/components/hero/Hero';
-import { DemoPools } from '@/components/demo/DemoPools';
-import ScreenshotButton from '@/components/utils/ScreenshotButton';
-import {
-  RoleOverrideToggle,
-  formatRoleLabel,
-  getRoleFlags,
-  normalizeRoleParam,
-  type RoleOverride,
-} from '@/components/dev/RoleOverrideToggle';
-import type { PositionsResponse, PositionsSummaryPayload, PositionRow } from '@/lib/positions/types';
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: {
+    destination: '/',
+    permanent: false,
+  },
+});
 
-const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/i;
-const FALLBACK_ENTITLEMENTS: PositionRow['entitlements'] = {
-  role: 'VISITOR',
-  flags: { premium: false, analytics: false },
-};
+export default DashboardRedirect;
 
+<<<<<<< HEAD
 export default function DashboardPage() {
   const { address } = useAccount();
   const [showUpgrade, setShowUpgrade] = React.useState(false);
@@ -193,3 +177,5 @@ function safeEntitlements(ent?: PositionRow['entitlements'] | PositionsSummaryPa
     },
   };
 }
+=======
+>>>>>>> a54508f7 (chore: stabilize pricing and wallet parity)

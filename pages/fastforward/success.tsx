@@ -1,7 +1,8 @@
-import Head from 'next/head';
+import type { GetServerSideProps } from 'next';
 
-import Header from '@/components/Header';
+const FastForwardSuccessRedirect = () => null;
 
+<<<<<<< HEAD
 export default function FastForwardSuccessPage() {
   return (
     <>
@@ -27,3 +28,13 @@ export default function FastForwardSuccessPage() {
     </>
   );
 }
+=======
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: {
+    destination: '/fastforward/pay?status=success',
+    permanent: false,
+  },
+});
+
+export default FastForwardSuccessRedirect;
+>>>>>>> a54508f7 (chore: stabilize pricing and wallet parity)

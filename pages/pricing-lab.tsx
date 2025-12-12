@@ -1,17 +1,8 @@
-'use client';
+import type { GetServerSideProps } from 'next';
 
-import Head from 'next/head';
-import { useRouter } from 'next/router';
-import { useAccount } from 'wagmi';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+const PricingLabRedirect = () => null;
 
+<<<<<<< HEAD
 import Header from '@/components/Header';
 import WalletConnect from '@/components/WalletConnect';
 import PackStepper from '@/components/pricing/PackStepper';
@@ -828,3 +819,13 @@ export default function PricingLabPage() {
     </>
   );
 }
+=======
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: {
+    destination: '/pricing',
+    permanent: false,
+  },
+});
+
+export default PricingLabRedirect;
+>>>>>>> a54508f7 (chore: stabilize pricing and wallet parity)

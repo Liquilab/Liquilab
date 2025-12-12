@@ -1,16 +1,24 @@
-'use client';
+import type { GetServerSideProps } from 'next';
 
+<<<<<<< HEAD
 import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Header from '@/components/Header';
 import { formatEUR, calcPoolsCost, calcNotifCost, calcTotal } from '@/lib/pricing';
+=======
+const SalesRedirect = () => null;
+>>>>>>> a54508f7 (chore: stabilize pricing and wallet parity)
 
-export default function SalesPage() {
-  const router = useRouter();
-  const { paidPools, addNotifications } = router.query;
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: {
+    destination: '/sales/offer',
+    permanent: false,
+  },
+});
 
+<<<<<<< HEAD
   const pools = Number(paidPools) || 5;
   const notifications = addNotifications === '1';
 
@@ -106,6 +114,9 @@ export default function SalesPage() {
     </>
   );
 }
+=======
+export default SalesRedirect;
+>>>>>>> a54508f7 (chore: stabilize pricing and wallet parity)
 
 
 

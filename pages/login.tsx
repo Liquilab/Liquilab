@@ -1,23 +1,15 @@
-import { useState } from 'react'
-import { useRouter } from 'next/router'
+import type { GetServerSideProps } from 'next';
 
-export default function Login() {
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
+const LoginRedirect = () => null;
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify({ password }),
-    })
-    if (res.ok) router.push('/')
-    else setError('Wrong password')
-  }
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: {
+    destination: '/connect',
+    permanent: false,
+  },
+});
 
+<<<<<<< HEAD
   return (
     <main className="min-h-screen flex items-center justify-center bg-[#0A0F1C] text-white">
       <form onSubmit={onSubmit} className="w-[92%] max-w-[380px] rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
@@ -42,3 +34,6 @@ export default function Login() {
     </main>
   )
 }
+=======
+export default LoginRedirect;
+>>>>>>> a54508f7 (chore: stabilize pricing and wallet parity)
