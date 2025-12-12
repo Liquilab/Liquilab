@@ -99,6 +99,7 @@
   - `PositionTransfer` — ERC721 transfers across owners.  
   - `SyncCheckpoint` — per-stream progress (keys: `NPM:global`, `FACTORY:enosys|sparkdex`, `POOLS:all`, etc).  
   - `analytics_market`, `analytics_position`, `analytics_position_snapshot`, `metrics_daily_*` — derived KPI tables for TVL, APY, wallet adoption.  
+  - `PoolIncentiveSnapshot` — current incentive rates per pool (rFLR, APS, etc.).  
   - Supporting tables: `PoolStateSnapshot`, `PositionSnapshot`, `User`, `Wallet`.
 - **Relationships:**  
   - Factory events discover pools (`PoolCreated` → `PoolEvent.pool`).  
@@ -112,6 +113,7 @@
 
 ---
 
+<<<<<<< HEAD
 ## 4. Environment Variables
 - **RPC:**  
   - `FLARE_RPC_URL` (primary; e.g. `https://rpc.ankr.com/flare/<apiKey>`).  
@@ -1617,3 +1619,42 @@ See archives in /docs/changelog/.
   - Pool routes now consistent: `/pool/[poolAddress]` (index) and `/pool/[poolAddress]/universe` (universe view).
   - Merged `/api/analytics/pool/[id].ts` into `/api/analytics/pool/[poolAddress].ts` with `?simple=true` query parameter for simple pool data; deleted conflicting `[id].ts` API route. Updated `fetchPool()` to use `?simple=true` parameter.
   - Verified all pool routes (pages and API) consistently use `[poolAddress]` as the dynamic segment; no `[id]` routes remain. If Next.js error persists, clear `.next` build cache.
+=======
+## Changelog — 2025-12-12 (PHASE2-WALLET-PRO-UI-PORT)
+- **PHASE2-WALLET-PRO-UI-PORT:** Ported Wallet Pro "My Positions" page to match figma/src/pages/WalletOverviewPro.tsx pixel-perfect layout. Updated tabs with gradient underline (from-[#3B82F6] to-[#1BE8D2]), added List/Grid toggle buttons matching Figma, refactored table structure to match PoolTableRow exactly (grid-cols-[2fr_1fr_1fr_1fr_1fr], exact spacing/padding). RangeBandPositionBar updated to match Figma "list" variant (centered line with width based on strategy %, dot marker, min/max prices under ends, current price centered). Table rows use positionKey for keys to prevent cross-DEX collisions. No data pipeline changes; UI-only port. Verified npm run build passes; PRO wallet shows positions with correct layout; PREMIUM gating unchanged.
+- **Files Modified:** `src/components/wallet/WalletProPage.tsx` (UI layout port), `src/components/wallet/RangeBandPositionBar.tsx` (Figma list variant), `PROJECT_STATE.md` (this entry).
+
+## Changelog — 2025-12-12 (PHASE3-WALLET-PRO-DATA)
+- **PHASE3-WALLET-PRO-DATA:** Data-only hardening for Wallet Pro positions. Added per-DEX counters/logs (mapped/partial/failed, fees/incentives/range stats); TVL/fees now compute with slot0 + feeGrowth deltas per position; incentives tracked per DEX with explicit null warnings; rangeband inversion guard and warnings; pricing pipeline now uses registry hard prices + stablecoins + CoinGecko/Ankr/DefiLlama with cache hit logs and missing-price warnings. No UI changes.
+- **Files Modified:** `pages/api/positions.ts` (data robustness/logging), `src/lib/pricing/prices.ts` (registry + cache logging).
+
+## Changelog — 2025-12-11 (SP3-WALLET-PRO My Positions Design Align)
+- **SP3-WALLET-PRO-MY-POSITIONS:** Aligned Wallet Pro "My Positions" view with Figma Portfolio Pro design. Changed page title to "Portfolio Pro" with "Pro" badge. Added tab navigation: "My Positions" (active) and "Performance & Analytics (Pro)" (inactive placeholder). Implemented sort bar above table with Select dropdown (Health Status, TVL, APR, Unclaimed Fees). Refactored positions table to match Figma structure: grid layout with columns (Pool specifications, TVL, Unclaimed fees, Incentives, APR), RangeBand visual per row styled as horizontal line with end ticks and current-price marker, "View Pool Universe →" link per row routing to correct pool address/slug. Removed water-wave background overlay for wallet content (changed pages/wallet/index.tsx to use clean dark background #0B1221 instead of WaveBackground). All table rows derived from live usePositions data via getWalletPortfolioAnalytics; no static demo pools. RangeBandPositionBar updated to match Figma styling (centered band, end ticks, current-price dot with glow animation for in-range). Sort functionality implemented (health status priority, TVL/APR/fees descending). Empty state shows "No Active Positions" with CTA to explore Pool Universe. Build passes successfully.
+- **Files Modified:** `src/components/wallet/WalletProPage.tsx` (complete refactor), `src/components/wallet/RangeBandPositionBar.tsx` (styling update), `pages/wallet/index.tsx` (background change), `PROJECT_STATE.md` (this entry).
+
+## Changelog — 2025-12-11T14:00 CET
+- SP2-FE-POOL-UNIVERSE: Rebuilt Pool Universe frontend for /pool/[tokenId] to match SP2 Universe specification. Implemented complete Rustig layout with: (1) Universe head with 6 KPI tiles (TVL, Fees 24h/7d, Incentives 7d, Positions, Wallets, APR) + time-range toggle (24h/7d/30d/90d), (2) Liquidity Venues table (DEX, Fee Tier, TVL, Fees, Incentives, APR, Positions, Wallets), (3) LP Population section (positions/wallets counts, positions-per-wallet ratio, DEX distribution), (4) RangeBand™ Yield & Efficiency section (total APR, yield composition band), (5) Wallet Flows & Notable Moves section (placeholder for future flows data), (6) Pool Intel — Web Signals section (wired to PoolIntelCard), (7) Context Card with smart-static insights (Market Structure, Yield Drivers, Participant Behavior). All sections handle loading/empty/degrade states gracefully. Universe head APR calculation: 24h→365×, 7d→52× (30d/90d use 7d proxy). Components use real analytics data from /api/analytics/pool/[id] SSoT. Updated src/lib/analytics/db.ts to include fees24hUsd and incentives7dUsd in segments. Route supports both pool addresses and pair slugs (e.g., /pool/stxrp-fxrp). All 7 golden pools verified to render without React errors.
+
+---
+
+Zet bijvoorbeeld deze TODO-sectie in je PROJECT_STATE.md:
+
+### TODO — Ecosystem intel (Enosys & SparkDEX Telegram)
+
+Doel  
+Integreren van live community context door een simpele Telegram-integratie (of mock) die de laatste officiële aankondigingen ophaalt voor de pool card.
+
+Technische richting  
+- Gebruik de `WebSearch` tool of een eenvoudige scraping-API (server-side, cached) om de laatste 1-2 berichten uit publieke kanalen te halen.
+- Fallback naar een statische "ecosystem update" lijst (JSON in repo) die we handmatig of via cron updaten.
+- Presenteren in de "Pool Intel" kaart als "Latest Signal".
+
+Status  
+[ ] Concept uitwerken in SP3.  
+[ ] API-route `/api/intel/telegram` opzetten.  
+[ ] Frontend component `TelegramSignalWidget`.
+
+---
+
+[End of State]
+>>>>>>> 931d7f17 (Improve wallet positions data robustness and pricing coverage)
