@@ -6,18 +6,26 @@ import Link from 'next/link';
 import { Navigation } from '@/components/Navigation';
 import { WaveBackground } from '@/components/WaveBackground';
 import Footer from '@/components/Footer';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/badge';
 import { GlobalCtaButton } from '@/components/GlobalCtaButton';
-import { Check, Minus, Info, Gauge, TrendingUp, Building2, ArrowRight, Sparkles } from 'lucide-react';
+import { Check, Minus, Info, Gauge, ArrowRight, Sparkles } from 'lucide-react';
 import { pricingConfig } from '@/lib/billing/pricing';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-// Import Icons properly if they exist, else use Lucide
-const SparklesIcon = Sparkles; 
+const SparklesIcon = Sparkles;
+
+// Safe accessors for pricing config
+const getPremium = () => pricingConfig?.premium ?? { priceMonthlyUsd: 14.95, includedPools: 5, extraBundlePriceUsd: 9.95, extraBundlePools: 5 };
+const getPro = () => pricingConfig?.pro ?? { priceMonthlyUsd: 24.95, includedPools: 5, extraBundlePriceUsd: 14.95, extraBundlePools: 5 };
+const getAlerts = () => pricingConfig?.rangebandAlerts ?? { priceMonthlyUsdPerBundle: 2.49, bundlePools: 5 };
 
 // Comparison Table Component
 function ComparisonTable() {
+  const premiumPlan = getPremium();
+  const proPlan = getPro();
+  const rangebandAlerts = getAlerts();
+
   const FeatureRow = ({ 
     feature, 
     premium, 
@@ -223,7 +231,7 @@ function ComparisonTable() {
           <SectionHeader title="Alerts & Reports" />
           <FeatureRow
             feature="RangeBand™ alerts"
-            premium={`+$${pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle}/5 pools`}
+            premium={`+$${rangebandAlerts.priceMonthlyUsdPerBundle}/5 pools`}
             pro="Included"
             enterprise="Included + custom"
             tooltip="Real-time notifications when positions move out of range or fees are ready to claim"
@@ -247,20 +255,20 @@ function ComparisonTable() {
           <SectionHeader title="Billing & usage" />
           <FeatureRow
             feature="Included pools"
-            premium={`${pricingConfig.premium.includedPools} pools + bundles`}
-            pro={`${pricingConfig.pro.includedPools} pools + bundles`}
+            premium={`${premiumPlan.includedPools} pools + bundles`}
+            pro={`${proPlan.includedPools} pools + bundles`}
             enterprise="Custom limits"
           />
           <FeatureRow
             feature="Additional pool bundles"
-            premium={`+$${pricingConfig.premium.extraBundlePriceUsd} per ${pricingConfig.premium.extraBundlePools} pools`}
-            pro={`+$${pricingConfig.pro.extraBundlePriceUsd} per ${pricingConfig.pro.extraBundlePools} pools`}
+            premium={`+$${premiumPlan.extraBundlePriceUsd} per ${premiumPlan.extraBundlePools} pools`}
+            pro={`+$${proPlan.extraBundlePriceUsd} per ${proPlan.extraBundlePools} pools`}
             enterprise="Custom pricing"
             tooltip="Expand your monitoring capacity by adding bundles of 5 pools"
           />
           <FeatureRow
             feature="RangeBand™ Alerts pricing"
-            premium={`+$${pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle}/month per ${pricingConfig.rangebandAlerts.bundlePools} pools`}
+            premium={`+$${rangebandAlerts.priceMonthlyUsdPerBundle}/month per ${rangebandAlerts.bundlePools} pools`}
             pro="Included"
             enterprise="Included"
           />
@@ -280,8 +288,9 @@ function ComparisonTable() {
 }
 
 export default function PricingPage() {
-  const premiumPlan = pricingConfig.premium;
-  const proPlan = pricingConfig.pro;
+  const premiumPlan = getPremium();
+  const proPlan = getPro();
+  const rangebandAlerts = getAlerts();
 
   const plans = [
     {
@@ -427,9 +436,7 @@ export default function PricingPage() {
                   Contact sales
                 </Button>
               ) : (
-                <GlobalCtaButton 
-                  className="mt-4 w-full"
-                />
+                <GlobalCtaButton className="mt-4 w-full" />
               )}
             </div>
           ))}
@@ -456,7 +463,7 @@ export default function PricingPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-4 mb-1">
                   <span className="font-ui text-white/95 text-2xl font-mono numeric">
-                    ${pricingConfig.rangebandAlerts.priceMonthlyUsdPerBundle}
+                    ${rangebandAlerts.priceMonthlyUsdPerBundle}
                   </span>
                   <span className="font-ui text-white/40">per 5 pools</span>
                   <Button variant="ghost" className="h-8 px-3 text-xs border-[#1BE8D2] text-[#1BE8D2] hover:bg-[#1BE8D2]/10 font-ui">

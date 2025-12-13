@@ -1,156 +1,152 @@
 import { useState } from 'react';
-import Link from 'next/link';
-import Header from '../src/components/Header';
+import Head from 'next/head';
+import Navigation from '@/components/Navigation';
+import { WaveBackground } from '@/components/WaveBackground';
+import Footer from '@/components/Footer';
+import { ChevronDown, MessageCircle, Mail } from 'lucide-react';
 
 interface FAQItem {
   question: string;
   answer: string;
+  category: 'general' | 'rangeband' | 'billing';
 }
 
 const faqData: FAQItem[] = [
   {
-    question: "What is Liqui LP Manager?",
-    answer: "Liqui is a liquidity pool intelligence platform specifically built for Uniswap V3 positions on the Flare Network. It provides real-time tracking of your LP positions, automatic calculations of fees and rewards (including RFLR incentives), and comprehensive analytics to help you make informed decisions about your liquidity provision strategy."
+    question: "What is Liquilab?",
+    answer: "Liquilab is a portfolio intelligence platform for concentrated liquidity positions on Flare Network. It provides real-time tracking, RangeBand™ health monitoring, and comprehensive analytics for your positions on Ēnosys and SparkDEX.",
+    category: 'general',
   },
   {
     question: "How do I connect my wallet?",
-    answer: "Click the 'Connect Wallet' button in the top right corner of the page. We support MetaMask and WalletConnect. Make sure you're connected to the Flare Network. Once connected, the app will automatically discover all your Uniswap V3 LP positions."
+    answer: "Click the 'Connect Wallet' button in the navigation bar. We support MetaMask and WalletConnect. Make sure you're connected to Flare Network. Once connected, the app will automatically discover all your V3 LP positions.",
+    category: 'general',
   },
   {
-    question: "What does 'Liquidity Removed' mean?",
-    answer: "When you decrease or remove liquidity from your position, this is shown as 'Liquidity Removed'. This action automatically collects any pending fees and returns them along with your liquidity. The collected fees are included in the USD Delta shown for the transaction, but are not displayed as a separate 'Fees Claimed' event."
+    question: "What is RangeBand™?",
+    answer: "RangeBand™ is our visual health indicator for concentrated liquidity positions. It shows your position's price range, current market price, and status (In Range, Near Band, or Out of Range) at a glance, helping you decide when to rebalance.",
+    category: 'rangeband',
   },
   {
-    question: "What does 'Fees Claimed' mean?",
-    answer: "Fees Claimed refers to standalone fee collection events where you explicitly claim accumulated fees and incentives (like RFLR rewards) WITHOUT removing liquidity. This is different from the automatic fee collection that happens when you decrease liquidity."
+    question: "What do the RangeBand™ colors mean?",
+    answer: "Green (In Range) means your position is earning fees. Yellow (Near Band) means the price is approaching your range edge—consider rebalancing soon. Red (Out of Range) means you're not earning fees until you rebalance.",
+    category: 'rangeband',
   },
   {
-    question: "What are RFLR Incentives?",
-    answer: "RFLR (Reward FLR) are incentive rewards distributed by the Flare Network to liquidity providers. These rewards are separate from trading fees and are designed to incentivize liquidity provision. RFLR rewards accrue over time and are shown in the 'Incentives' column. They can be claimed via the Flare Portal at the end of each month."
+    question: "Can Liquilab modify my positions?",
+    answer: "No. Liquilab is a monitoring dashboard only. All liquidity management actions (claim fees, increase/decrease liquidity, rebalance) happen directly on Ēnosys or SparkDEX. We provide quick links to the DEX for convenience.",
+    category: 'general',
   },
   {
-    question: "When should I claim my fees?",
-    answer: "The optimal time to claim fees depends on gas costs vs accumulated fees. Liqui shows a green 'Claim' button when your unclaimed fees exceed $5 USD (recommended threshold) and a yellow button for $1-$5 (marginal). Below $1, the button is disabled (grey) as gas costs likely exceed the value. For maximum efficiency, claim when fees are >$5 or when you're removing liquidity anyway (which auto-collects fees). Remember: fees are already earning yield in the pool, so there's no urgency unless you need the funds."
+    question: "What are RFLR incentives?",
+    answer: "RFLR (Reward FLR) are incentive rewards distributed by Flare Network to liquidity providers. These are separate from trading fees and accrue over time. They can be claimed via the Flare Portal at the end of each distribution period.",
+    category: 'general',
   },
   {
-    question: "What&apos;s the difference between Active and Inactive pools?",
-    answer: "Active pools have their current price within the set price range, meaning they actively provide liquidity for trades and earn swap fees. Inactive (Out of Range) pools have their current price outside the set range, so they don&apos;t earn swap fees but may still earn RFLR incentive rewards."
+    question: "What's included in Premium vs Pro?",
+    answer: "Premium includes portfolio tracking for up to 5 pools with RangeBand™ monitoring and basic analytics. Pro adds advanced features like fee projections, peer benchmarking, and priority support. Both include a 14-day free trial.",
+    category: 'billing',
   },
   {
-    question: "What does In Range vs Out of Range mean?",
-    answer: "In Range means the current market price falls within your position&apos;s price range, so your liquidity is being used for swaps and earning fees. Out of Range means the price has moved outside your range - your position is entirely in one token and not earning swap fees. You&apos;ll see a green blinking indicator for In Range and a red indicator for Out of Range."
-  },
-  {
-    question: "Why don&apos;t Inactive pools show any Fees?",
-    answer: "Inactive (Out of Range) pools don&apos;t earn trading fees because their liquidity isn&apos;t being used for swaps. The Fees column will show $0.00 for inactive pools. However, these pools may still earn RFLR incentive rewards, which are shown in the Incentives column."
-  },
-  {
-    question: "How is the USD value calculated?",
-    answer: "USD values are calculated using real-time token prices from CoinGecko and on-chain sources. For your LP positions, we calculate the total value of both tokens in your position at current market prices. The USD Delta shows the change in dollar value for specific actions like adding or removing liquidity."
-  },
-  {
-    question: "What happens when I remove liquidity?",
-    answer: "When you decrease (remove) liquidity, Uniswap V3 automatically collects all pending fees and returns them along with your liquidity tokens in a single transaction. This is more gas-efficient than claiming fees separately first. The total value (liquidity + fees) is shown in the USD Delta for the Liquidity Removed event."
-  },
-  {
-    question: "How do I view my pool&apos;s performance?",
-    answer: "Click on any pool from your homepage to view detailed performance metrics including total liquidity, accumulated fees, RFLR rewards, pool earnings history, and recent activity. You can also view your overall portfolio performance by clicking 'Portfolio Performance' in the header."
+    question: "How do I upgrade my plan?",
+    answer: "Visit the Pricing page and select your preferred plan. You can start with a 14-day free trial—no credit card required. After the trial, you'll be prompted to subscribe to continue using premium features.",
+    category: 'billing',
   },
   {
     question: "Is my data secure?",
-    answer: "Liqui is a read-only interface - we never ask for your private keys or have access to your funds. All data is fetched directly from the blockchain and your connected wallet. We do not store any sensitive information. Your positions remain completely under your control in your own wallet."
-  }
+    answer: "Yes. Liquilab is read-only—we never ask for private keys or have access to your funds. All data is fetched directly from the blockchain. Your positions remain completely under your control in your own wallet.",
+    category: 'general',
+  },
+  {
+    question: "Which DEXes are supported?",
+    answer: "Currently we support Ēnosys V3 and SparkDEX V3 on Flare Network. We're actively working on adding more protocols and chains based on user demand.",
+    category: 'general',
+  },
 ];
 
-export default function FAQ() {
+export default function FAQPage() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen">
-      <Header currentPage="faq" showTabs={false} />
+    <div className="min-h-screen relative text-white bg-[#0B1530]">
+      <Head>
+        <title>FAQ · Liquilab</title>
+        <meta name="description" content="Frequently asked questions about Liquilab, RangeBand™, and managing your liquidity positions." />
+      </Head>
       
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Header */}
-        <div className="mb-8">
-          <Link 
-            href="/" 
-            className="text-liqui-subtext hover:text-liqui-aqua transition-colors mb-4 inline-flex items-center gap-2"
-          >
-            ← Back to My Pools
-          </Link>
-          <h1 className="font-brand text-3xl font-bold text-white mt-4">Frequently Asked Questions</h1>
-          <p className="font-ui text-liqui-subtext mt-2">
-            Everything you need to know about managing your Uniswap V3 liquidity positions
-          </p>
-        </div>
+      <WaveBackground className="min-h-screen">
+        <Navigation />
+        
+        <div className="relative z-10 max-w-[900px] mx-auto px-4 lg:px-8 py-16">
+          {/* Header */}
+          <div className="text-center mb-16">
+            <h1 className="text-4xl sm:text-5xl font-brand text-white mb-4">
+              Frequently Asked Questions
+            </h1>
+            <p className="text-lg text-white/60 font-ui max-w-2xl mx-auto">
+              Everything you need to know about Liquilab and managing your liquidity positions.
+            </p>
+          </div>
 
-        {/* FAQ Items */}
-        <div className="space-y-4">
-          {faqData.map((item, index) => (
-            <div 
-              key={index}
-              className="bg-liqui-card border border-liqui-border rounded-lg overflow-hidden"
-            >
-              <button
-                onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-liqui-hover transition-colors"
+          {/* FAQ Items */}
+          <div className="space-y-3">
+            {faqData.map((item, index) => (
+              <div 
+                key={index}
+                className="bg-[#0F1A36]/95 border border-white/10 rounded-xl overflow-hidden"
               >
-                <span className="font-brand text-lg font-semibold text-white pr-4">
-                  {item.question}
-                </span>
-                <svg
-                  className={`w-5 h-5 text-liqui-subtext transition-transform ${
-                    openIndex === index ? 'rotate-180' : ''
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                <button
+                  onClick={() => setOpenIndex(openIndex === index ? null : index)}
+                  className="w-full px-6 py-5 text-left flex items-center justify-between hover:bg-white/5 transition-colors"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
+                  <span className="font-brand text-base sm:text-lg text-white/95 pr-4">
+                    {item.question}
+                  </span>
+                  <ChevronDown
+                    className={`size-5 text-white/50 transition-transform flex-shrink-0 ${
+                      openIndex === index ? 'rotate-180' : ''
+                    }`}
                   />
-                </svg>
-              </button>
-              
-              {openIndex === index && (
-                <div className="px-6 pb-4 font-ui text-liqui-subtext">
-                  {item.answer}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+                </button>
+                
+                {openIndex === index && (
+                  <div className="px-6 pb-5 font-ui text-white/70 text-sm sm:text-base leading-relaxed border-t border-white/5 pt-4">
+                    {item.answer}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
 
-        {/* Footer */}
-        <div className="mt-12 p-6 bg-liqui-card border border-liqui-border rounded-lg">
-          <h2 className="font-brand text-xl font-bold text-white mb-3">Still have questions?</h2>
-          <p className="font-ui text-liqui-subtext mb-4">
-            If you can&apos;t find the answer you&apos;re looking for, feel free to reach out:
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <a
-              href="https://discord.gg/flarenetwork"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 bg-liqui-aqua/10 text-liqui-aqua border border-liqui-aqua/20 rounded-lg hover:bg-liqui-aqua/20 transition-colors text-center"
-            >
-              Join Flare Discord
-            </a>
-            <a
-              href="https://twitter.com/FlareNetworks"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 bg-liqui-aqua/10 text-liqui-aqua border border-liqui-aqua/20 rounded-lg hover:bg-liqui-aqua/20 transition-colors text-center"
-            >
-              Follow on Twitter
-            </a>
+          {/* Contact Section */}
+          <div className="mt-16 bg-[#0F1A36]/95 border border-white/10 rounded-xl p-8 text-center">
+            <h2 className="text-2xl font-brand text-white mb-3">Still have questions?</h2>
+            <p className="font-ui text-white/60 mb-6 max-w-lg mx-auto">
+              Can't find what you're looking for? Reach out and we'll help you out.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <a
+                href="mailto:support@liquilab.io"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#3B82F6] hover:bg-[#2563EB] text-white font-brand px-6 py-3 text-sm font-medium transition"
+              >
+                <Mail className="size-4" />
+                Email Support
+              </a>
+              <a
+                href="https://discord.gg/flarenetwork"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 text-white/90 hover:border-white hover:text-white hover:bg-white/5 font-brand px-6 py-3 text-sm font-medium transition"
+              >
+                <MessageCircle className="size-4" />
+                Join Discord
+              </a>
+            </div>
           </div>
         </div>
-      </div>
+
+        <Footer />
+      </WaveBackground>
     </div>
   );
 }
-

@@ -11,7 +11,6 @@ import { InteractiveRangeBandExplainer } from '@/components/InteractiveRangeBand
 import { Badge } from '@/components/ui/badge';
 import Footer from '@/components/Footer';
 import { 
-  ArrowRight, 
   XCircle, 
   AlertTriangle, 
   CheckCircle2, 
@@ -481,37 +480,6 @@ export default function RangeBandPage() {
           </div>
         </div>
 
-        {/* Final CTA */}
-        <div className="bg-gradient-to-br from-[#3B82F6]/10 to-[#1BE8D2]/5 border border-[#3B82F6]/20 rounded-xl p-6 sm:p-12 text-center">
-          <h2 className="font-brand text-white/95 mb-4 text-3xl sm:text-[40px]">
-            Ready to try RangeBand™?
-          </h2>
-          <p className="font-ui text-white/70 mb-8 max-w-2xl mx-auto text-lg sm:text-[18px] leading-[1.6]">
-            Start monitoring your liquidity positions with intelligent range tracking. 
-            Available on Premium and Pro plans with 14-day free trial.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link
-              href="/pricing"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#3B82F6] hover:bg-[#3B82F6]/90 text-white font-ui px-8 py-6 h-auto text-base font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B82F6]"
-            >
-              View pools with RangeBand™
-              <ArrowRight className="size-5" />
-            </Link>
-            <Link
-              href="/pricing"
-              className="inline-flex items-center justify-center rounded-xl border border-white/20 text-white/95 hover:border-white hover:text-white hover:bg-white/5 font-ui px-8 py-6 h-auto text-base font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/80"
-            >
-              View pricing
-            </Link>
-          </div>
-          
-          <div className="mt-8 pt-8 border-t border-white/10">
-            <p className="font-ui text-white/[0.58]">
-              Join 500+ liquidity providers already using RangeBand™ • No credit card required
-            </p>
-          </div>
-        </div>
       </div>
       
       <Footer />

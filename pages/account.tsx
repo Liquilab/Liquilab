@@ -1,17 +1,13 @@
 import React from 'react';
 import Head from 'next/head';
-import { Navigation } from '@/components/Navigation';
+import Navigation from '@/components/Navigation';
 import { WaveBackground } from '@/components/WaveBackground';
 import Footer from '@/components/Footer';
-import Button from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/Button';
 import { GlobalCtaButton } from '@/components/GlobalCtaButton';
 import { CreditCard, Shield, Clock, Bell } from 'lucide-react';
-import { pricingConfig } from '@/lib/billing/pricing';
 
 export default function AccountPage() {
-  const premiumPlan = pricingConfig.premium;
-
   return (
     <div className="min-h-screen relative text-white bg-[#0B1530]">
       <Head>
@@ -19,29 +15,28 @@ export default function AccountPage() {
         <meta name="description" content="Manage your subscription and settings." />
       </Head>
       
-      <WaveBackground>
+      <WaveBackground className="min-h-screen">
         <Navigation />
         
         <div className="relative z-10 max-w-[1000px] mx-auto px-4 lg:px-8 py-12">
           <div className="mb-10">
-            <h1 className="text-3xl font-brand text-white mb-2">Account Settings</h1>
+            <h1 className="text-3xl font-brand text-white mb-2">Account</h1>
             <p className="text-white/60 font-ui">Manage your subscription and preferences.</p>
           </div>
 
           <div className="grid gap-8">
-            {/* Current Plan Card */}
+            {/* Subscription Card */}
             <div className="bg-[#0F1A36]/95 border border-white/10 rounded-xl p-8">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div>
-                  <h2 className="text-xl font-brand text-white mb-1 flex items-center gap-3">
-                    Current Plan
-                    <Badge variant="outline" className="bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/30">
-                      Free Visitor
-                    </Badge>
+                  <h2 className="text-xl font-brand text-white mb-1">
+                    Subscription
                   </h2>
-                  <p className="text-white/50 text-sm font-ui">You are currently on the free plan.</p>
+                  <p className="text-white/50 text-sm font-ui">No active subscription. Upgrade to Premium or Pro.</p>
                 </div>
-                <GlobalCtaButton className="w-full sm:w-auto" />
+                <GlobalCtaButton className="w-full sm:w-auto" href="/pricing">
+                  View plans
+                </GlobalCtaButton>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-[#0B1530]/50 rounded-lg border border-white/5">
@@ -50,8 +45,8 @@ export default function AccountPage() {
                     <CreditCard className="size-5 text-white/70" />
                   </div>
                   <div>
-                    <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Status</p>
-                    <p className="text-sm text-white font-ui">Active</p>
+                    <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Plan</p>
+                    <p className="text-sm text-white/60 font-ui">—</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -60,7 +55,7 @@ export default function AccountPage() {
                   </div>
                   <div>
                     <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Pool Limit</p>
-                    <p className="text-sm text-white font-ui">3 pools</p>
+                    <p className="text-sm text-white/60 font-ui">—</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -69,7 +64,7 @@ export default function AccountPage() {
                   </div>
                   <div>
                     <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Renewal</p>
-                    <p className="text-sm text-white font-ui">N/A</p>
+                    <p className="text-sm text-white/60 font-ui">—</p>
                   </div>
                 </div>
               </div>
@@ -96,7 +91,3 @@ export default function AccountPage() {
     </div>
   );
 }
-
-
-
-

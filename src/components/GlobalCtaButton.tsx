@@ -3,16 +3,16 @@ import Link from "next/link";
 
 type Props = {
   href?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
   target?: string;
   rel?: string;
   disabled?: boolean;
 };
 
-export default function GlobalCtaButton({
-  href,
-  children,
+export function GlobalCtaButton({
+  href = "/waitlist",
+  children = "Start free trial",
   className = "",
   target,
   rel,
@@ -49,3 +49,5 @@ export default function GlobalCtaButton({
     </Link>
   );
 }
+
+export default GlobalCtaButton;
