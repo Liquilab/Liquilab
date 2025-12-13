@@ -2,7 +2,6 @@ import React from 'react';
 import Head from 'next/head';
 import Navigation from '@/components/Navigation';
 import { WaveBackground } from '@/components/WaveBackground';
-import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/Button';
 import { GlobalCtaButton } from '@/components/GlobalCtaButton';
 import { CreditCard, Shield, Clock, Bell } from 'lucide-react';
@@ -85,8 +84,6 @@ export default function AccountPage() {
             </div>
           </div>
         </div>
-
-        <Footer />
       </WaveBackground>
     </div>
   );

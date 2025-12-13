@@ -5,7 +5,6 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Navigation } from '@/components/Navigation';
 import { WaveBackground } from '@/components/WaveBackground';
-import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/badge';
 import { GlobalCtaButton } from '@/components/GlobalCtaButton';
@@ -490,8 +489,6 @@ export default function PricingPage() {
           </div>
         </div>
       </div>
-      
-      <Footer />
     </div>
   );
 }

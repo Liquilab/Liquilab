@@ -1,9 +1,20 @@
-import React from "react";
+'use client';
+
+import React from 'react';
+import { RangeBand } from '@/components/pools/PoolRangeIndicator';
 
 export function InteractiveRangeBandExplainer() {
   return (
-    <div className="mt-6 rounded-2xl border border-white/10 p-6 text-sm opacity-80">
-      Explainer coming soon.
+    <div className="py-4">
+      <RangeBand 
+        min={2.00}
+        max={2.33}
+        current={2.03}
+        status="in"
+        token0Symbol="FXRP"
+        token1Symbol="USDT0"
+        explainer={true}
+      />
     </div>
   );
 }
