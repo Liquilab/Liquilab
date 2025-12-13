@@ -249,7 +249,7 @@ export function WalletProPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [activeTab, setActiveTab] = useState<'positions' | 'analytics'>('positions');
   const [sortBy, setSortBy] = useState<SortBy>('tvl');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
 
   const queryWallet =
     router.isReady && typeof router.query.wallet === 'string'
@@ -280,22 +280,49 @@ export function WalletProPage() {
     fetch(`/api/positions?address=${encodeURIComponent(effectiveAddress)}&debug=0`, { signal: controller.signal })
       .then(async (res) => {
         const json = await res.json();
-        const payload = json?.data ?? json;
-        const positions = Array.isArray(payload?.positions) ? payload.positions : [];
-        const summary = payload?.summary;
+        const payload = json && typeof json === 'object' && 'data' in json ? (json as { data: unknown }).data : json;
+        const rawPositions = Array.isArray((payload as any)?.positions) ? (payload as any).positions : null;
+
         if (process.env.NODE_ENV !== 'production') {
           console.log('[WalletProPage] positions fetch', {
             url: res.url,
             status: res.status,
-            keys: Object.keys(json ?? {}),
-            hasData: Boolean(json?.data),
-            positionsLength: positions.length,
+            topLevelKeys: Object.keys(json ?? {}),
+            payloadKeys: payload && typeof payload === 'object' ? Object.keys(payload as Record<string, unknown>) : null,
+            positionsType: Array.isArray(rawPositions) ? 'array' : typeof rawPositions,
+            positionsLength: Array.isArray(rawPositions) ? rawPositions.length : 'n/a',
           });
         }
+
         if (!res.ok) {
           throw new Error(`Failed to fetch positions (${res.status})`);
         }
-        return { positions, summary } as WalletPortfolioAnalytics;
+
+        if (!Array.isArray(rawPositions)) {
+          throw new Error('Unexpected /api/positions payload (missing positions array)');
+        }
+
+        const summaryPayload = payload && typeof payload === 'object' ? (payload as any).summary : undefined;
+        const summary =
+          summaryPayload && typeof summaryPayload === 'object'
+            ? summaryPayload
+            : {
+                address: effectiveAddress.toLowerCase(),
+                positionsCount: rawPositions.length,
+                poolsCount: 0,
+                activePositions: rawPositions.length,
+                totalTvlUsd: 0,
+                fees7dUsd: null,
+                lifetimeFeesUsd: null,
+              };
+
+        const meta = payload && typeof payload === 'object' ? (payload as any).meta : undefined;
+
+        return {
+          positions: rawPositions,
+          summary,
+          meta,
+        } as WalletPortfolioAnalytics;
       })
       .then((result) => {
         if (!isCurrent) return;

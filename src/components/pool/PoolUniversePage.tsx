@@ -737,23 +737,23 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
 
   // Extract data from response
   const pool = response?.pool;
-  const universe = (pool as Record<string, unknown>)?.universe as Record<string, unknown> | null;
-  const head = (pool as Record<string, unknown>)?.head as Record<string, unknown> | null;
-  const segments: PoolSegment[] = (universe?.segments as PoolSegment[]) ?? [];
+  const head = pool?.head ?? null;
+  const universe = pool?.universe ?? null;
+  const segments: PoolSegment[] = universe?.segments ?? [];
 
-  const pair = universe?.pair as Record<string, unknown> | null;
-  const summary = universe?.summary as Record<string, unknown> | null;
+  const pair = universe?.pair ?? null;
+  const summary = universe?.summary ?? null;
   
-  const token0Symbol = (pair?.token0Symbol as string) ?? null;
-  const token1Symbol = (pair?.token1Symbol as string) ?? null;
+  const token0Symbol = pair?.token0Symbol ?? null;
+  const token1Symbol = pair?.token1Symbol ?? null;
   const pairLabel = token0Symbol && token1Symbol ? `${token0Symbol} / ${token1Symbol}` : 'Pool';
 
   // Metrics
-  const tvlUsd = (summary?.tvlUsd as number) ?? (head?.tvl as number) ?? null;
-  const fees7dUsd = (summary?.fees7dUsd as number) ?? (head?.fees7d as number) ?? null;
-  const fees24hUsd = (summary?.fees24hUsd as number) ?? (head?.fees24h as number) ?? null;
-  const positionsCount = (summary?.positionsCount as number) ?? (head?.positionsCount as number) ?? null;
-  const walletsCount = (summary?.walletsCount as number) ?? null;
+  const tvlUsd = summary?.tvlUsd ?? head?.tvlUsd ?? null;
+  const fees7dUsd = summary?.fees7dUsd ?? head?.fees7dUsd ?? null;
+  const fees24hUsd = summary?.fees24hUsd ?? head?.fees24hUsd ?? null;
+  const positionsCount = summary?.positionsCount ?? head?.positionsCount ?? null;
+  const walletsCount = summary?.walletsCount ?? null;
 
   const lastUpdatedText = ts
     ? new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })

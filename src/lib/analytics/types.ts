@@ -189,6 +189,56 @@ export interface PoolSevenDayAprMetrics {
   tvlUsd: number | null;
 }
 
+// ---------------------------------------------------------------------------
+// Pool Universe (Phase 1) types
+// ---------------------------------------------------------------------------
+
+export interface AnalyticsPoolHead {
+  tvlUsd: number;
+  fees24hUsd: number;
+  fees7dUsd: number;
+  positionsCount: number;
+}
+
+export interface AnalyticsPoolUniversePair {
+  token0Symbol: string | null;
+  token1Symbol: string | null;
+}
+
+export interface AnalyticsPoolUniverseSummary {
+  tvlUsd: number;
+  fees24hUsd: number;
+  fees7dUsd: number;
+  positionsCount: number;
+  walletsCount: number;
+}
+
+export interface AnalyticsPoolUniverseSegment {
+  dex: string;
+  feeTierBps: number;
+  tvlUsd: number;
+  fees7dUsd: number;
+  positionsCount: number;
+}
+
+export interface AnalyticsPoolUniverse {
+  pair: AnalyticsPoolUniversePair;
+  summary: AnalyticsPoolUniverseSummary;
+  segments: AnalyticsPoolUniverseSegment[];
+}
+
+export interface AnalyticsPoolData {
+  head: AnalyticsPoolHead | null;
+  universe: AnalyticsPoolUniverse | null;
+}
+
+export interface AnalyticsPoolResponse {
+  ok?: boolean;
+  degrade?: boolean;
+  ts: number;
+  pool?: AnalyticsPoolData;
+}
+
 export interface PoolFeeApr7d {
   poolAddress: string;
   token0Symbol: string;

@@ -13,3 +13,8 @@ OK 2025-12-13T00:00 CET PR: /wallet stabilized (positions + RangeBand); build pa
 OK 2025-12-13T16:30 CET RESTORE: Fixed /pricing, /rangeband, /account pages; restored Button.tsx, added pricingConfig export, fixed named/default exports for WaveBackground and GlobalCtaButton; build passed.
 OK 2025-12-13T19:30 CET RESTORE: Restored full /pool/[poolAddress] with PoolUniversePage (Liquidity venues, LP Population, RangeBand, Fees/APR, etc.); build ok.
 OK 2025-12-13T21:00 CET UNIVERSE: Added graceful degradation; ts now from Postgres (last_updated); RangeBand section added to layout; build ok.
+OK 2025-12-13T21:30 CET POOL Phase1: Extended /api/analytics/pool/[id] + types/UI for head+universe summary/segments; build pending.
+OK 2025-12-13T22:00 CET HOTFIX: WalletProPage now reads json.data.positions fallback; build pending; /wallet shows positions.
+OK 2025-12-13T22:45:00Z HOTFIX: /pool KPI/segments no longer $0 (API/UI shape aligned); build ok; verified on 1 pool.
+OK 2025-12-13T23:15 CET HOTFIX: /api/analytics/pool detects legacy vs analytics snapshots and surfaces non-zero head/summary; build ok; verified on WFLR/USDT0.
+OK 2025-12-14T00:30 CET HOTFIX: Schema-adaptive pool-key detection for /api/analytics/pool; fixed "column pool does not exist" → degrade:true; build ok.

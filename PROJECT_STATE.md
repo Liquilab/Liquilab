@@ -1669,3 +1669,17 @@ Changelog — 2025-12-13
 - Route supports both raw pool addresses and pair slugs (e.g., fxrp-usdt0).
 - Full Pool Universe UI: Liquidity venues by DEX, LP Population, RangeBand distribution, Fees/APR, Wallet Flows, Market Context.
 - Build passed; /pool/[poolAddress] renders with consistent nav and data wiring.
+Changelog — 2025-12-13
+- pages/api/analytics/pool/[id].ts: Added head+universe query (pair/summary/segments) using pool materialized views with graceful degradation.
+- src/lib/analytics/types.ts, src/lib/api/analytics.ts: Updated analytics pool response types and fetchPool fallback for universe shape.
+- src/components/pool/PoolUniversePage.tsx: Reads new head/summary fields (tvlUsd/fees24hUsd/fees7dUsd/positionsCount) for KPI/segments rendering.
+- RUN_LOG.md: Logged Pool Phase1 universe expansion (build pending).
+Changelog — 2025-12-13
+- src/components/wallet/WalletProPage.tsx: Normalizes /api/positions payload (json.data.positions fallback) so positions render again on /wallet.
+- RUN_LOG.md: Logged wallet positions parsing hotfix.
+Changelog — 2025-12-13
+- pages/api/analytics/pool/[id].ts: Added schema-detection + analytics_snapshot fallback (market snapshots + position snapshots) so KPI summary + segments return non-zero values even when legacy MVs lack tvl_usd.
+- RUN_LOG.md: Logged /pool analytics schema-adaptive hotfix.
+Changelog — 2025-12-14
+- pages/api/analytics/pool/[id].ts: Schema-adaptive pool-key detection using information_schema introspection; fixed "column pool does not exist" error causing degrade:true; pool key column cached with 60s TTL; dev-only logging for resolved columns and result counts.
+- RUN_LOG.md: Logged schema-adaptive pool-key detection hotfix.

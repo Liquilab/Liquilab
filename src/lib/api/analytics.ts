@@ -13,20 +13,7 @@ export type AnalyticsSummaryResponse = {
   data?: AnalyticsSummaryData;
 };
 
-export type AnalyticsPoolData = {
-  state: string;
-  tvl: number;
-  fees24h: number;
-  fees7d: number;
-  positionsCount: number;
-};
-
-export type AnalyticsPoolResponse = {
-  ok?: boolean;
-  degrade?: boolean;
-  ts: number;
-  pool?: AnalyticsPoolData;
-};
+export type AnalyticsPoolResponse = import('@/lib/analytics/types').AnalyticsPoolResponse;
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
@@ -64,7 +51,10 @@ export async function fetchPool(address: string): Promise<AnalyticsPoolResponse>
       ok: false,
       degrade: true,
       ts: Date.now(),
-      pool: undefined,
+      pool: {
+        head: null,
+        universe: null,
+      },
     };
   }
 }
