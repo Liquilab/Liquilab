@@ -11,16 +11,16 @@ type Props = {
 };
 
 export function GlobalCtaButton({
-  href = "/waitlist",
-  children = "Start free trial",
+  href = "/pricing",
+  children = "Start 14-day Pro trial",
   className = "",
   target,
   rel,
   disabled,
 }: Props) {
   const base =
-    "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium " +
-    "bg-[#E9DCC3] text-black hover:opacity-90 " +
+    "inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold " +
+    "bg-[#3B82F6] text-white hover:bg-[#2563EB] transition-colors " +
     className;
 
   const isDisabled = disabled || !href || typeof href !== "string" || href.trim().length === 0;

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import Head from 'next/head';
 import Navigation from '@/components/Navigation';
 import { WaveBackground } from '@/components/WaveBackground';
-import Footer from '@/components/Footer';
 import { ChevronDown, MessageCircle, Mail } from 'lucide-react';
 
 interface FAQItem {
@@ -144,8 +143,6 @@ export default function FAQPage() {
             </div>
           </div>
         </div>
-
-        <Footer />
       </WaveBackground>
     </div>
   );

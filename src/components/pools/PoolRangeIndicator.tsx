@@ -194,7 +194,7 @@ function computePreviewRange(realMin: number, realMax: number, strategyTone: Ran
   
   switch (strategyTone) {
     case 'aggressive':
-      widthPct = 11; // ~11% width
+      widthPct = 8; // ~8% width
       break;
     case 'balanced':
       widthPct = 22; // ~22% width
@@ -288,6 +288,24 @@ export function RangeBand({
       return preview.value;
     }
     
+    // For strategy preview, calculate status based on original current price vs new range
+    if (preview.kind === 'strategy' && displayMin !== null && displayMax !== null && safeCurrent !== null) {
+      if (safeCurrent < displayMin || safeCurrent > displayMax) {
+        return 'out'; // 🔴 Red - outside new strategy boundaries
+      }
+      
+      const width = displayMax - displayMin;
+      const distanceToMin = safeCurrent - displayMin;
+      const distanceToMax = displayMax - safeCurrent;
+      const threshold = width * 0.1;
+      
+      if (distanceToMin <= threshold || distanceToMax <= threshold) {
+        return 'near'; // 🟠 Amber - close to edge
+      }
+      
+      return 'in'; // 🟢 Green - in range
+    }
+    
     // During live animation, calculate status dynamically
     if (explainer && livePrice !== null && displayMin !== null && displayMax !== null) {
       // First check: is price out of range?
@@ -311,7 +329,7 @@ export function RangeBand({
     }
     
     return status;
-  }, [preview, status, explainer, livePrice, displayMin, displayMax]);
+  }, [preview, status, explainer, livePrice, displayMin, displayMax, safeCurrent]);
 
   const markerPosition = React.useMemo(
     () => calculateMarkerPosition(displayMin, displayMax, displayCurrent),
@@ -540,10 +558,11 @@ export function RangeBand({
               width: '14px',
               height: '14px',
               borderRadius: '50%',
-              backgroundColor: 'currentColor',
+              backgroundColor: statusColor,
+              boxShadow: `0 0 10px ${statusColor}, 0 0 0 2px rgba(5,7,12,0.95)`,
               zIndex: 10,
               cursor: 'pointer',
-              transition: preview.kind === 'none' && !explainer ? 'left 0.6s ease-in-out' : 'none',
+              transition: preview.kind === 'none' && !explainer ? 'left 0.6s ease-in-out, background-color 0.3s ease' : 'background-color 0.3s ease',
             }}
             title={markerTooltip}
           >
