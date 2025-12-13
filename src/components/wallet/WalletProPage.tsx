@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { getWalletPortfolioAnalytics, type WalletPortfolioAnalytics } from '@/lib/api/analytics';
+import { type WalletPortfolioAnalytics } from '@/lib/api/analytics';
 import type { PositionRow } from '@/lib/positions/types';
 import { formatUsd } from '@/utils/format';
 import { RangeBandPositionBar } from './RangeBandPositionBar';
@@ -255,7 +255,13 @@ export function WalletProPage() {
     router.isReady && typeof router.query.wallet === 'string'
       ? router.query.wallet
       : undefined;
-  const effectiveAddress = queryWallet ?? address ?? '';
+
+  const devFallback =
+    process.env.NODE_ENV !== 'production' && typeof window !== 'undefined' && window.location.hostname.startsWith('localhost')
+      ? '0x57d294d815968f0efa722f1e8094da65402cd951'
+      : '';
+
+  const effectiveAddress = (queryWallet ?? address ?? devFallback)?.toLowerCase() ?? '';
   const viewingOverride = Boolean(queryWallet);
   const viewingGoldenWallet = useMemo(() => {
     if (!queryWallet) return null;
@@ -277,26 +283,38 @@ export function WalletProPage() {
     setLoading(true);
     setError(null);
 
-    getWalletPortfolioAnalytics(effectiveAddress, { signal: controller.signal })
-      .then((result) => {
+    (async () => {
+      try {
+        const params = new URLSearchParams({ address: effectiveAddress, debug: '0' });
+        const response = await fetch(`/api/positions?${params.toString()}`, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(`Failed to load positions (${response.status})`);
+        }
+        const json = await response.json();
         if (!isCurrent) return;
-        console.log(`[WalletProPage] Analytics loaded:`, {
-          positionsCount: result.positions.length,
-          summary: result.summary,
-        });
-        setData(result);
-      })
-      .catch((err) => {
-        if (!isCurrent || err.name === 'AbortError') return;
-        console.error(`[WalletProPage] Error loading analytics:`, err);
-        setError(err.message ?? 'Failed to load wallet portfolio');
+        const payload = (json && typeof json === 'object' && 'data' in json) ? (json as any).data : json;
+        const positions = Array.isArray((payload as any)?.positions) ? (payload as any).positions : [];
+        const summary = (payload as any)?.summary ?? {
+          address: effectiveAddress,
+          positionsCount: positions.length,
+          poolsCount: 0,
+          activePositions: 0,
+          totalTvlUsd: 0,
+          fees7dUsd: null,
+          lifetimeFeesUsd: null,
+        };
+        setData({ positions, summary });
+      } catch (err: any) {
+        if (!isCurrent || err?.name === 'AbortError') return;
+        console.error('[WalletProPage] Error loading positions:', err);
+        setError(err?.message ?? 'Failed to load wallet portfolio');
         setData(null);
-      })
-      .finally(() => {
+      } finally {
         if (isCurrent) {
           setLoading(false);
         }
-      });
+      }
+    })();
 
     return () => {
       isCurrent = false;
@@ -320,6 +338,14 @@ export function WalletProPage() {
   if (!mounted) {
     return null;
   }
+
+  const showDevFallback =
+    process.env.NODE_ENV !== 'production' &&
+    typeof window !== 'undefined' &&
+    window.location.hostname.startsWith('localhost') &&
+    !queryWallet &&
+    !address &&
+    effectiveAddress === '0x57d294d815968f0efa722f1e8094da65402cd951';
 
   return (
     <main className="relative z-10 mx-auto flex w-full max-w-[1400px] flex-col gap-8 px-4 py-10 sm:px-6 lg:px-10">
