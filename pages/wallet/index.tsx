@@ -36,7 +36,6 @@ export default function WalletPage() {
       <div className="flex min-h-screen flex-col">
         <Navigation />
         <WalletPageContent />
-        <Footer />
       </div>
     </div>
   );

@@ -1622,3 +1622,34 @@ Changelog — 2025-12-13
 - pages/wallet/index.tsx: Fixed Navigation import to match default export, resolving the “Element type is invalid” runtime error on /wallet.
 - PROJECT_STATE.md, RUN_LOG.md: Documented the wallet runtime hotfix.
 - src/components/wallet/WalletUpgradePage.tsx: Fixed GlobalCtaButton import (default) and set href so /wallet no longer triggers “Element type is invalid” in WalletUpgradePage.
+- pages/api/entitlements.ts: Added dev-only wallet allowlist override (0x57d294d815968f0efa722f1e8094da65402cd951 → PRO) without affecting production.
+Changelog — 2025-12-13
+- pages/api/entitlements.ts: Added localhost-only dev override mapping 0x57d294d815968f0efa722f1e8094da65402cd951 to PRO (no impact on staging/prod).
+- RUN_LOG.md: Logged the dev entitlements override.
+Changelog — 2025-12-13
+- src/lib/api/analytics.ts: Added runtime getWalletPortfolioAnalytics fetcher.
+- src/components/wallet/WalletProPage.tsx: Added guard against missing analytics function to prevent /wallet crash.
+- RUN_LOG.md: Logged the wallet analytics hotfix.
+Changelog — 2025-12-13
+- src/lib/api/analytics.ts: Added graceful fallback for getWalletPortfolioAnalytics (returns empty portfolio on non-OK responses) to prevent /wallet runtime crashes when the endpoint is unavailable.
+- RUN_LOG.md: Logged the /wallet analytics 404 hotfix.
+Changelog — 2025-12-13
+- pages/api/analytics/wallet/portfolio.ts: Added stub endpoint returning empty portfolio to prevent /wallet 404 crashes in dev.
+- RUN_LOG.md: Logged the /wallet analytics stub hotfix.
+Changelog — 2025-12-13
+- src/components/wallet/WalletProPage.tsx: Wired effectiveAddress selection (query/wagmi/dev fallback) and fetches positions from /api/positions; added dev-only fallback banner logic; avoids crashes on missing analytics.
+- RUN_LOG.md: Logged wallet positions hotfix.
+Changelog — 2025-12-13
+- pages/api/positions.ts: Added deterministic minPrice/maxPrice/currentPrice (token1 per token0) with status classification; range warnings recorded when unavailable.
+- src/components/wallet/WalletProPage.tsx: Fetches positions and passes range fields to RangeBand; dev fallback address preserved.
+- RUN_LOG.md: Logged RangeBand positions hotfix.
+Changelog — 2025-12-13
+- pages/api/positions.ts: Added fallback to derivedPrice01 when slot0 tick is missing so currentPrice is finite for RangeBand; kept range guards intact.
+Changelog — 2025-12-13
+- pages/api/positions.ts: RangeBand fields now computed from tickLower/tickUpper + slot0 sqrtPrice with canonical token1/token0 prices; warnings include reasons; range_ok increments when all prices are finite.
+Changelog — 2025-12-13
+- pages/api/positions.ts: Preserved range fields for non-premium responses so RangeBand can render in dev/local; fees/incentives still gated for non-premium.
+Changelog — 2025-12-13
+- pages/wallet/index.tsx: Removed page-level Footer to avoid duplicate footer since _app already renders Footer.
+Changelog — 2025-12-13
+- PR wallet-rangeband-pr: Stabilized /wallet positions + RangeBand (positions API fields + UI wiring); build passed and branch pushed for review.
