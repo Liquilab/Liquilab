@@ -831,8 +831,8 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
         </div>
       ) : (
         <div className="space-y-6">
-          {/* KPI Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* KPI Row - 6 tiles */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="bg-[#0F1A36]/95 rounded-xl border border-white/10 p-5">
               <div className="text-xs font-medium uppercase tracking-wide text-white/[0.58] mb-1">Total TVL</div>
               <div className="text-2xl font-bold tabular-nums text-white/95">{formatUsd(tvlUsd, true)}</div>
@@ -841,6 +841,19 @@ export default function PoolUniversePage({ poolAddress }: PoolUniversePageProps)
             <div className="bg-[#0F1A36]/95 rounded-xl border border-white/10 p-5">
               <div className="text-xs font-medium uppercase tracking-wide text-white/[0.58] mb-1">Fees ({timeRange === '24h' ? '24H' : '7D'})</div>
               <div className="text-2xl font-bold tabular-nums text-white/95">{formatUsd(timeRange === '24h' ? fees24hUsd : fees7dUsd, true)}</div>
+            </div>
+            <div className="bg-[#0F1A36]/95 rounded-xl border border-white/10 p-5">
+              <div className="text-xs font-medium uppercase tracking-wide text-white/[0.58] mb-1">Fee per $K TVL</div>
+              <div className="text-2xl font-bold tabular-nums text-white/95">
+                {tvlUsd && tvlUsd > 0 && fees7dUsd ? `$${(fees7dUsd / tvlUsd * 1000).toFixed(2)}` : '—'}
+              </div>
+              <div className="text-xs text-white/[0.58] mt-1">7 days period</div>
+            </div>
+            <div className="bg-[#0F1A36]/95 rounded-xl border border-white/10 p-5">
+              <div className="text-xs font-medium uppercase tracking-wide text-white/[0.58] mb-1">Total APR Est.</div>
+              <div className={cn("text-2xl font-bold tabular-nums", tvlUsd && fees7dUsd ? "text-[#10B981]" : "text-white/95")}>
+                {tvlUsd && tvlUsd > 0 && fees7dUsd ? formatPct((fees7dUsd * 52 / tvlUsd) * 100) : '—'}
+              </div>
             </div>
             <div className="bg-[#0F1A36]/95 rounded-xl border border-white/10 p-5">
               <div className="text-xs font-medium uppercase tracking-wide text-white/[0.58] mb-1">Total Positions</div>
