@@ -5,7 +5,7 @@ import { WalletProPage } from '@/components/wallet/WalletProPage';
 import { WalletUpgradePage } from '@/components/wallet/WalletUpgradePage';
 import { useSubscriptionTier } from '@/hooks/useSubscriptionTier';
 import Footer from '@/components/Footer';
-import { Navigation } from '@/components/Navigation';
+import Navigation from '@/components/Navigation';
 
 function WalletPageContent() {
   const { subscriptionTier, isLoading } = useSubscriptionTier();

@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
-import { GlobalCtaButton } from '@/components/GlobalCtaButton';
+import GlobalCtaButton from '@/components/GlobalCtaButton';
 
 export function WalletUpgradePage() {
   return (
@@ -17,7 +17,9 @@ export function WalletUpgradePage() {
           performance insights, and peer benchmarking.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <GlobalCtaButton className="px-8 py-3" />
+          <GlobalCtaButton href="/waitlist" className="px-8 py-3">
+            Join the waitlist
+          </GlobalCtaButton>
           <Link href="/pricing" legacyBehavior passHref>
             <Button
               as="a"
@@ -32,4 +34,3 @@ export function WalletUpgradePage() {
     </div>
   );
 }
-
