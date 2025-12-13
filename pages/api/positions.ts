@@ -778,9 +778,6 @@ async function mapRawPosition(
       rangeMin,
       rangeMax,
       currentPrice,
-      minPrice: rangeMin ?? null,
-      maxPrice: rangeMax ?? null,
-      currentPrice: currentPrice ?? null,
       tvlUsd: undefined,
       unclaimedFeesUsd: undefined,
       enrichmentStatus: 'partial',
@@ -1045,7 +1042,7 @@ async function mapRawPosition(
       !Number.isFinite(row.currentPrice)
     ) {
       row.enrichmentStatus = 'partial';
-      row.status = determineStatus(raw.tick, raw.tickLower, raw.tickUpper, row.rangeMin, row.rangeMax, row.currentPrice);
+      row.status = determineStatus(raw.tick, raw.tickLower, raw.tickUpper);
       warnings.push(`range_data_unavailable:${rangeFailureReason ?? 'unknown'}`);
       counters.rangeUnavailable += 1;
     } else {
@@ -1057,11 +1054,6 @@ async function mapRawPosition(
     if (row.unclaimedFeesUsd !== undefined && row.unclaimedFeesUsd !== null && Number.isFinite(row.unclaimedFeesUsd)) {
       // already captured in feesOk counter above
     }
-
-    // Keep public aliases for range fields (token1 per token0) even after final checks
-    row.minPrice = typeof row.rangeMin === 'number' && Number.isFinite(row.rangeMin) ? row.rangeMin : null;
-    row.maxPrice = typeof row.rangeMax === 'number' && Number.isFinite(row.rangeMax) ? row.rangeMax : null;
-    row.currentPrice = typeof row.currentPrice === 'number' && Number.isFinite(row.currentPrice) ? row.currentPrice : null;
 
     if (row.enrichmentStatus === 'ok') {
       counters.mapped += 1;

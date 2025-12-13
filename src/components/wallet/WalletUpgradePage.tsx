@@ -17,7 +17,9 @@ export function WalletUpgradePage() {
           performance insights, and peer benchmarking.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <GlobalCtaButton className="px-8 py-3" />
+          <GlobalCtaButton href="/pricing" className="px-8 py-3">
+            Upgrade now
+          </GlobalCtaButton>
           <Link href="/pricing" legacyBehavior passHref>
             <Button
               as="a"
