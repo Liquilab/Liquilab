@@ -28,7 +28,7 @@ function WalletPageContent() {
 
 export default function WalletPage() {
   return (
-    <div className="bg-[#0B1221]">
+    <div className="min-h-screen bg-[#0B1530]">
       <Head>
         <title>Portfolio Pro · Liquilab</title>
       </Head>
