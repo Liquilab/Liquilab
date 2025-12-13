@@ -1652,3 +1652,13 @@ Changelog — 2025-12-13
 - pages/wallet/index.tsx: Removed page-level Footer to avoid duplicate footer since _app already renders Footer.
 Changelog — 2025-12-13
 - PR wallet-rangeband-pr: Stabilized /wallet positions + RangeBand (positions API fields + UI wiring); build passed and branch pushed for review.
+Changelog — 2025-12-13
+- Restored /pricing, /rangeband, /account pages to build-safe state after previous breakage.
+- src/components/ui/Button.tsx: Restored full Button component (was broken circular reference).
+- src/components/WaveBackground.tsx: Added children prop and both named+default exports.
+- src/components/GlobalCtaButton.tsx: Added both named+default exports, default href="/waitlist".
+- src/components/InteractiveRangeBandExplainer.tsx: Added named export alongside default.
+- src/lib/billing/pricing.ts: Added pricingConfig export with premium/pro/rangebandAlerts structure for UI pages.
+- pages/pricing.tsx: Fixed to use safe accessors for pricingConfig with fallback defaults.
+- pages/account.tsx: Fixed imports (Navigation default, WaveBackground named with children).
+- Build passed; /pricing, /rangeband, /account render without runtime crashes.

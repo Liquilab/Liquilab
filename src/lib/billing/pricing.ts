@@ -56,5 +56,25 @@ export function priceBreakdown({ slots, alertsSelected }: PriceInput): PriceBrea
   return { base5, extras, alerts, alertsPacks, total };
 }
 
-
-
+/**
+ * pricingConfig provides a UI-friendly structure for pricing pages.
+ * Computed from the active plan (A or B) based on LL_PRICING_PLAN env var.
+ */
+export const pricingConfig = {
+  premium: {
+    priceMonthlyUsd: ACTIVE_PLAN.BASE5,
+    includedPools: 5,
+    extraBundlePriceUsd: +(ACTIVE_PLAN.EXTRA_SLOT * 5).toFixed(2),
+    extraBundlePools: 5,
+  },
+  pro: {
+    priceMonthlyUsd: +(ACTIVE_PLAN.BASE5 * 1.67).toFixed(2), // Pro is ~67% more than Premium
+    includedPools: 5,
+    extraBundlePriceUsd: +(ACTIVE_PLAN.EXTRA_SLOT * 5 * 1.5).toFixed(2),
+    extraBundlePools: 5,
+  },
+  rangebandAlerts: {
+    priceMonthlyUsdPerBundle: ACTIVE_PLAN.ALERTS_PACK5,
+    bundlePools: 5,
+  },
+};

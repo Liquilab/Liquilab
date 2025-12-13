@@ -10,3 +10,4 @@ OK 2025-12-13T00:00 CET HOTFIX: /api/positions computes min/max/current from tic
 OK 2025-12-13T00:00 CET HOTFIX: /api/positions no longer strips range fields for non-premium so RangeBand can render in dev; build pending.
 OK 2025-12-13T00:00 CET HOTFIX: Removed duplicate Footer on /wallet (Footer now only from _app).
 OK 2025-12-13T00:00 CET PR: /wallet stabilized (positions + RangeBand); build passed; branch wallet-rangeband-pr pushed.
+OK 2025-12-13T16:30 CET RESTORE: Fixed /pricing, /rangeband, /account pages; restored Button.tsx, added pricingConfig export, fixed named/default exports for WaveBackground and GlobalCtaButton; build passed.
