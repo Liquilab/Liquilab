@@ -11,7 +11,7 @@ interface DataStateBannerProps {
   context?: 'universe' | 'pool' | 'position';
 }
 
-export function DataStateBanner({ state, className, children, context = 'universe' }: DataStateBannerProps) {
+export default function DataStateBanner({ state, className, children, context = 'universe' }: DataStateBannerProps) {
   if (state === 'ok') {
     return null;
   }

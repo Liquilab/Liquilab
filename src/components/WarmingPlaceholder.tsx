@@ -9,7 +9,7 @@ interface WarmingPlaceholderProps {
   showSpinner?: boolean;
 }
 
-export function WarmingPlaceholder({
+export default function WarmingPlaceholder({
   className,
   title = 'Building 7-day history',
   showSpinner = true,
