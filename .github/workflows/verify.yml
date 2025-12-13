@@ -1,0 +1,47 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "pr-*"
+      - "feature/*"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Start server (for verify:api:prices)
+        run: |
+          export PORT=3000
+          npm run start &
+          i=0
+          until curl -fsS "http://localhost:3000/api/prices/current?symbols=FXRP,USDT0,WFLR" >/dev/null 2>&1; do
+            i=$((i+1))
+            if [ "$i" -ge 60 ]; then
+              echo "Server did not become ready in time"
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Verify
+        run: npm run verify
