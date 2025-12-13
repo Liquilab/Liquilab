@@ -123,3 +123,47 @@ export async function fetchPoolUniverse(poolAddress: string): Promise<PoolUniver
     };
   }
 }
+
+export type WalletPortfolioAnalytics = import('@/lib/positions/types').PositionsResponse['data'] & {
+  summary: {
+    address: string;
+    positionsCount: number;
+    poolsCount: number;
+    activePositions: number;
+    totalTvlUsd: number;
+    fees7dUsd: number | null;
+    lifetimeFeesUsd: number | null;
+  };
+};
+
+export async function getWalletPortfolioAnalytics(
+  walletAddress: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<WalletPortfolioAnalytics> {
+  const params = new URLSearchParams({ wallet: walletAddress });
+  const url = `/api/analytics/wallet/portfolio?${params.toString()}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'content-type': 'application/json',
+    },
+    signal: opts.signal,
+  });
+  if (!response.ok) {
+    // Graceful fallback to avoid runtime crash when endpoint is unavailable in dev
+    return {
+      summary: {
+        address: walletAddress.toLowerCase(),
+        positionsCount: 0,
+        poolsCount: 0,
+        activePositions: 0,
+        totalTvlUsd: 0,
+        fees7dUsd: null,
+        lifetimeFeesUsd: null,
+      },
+      positions: [],
+      meta: undefined,
+    };
+  }
+  return (await response.json()) as WalletPortfolioAnalytics;
+}

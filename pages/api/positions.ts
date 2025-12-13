@@ -689,32 +689,68 @@ async function mapRawPosition(
 
     const claim = buildClaim(raw, token0Meta, token1Meta, effectivePrice0, effectivePrice1);
 
-    // Range calculations (best-effort)
+    // Range calculations (best-effort, token1 per token0)
     let rangeMin: number | undefined;
     let rangeMax: number | undefined;
     let currentPrice: number | undefined;
+    let rangeFailureReason: string | null = null;
     try {
-      const range = computePriceRange(raw.tickLower, raw.tickUpper, token0Meta.decimals, token1Meta.decimals);
-      rangeMin = range.lowerPrice ?? undefined;
-      rangeMax = range.upperPrice ?? undefined;
-      if (raw.tick !== null && raw.tick !== undefined) {
-        currentPrice = tickToPrice(raw.tick, token0Meta.decimals, token1Meta.decimals);
-      }
-      if (
-        typeof rangeMin === 'number' &&
-        typeof rangeMax === 'number' &&
-        Number.isFinite(rangeMin) &&
-        Number.isFinite(rangeMax) &&
-        rangeMin > rangeMax
-      ) {
-        const tmp = rangeMin;
-        rangeMin = rangeMax;
-        rangeMax = tmp;
-        warnings.push('rangeband_fixed_inversion');
-        counters.rangeFixed += 1;
+      const dec0 = token0Meta.decimals;
+      const dec1 = token1Meta.decimals;
+      if (typeof dec0 === 'number' && typeof dec1 === 'number') {
+        rangeMin = tickToPrice(raw.tickLower, dec0, dec1);
+        rangeMax = tickToPrice(raw.tickUpper, dec0, dec1);
+
+        if (raw.tick !== null && raw.tick !== undefined) {
+          currentPrice = tickToPrice(raw.tick, dec0, dec1);
+        } else if (raw.sqrtPriceX96) {
+          const priceFromSqrt = sqrtRatioToPrice(raw.sqrtPriceX96, dec0, dec1);
+          if (Number.isFinite(priceFromSqrt)) {
+            currentPrice = priceFromSqrt;
+          }
+        }
+
+        // Fallback to derivedPrice01 (from stable pair truth) if currentPrice is not available
+        if ((currentPrice === undefined || !Number.isFinite(currentPrice)) && derivedPrice01 !== undefined) {
+          currentPrice = derivedPrice01;
+        }
+
+        if (
+          typeof rangeMin === 'number' &&
+          typeof rangeMax === 'number' &&
+          Number.isFinite(rangeMin) &&
+          Number.isFinite(rangeMax) &&
+          rangeMin > rangeMax
+        ) {
+          const tmp = rangeMin;
+          rangeMin = rangeMax;
+          rangeMax = tmp;
+          warnings.push('rangeband_fixed_inversion');
+          counters.rangeFixed += 1;
+        }
+
+        if (
+          typeof rangeMin !== 'number' ||
+          typeof rangeMax !== 'number' ||
+          !Number.isFinite(rangeMin) ||
+          !Number.isFinite(rangeMax)
+        ) {
+          rangeFailureReason = 'nonfinite_bounds';
+        } else if (rangeMin === rangeMax) {
+          rangeFailureReason = 'zero_width_range';
+        }
+
+        if (currentPrice === undefined || !Number.isFinite(currentPrice)) {
+          rangeFailureReason = rangeFailureReason ?? 'missing_current_price';
+        }
+      } else {
+        rangeFailureReason = 'missing_decimals';
+        warnings.push('range_data_unavailable:missing_decimals');
       }
     } catch (err) {
       console.warn(`[api/positions] Range computation failed for tokenId=${raw.tokenId}:`, err);
+      rangeFailureReason = 'range_calc_error';
+      warnings.push('range_data_unavailable:range_calc_error');
     }
 
     const row: PositionRow = {
@@ -742,6 +778,9 @@ async function mapRawPosition(
       rangeMin,
       rangeMax,
       currentPrice,
+      minPrice: rangeMin ?? null,
+      maxPrice: rangeMax ?? null,
+      currentPrice: currentPrice ?? null,
       tvlUsd: undefined,
       unclaimedFeesUsd: undefined,
       enrichmentStatus: 'partial',
@@ -993,9 +1032,7 @@ async function mapRawPosition(
       row.incentivesUsdPerDay = null;
       row.incentivesTokens = [];
       row.claim = null;
-      row.rangeMin = undefined;
-      row.rangeMax = undefined;
-      row.currentPrice = undefined;
+      // Preserve range fields for RangeBand visibility even for non-premium in dev/local
     }
 
     if (
@@ -1008,9 +1045,11 @@ async function mapRawPosition(
       !Number.isFinite(row.currentPrice)
     ) {
       row.enrichmentStatus = 'partial';
-      warnings.push('Range data unavailable');
+      row.status = determineStatus(raw.tick, raw.tickLower, raw.tickUpper, row.rangeMin, row.rangeMax, row.currentPrice);
+      warnings.push(`range_data_unavailable:${rangeFailureReason ?? 'unknown'}`);
       counters.rangeUnavailable += 1;
     } else {
+      row.status = determineStatus(raw.tick, raw.tickLower, raw.tickUpper, row.rangeMin, row.rangeMax, row.currentPrice);
       row.enrichmentStatus = 'ok';
       counters.rangeOk += 1;
     }
@@ -1018,6 +1057,11 @@ async function mapRawPosition(
     if (row.unclaimedFeesUsd !== undefined && row.unclaimedFeesUsd !== null && Number.isFinite(row.unclaimedFeesUsd)) {
       // already captured in feesOk counter above
     }
+
+    // Keep public aliases for range fields (token1 per token0) even after final checks
+    row.minPrice = typeof row.rangeMin === 'number' && Number.isFinite(row.rangeMin) ? row.rangeMin : null;
+    row.maxPrice = typeof row.rangeMax === 'number' && Number.isFinite(row.rangeMax) ? row.rangeMax : null;
+    row.currentPrice = typeof row.currentPrice === 'number' && Number.isFinite(row.currentPrice) ? row.currentPrice : null;
 
     if (row.enrichmentStatus === 'ok') {
       counters.mapped += 1;

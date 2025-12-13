@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
-import { GlobalCtaButton } from '@/components/GlobalCtaButton';
+import GlobalCtaButton from '@/components/GlobalCtaButton';
 
 export function WalletUpgradePage() {
   return (

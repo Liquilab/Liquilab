@@ -492,9 +492,9 @@ export function WalletProPage() {
                           ? position.incentivesUsd
                           : null;
                       const positionAPR = computePositionAPR(position);
-                      const minPrice = position.rangeMin ?? null;
-                      const maxPrice = position.rangeMax ?? null;
-                      const currentPrice = position.currentPrice ?? null;
+                    const minPrice = (position as any).minPrice ?? position.rangeMin ?? null;
+                    const maxPrice = (position as any).maxPrice ?? position.rangeMax ?? null;
+                    const currentPrice = (position as any).currentPrice ?? null;
                       const universeLink = getPoolUniverseLink(position);
 
                       return (
