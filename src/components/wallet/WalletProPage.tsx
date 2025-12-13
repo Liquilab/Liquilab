@@ -277,10 +277,29 @@ export function WalletProPage() {
     setLoading(true);
     setError(null);
 
-    getWalletPortfolioAnalytics(effectiveAddress, { signal: controller.signal })
+    fetch(`/api/positions?address=${encodeURIComponent(effectiveAddress)}&debug=0`, { signal: controller.signal })
+      .then(async (res) => {
+        const json = await res.json();
+        const payload = json?.data ?? json;
+        const positions = Array.isArray(payload?.positions) ? payload.positions : [];
+        const summary = payload?.summary;
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[WalletProPage] positions fetch', {
+            url: res.url,
+            status: res.status,
+            keys: Object.keys(json ?? {}),
+            hasData: Boolean(json?.data),
+            positionsLength: positions.length,
+          });
+        }
+        if (!res.ok) {
+          throw new Error(`Failed to fetch positions (${res.status})`);
+        }
+        return { positions, summary } as WalletPortfolioAnalytics;
+      })
       .then((result) => {
         if (!isCurrent) return;
-        console.log(`[WalletProPage] Analytics loaded:`, {
+        console.log(`[WalletProPage] Positions loaded:`, {
           positionsCount: result.positions.length,
           summary: result.summary,
         });
@@ -288,8 +307,8 @@ export function WalletProPage() {
       })
       .catch((err) => {
         if (!isCurrent || err.name === 'AbortError') return;
-        console.error(`[WalletProPage] Error loading analytics:`, err);
-        setError(err.message ?? 'Failed to load wallet portfolio');
+        console.error(`[WalletProPage] Error loading positions:`, err);
+        setError(err.message ?? 'Failed to load wallet positions');
         setData(null);
       })
       .finally(() => {
@@ -492,9 +511,9 @@ export function WalletProPage() {
                           ? position.incentivesUsd
                           : null;
                       const positionAPR = computePositionAPR(position);
-                    const minPrice = (position as any).minPrice ?? position.rangeMin ?? null;
-                    const maxPrice = (position as any).maxPrice ?? position.rangeMax ?? null;
-                    const currentPrice = (position as any).currentPrice ?? null;
+                      const minPrice = position.rangeMin ?? null;
+                      const maxPrice = position.rangeMax ?? null;
+                      const currentPrice = position.currentPrice ?? null;
                       const universeLink = getPoolUniverseLink(position);
 
                       return (
