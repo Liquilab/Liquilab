@@ -50,6 +50,14 @@ export async function fetchPositions(
     throw new Error(message);
   }
 
+  const positionsArray = Array.isArray(payload.data.positions) ? payload.data.positions : [];
+  payload.data.positions = positionsArray;
+
+  console.log(`[fetchPositions] Response positions=${positionsArray.length}`, {
+    success: payload.success,
+    hasData: !!payload.data,
+  });
+
   return payload;
 }
 
