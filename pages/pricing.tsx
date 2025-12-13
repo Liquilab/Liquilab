@@ -4,6 +4,7 @@ import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { Navigation } from '@/components/Navigation';
+import pricingConfig from "@/config/pricing.json";
 import { WaveBackground } from '@/components/WaveBackground';
 import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/button';
@@ -280,6 +281,19 @@ function ComparisonTable() {
 }
 
 export default function PricingPage() {
+  if (!pricingConfig || typeof pricingConfig !== "object") {
+    return (
+      <>
+        <Head><title>Pricing — LiquiLab</title></Head>
+        <Navigation />
+        <main className="mx-auto max-w-6xl px-4 py-10">
+          <h1 className="text-2xl font-semibold">Pricing</h1>
+          <p className="mt-2 opacity-80">Pricing is temporarily unavailable.</p>
+        </main>
+      </>
+    );
+  }
+
   const premiumPlan = pricingConfig.premium;
   const proPlan = pricingConfig.pro;
 
