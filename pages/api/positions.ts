@@ -11,9 +11,16 @@ import type {
 } from '@/lib/positions/types';
 import { flare } from '@/lib/chainFlare';
 import { prisma } from '@/server/db';
-import { nftsByOwner } from '@/lib/providers/ankr';
 import { getPrices } from '@/lib/pricing/prices';
-import { getPoolAddress, getPoolState } from '@/utils/poolHelpers';
+import {
+  getPoolAddress,
+  getPoolState,
+  computePriceRange,
+  tickToPrice,
+  calcAmountsForPosition,
+  bigIntToDecimal,
+  calculateAccruedFees,
+} from '@/utils/poolHelpers';
 import type { ResolvedRole, RoleResolution } from '@/lib/entitlements/resolveRole';
 
 const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/i;
@@ -100,9 +107,12 @@ interface RawPosition {
   tickLower: number;
   tickUpper: number;
   liquidity: bigint;
+  feeGrowthInside0LastX128: bigint;
+  feeGrowthInside1LastX128: bigint;
   tokensOwed0: bigint;
   tokensOwed1: bigint;
   tick?: number | null;
+  sqrtPriceX96?: bigint;
 }
 
 interface IncentiveInfo {
@@ -167,13 +177,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 async function buildPositions(wallet: string, role: 'VISITOR' | 'PREMIUM' | 'PRO', flags: { premium: boolean; analytics: boolean }): Promise<PositionRow[]> {
   if (!nfpmConfigs.length) return [];
-  const tokenIds = await nftsByOwner(wallet);
-  if (!tokenIds.length) return [];
 
   const rawPositions: RawPosition[] = [];
-  for (const tokenId of tokenIds) {
-    const raw = await readPositionAcrossManagers(tokenId);
-    if (raw) rawPositions.push(raw);
+  const perDexRawCount: Record<string, number> = {};
+  const perDexCounters: Record<
+    string,
+    {
+      mapped: number;
+      partial: number;
+      failed: number;
+      feesOk: number;
+      feesFailed: number;
+      incentivesOk: number;
+      incentivesNull: number;
+      incentivesFailed: number;
+      rangeOk: number;
+      rangeUnavailable: number;
+      rangeFixed: number;
+    }
+  > = {};
+
+  for (const config of nfpmConfigs) {
+    const tokenIds = await getTokenIdsForNfpm(config.nfpm, wallet);
+    perDexRawCount[config.dex] = tokenIds.length;
+    perDexCounters[config.dex] = {
+      mapped: 0,
+      partial: 0,
+      failed: 0,
+      feesOk: 0,
+      feesFailed: 0,
+      incentivesOk: 0,
+      incentivesNull: 0,
+      incentivesFailed: 0,
+      rangeOk: 0,
+      rangeUnavailable: 0,
+      rangeFixed: 0,
+    };
+    console.log(`[api/positions] ${config.dex} tokenIds=${tokenIds.length}`);
+    for (const tokenId of tokenIds) {
+      const raw = await readPositionForConfig(config, tokenId);
+      if (raw) rawPositions.push(raw);
+    }
   }
 
   if (!rawPositions.length) return [];
@@ -187,54 +231,90 @@ async function buildPositions(wallet: string, role: 'VISITOR' | 'PREMIUM' | 'PRO
   );
 
   const priceMap = await getPrices(priceAddresses);
+  console.log(`[api/positions] Mapping raw positions: count=${rawPositions.length}`);
   const positions = await Promise.all(
-    rawPositions.map(async (raw) => mapRawPosition(raw, role, flags, priceMap))
+    rawPositions.map(async (raw) =>
+      mapRawPosition(raw, role, flags, priceMap, perDexCounters[raw.dex]!)
+    )
   );
-
-  return positions.filter(Boolean) as PositionRow[];
+  const mapped = positions.filter(Boolean) as PositionRow[];
+  console.log(`[api/positions] Mapped positions: count=${mapped.length} (raw=${rawPositions.length})`);
+  Object.entries(perDexCounters).forEach(([dex, counters]) => {
+    console.log(
+      `[api/positions] ${dex} mapped=${counters.mapped} partial=${counters.partial} failed=${counters.failed} fees_ok=${counters.feesOk} fees_failed=${counters.feesFailed} incentives_ok=${counters.incentivesOk} incentives_null=${counters.incentivesNull} incentives_failed=${counters.incentivesFailed} range_ok=${counters.rangeOk} range_unavailable=${counters.rangeUnavailable} range_fixed=${counters.rangeFixed}`
+    );
+  });
+  return mapped;
 }
 
-async function readPositionAcrossManagers(tokenId: bigint): Promise<RawPosition | null> {
-  for (const config of nfpmConfigs) {
-    const result = await readPosition(config.nfpm, tokenId);
-    if (!result) continue;
-    const token0 = getAddress(result.token0);
-    const token1 = getAddress(result.token1);
-    const [sorted0, sorted1] = sortAddresses(token0, token1);
+async function getTokenIdsForNfpm(nfpm: `0x${string}`, owner: string): Promise<bigint[]> {
+  const ERC721_ENUMERABLE_ABI = [
+    { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
+    { type: 'function', name: 'tokenOfOwnerByIndex', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'index', type: 'uint256' }], outputs: [{ name: 'tokenId', type: 'uint256' }] },
+  ] as const;
 
-    let poolAddress: `0x${string}`;
-    try {
-      poolAddress = await getPoolAddress(config.factory, sorted0, sorted1, result.fee);
-    } catch {
-      continue;
+  try {
+    const ownerAddress = getAddress(owner);
+    const balance = await publicClient.readContract({
+      address: nfpm,
+      abi: ERC721_ENUMERABLE_ABI,
+      functionName: 'balanceOf',
+      args: [ownerAddress],
+    }) as bigint;
+
+    const tokenIds: bigint[] = [];
+    for (let i = 0n; i < balance; i += 1n) {
+      const tokenId = await publicClient.readContract({
+        address: nfpm,
+        abi: ERC721_ENUMERABLE_ABI,
+        functionName: 'tokenOfOwnerByIndex',
+        args: [ownerAddress, i],
+      }) as bigint;
+      tokenIds.push(tokenId);
     }
+    return tokenIds;
+  } catch (error) {
+    console.warn(`[api/positions] Failed to get tokenIds for NFPM ${nfpm}:`, error);
+    return [];
+  }
+}
 
-    let tick: number | null = null;
-    try {
-      const state = await getPoolState(poolAddress);
-      tick = state.tick;
-    } catch {
-      tick = null;
-    }
+async function readPositionForConfig(config: { dex: 'enosys-v3' | 'sparkdex-v3'; nfpm: `0x${string}`; factory: `0x${string}` }, tokenId: bigint): Promise<RawPosition | null> {
+  const result = await readPosition(config.nfpm, tokenId);
+  if (!result) return null;
+  const token0 = getAddress(result.token0);
+  const token1 = getAddress(result.token1);
+  const [sorted0, sorted1] = sortAddresses(token0, token1);
 
-    return {
-      tokenId,
-      dex: config.dex,
-      nfpm: config.nfpm,
-      poolAddress,
-      token0,
-      token1,
-      fee: result.fee,
-      tickLower: result.tickLower,
-      tickUpper: result.tickUpper,
-      liquidity: result.liquidity,
-      tokensOwed0: result.tokensOwed0,
-      tokensOwed1: result.tokensOwed1,
-      tick,
-    };
+  let poolAddress: `0x${string}`;
+  let poolState: { sqrtPriceX96: bigint; tick: number } | null = null;
+  try {
+    poolAddress = await getPoolAddress(config.factory, sorted0, sorted1, result.fee);
+    poolState = await getPoolState(poolAddress);
+  } catch {
+    return null;
   }
 
-  return null;
+  const tick = poolState?.tick ?? null;
+
+  return {
+    tokenId,
+    dex: config.dex,
+    nfpm: config.nfpm,
+    poolAddress,
+    token0,
+    token1,
+    fee: result.fee,
+    tickLower: result.tickLower,
+    tickUpper: result.tickUpper,
+    liquidity: result.liquidity,
+    feeGrowthInside0LastX128: result.feeGrowthInside0LastX128,
+    feeGrowthInside1LastX128: result.feeGrowthInside1LastX128,
+    tokensOwed0: result.tokensOwed0,
+    tokensOwed1: result.tokensOwed1,
+    tick,
+    sqrtPriceX96: poolState?.sqrtPriceX96,
+  };
 }
 
 async function readPosition(nfpm: `0x${string}`, tokenId: bigint) {
@@ -246,7 +326,20 @@ async function readPosition(nfpm: `0x${string}`, tokenId: bigint) {
       args: [tokenId],
     });
 
-    const [, , token0, token1, fee, tickLower, tickUpper, liquidity, , , tokensOwed0, tokensOwed1] = result as [
+    const [
+      ,
+      ,
+      token0,
+      token1,
+      fee,
+      tickLower,
+      tickUpper,
+      liquidity,
+      feeGrowthInside0LastX128,
+      feeGrowthInside1LastX128,
+      tokensOwed0,
+      tokensOwed1,
+    ] = result as [
       bigint,
       `0x${string}`,
       `0x${string}`,
@@ -270,6 +363,8 @@ async function readPosition(nfpm: `0x${string}`, tokenId: bigint) {
       tickLower,
       tickUpper,
       liquidity,
+      feeGrowthInside0LastX128,
+      feeGrowthInside1LastX128,
       tokensOwed0,
       tokensOwed1,
     };
@@ -282,7 +377,20 @@ async function mapRawPosition(
   raw: RawPosition,
   role: 'VISITOR' | 'PREMIUM' | 'PRO',
   flags: { premium: boolean; analytics: boolean },
-  priceMap: Record<string, number>
+  priceMap: Record<string, number>,
+  counters: {
+    mapped: number;
+    partial: number;
+    failed: number;
+    feesOk: number;
+    feesFailed: number;
+    incentivesOk: number;
+    incentivesNull: number;
+    incentivesFailed: number;
+    rangeOk: number;
+    rangeUnavailable: number;
+    rangeFixed: number;
+  }
 ): Promise<PositionRow | null> {
   try {
     const [token0Meta, token1Meta] = await Promise.all([
@@ -294,10 +402,41 @@ async function mapRawPosition(
     const price0 = priceMap[raw.token0.toLowerCase()];
     const price1 = priceMap[raw.token1.toLowerCase()];
     const claim = buildClaim(raw, token0Meta, token1Meta, price0, price1);
+    const warnings: string[] = [];
+
+    // Range calculations (best-effort)
+    let rangeMin: number | undefined;
+    let rangeMax: number | undefined;
+    let currentPrice: number | undefined;
+    try {
+      const range = computePriceRange(raw.tickLower, raw.tickUpper, token0Meta.decimals, token1Meta.decimals);
+      rangeMin = range.lowerPrice ?? undefined;
+      rangeMax = range.upperPrice ?? undefined;
+      if (raw.tick !== null && raw.tick !== undefined) {
+        currentPrice = tickToPrice(raw.tick, token0Meta.decimals, token1Meta.decimals);
+      }
+      if (
+        typeof rangeMin === 'number' &&
+        typeof rangeMax === 'number' &&
+        Number.isFinite(rangeMin) &&
+        Number.isFinite(rangeMax) &&
+        rangeMin > rangeMax
+      ) {
+        const tmp = rangeMin;
+        rangeMin = rangeMax;
+        rangeMax = tmp;
+        warnings.push('rangeband_fixed_inversion');
+        counters.rangeFixed += 1;
+      }
+    } catch (err) {
+      console.warn(`[api/positions] Range computation failed for tokenId=${raw.tokenId}:`, err);
+    }
 
     const row: PositionRow = {
       tokenId: raw.tokenId.toString(),
+      nfpm: raw.nfpm,
       dex: raw.dex,
+      positionKey: `${raw.dex}:${raw.nfpm.toLowerCase()}:${raw.tokenId.toString()}`,
       poolAddress: raw.poolAddress,
       pair: {
         symbol0: token0Meta.symbol,
@@ -315,19 +454,166 @@ async function mapRawPosition(
         role,
         flags,
       },
+      rangeMin,
+      rangeMax,
+      currentPrice,
+      tvlUsd: undefined,
+      unclaimedFeesUsd: undefined,
+      enrichmentStatus: 'partial',
+      warnings,
     };
+
+    // TVL calculations (best-effort)
+    try {
+      if (raw.sqrtPriceX96 && raw.tick !== null && raw.tick !== undefined) {
+        const { amount0Wei, amount1Wei } = calcAmountsForPosition(
+          raw.liquidity,
+          raw.sqrtPriceX96,
+          raw.tickLower,
+          raw.tickUpper,
+          token0Meta.decimals,
+          token1Meta.decimals
+        );
+        const amount0 = bigIntToDecimal(amount0Wei, token0Meta.decimals);
+        const amount1 = bigIntToDecimal(amount1Wei, token1Meta.decimals);
+        const tvlUsd =
+          (price0 && Number.isFinite(price0) ? price0 * amount0 : 0) +
+          (price1 && Number.isFinite(price1) ? price1 * amount1 : 0);
+        row.amountsUsd = {
+          total: Number.isFinite(tvlUsd) ? tvlUsd : null,
+          token0: Number.isFinite(price0) ? price0 * amount0 : null,
+          token1: Number.isFinite(price1) ? price1 * amount1 : null,
+        };
+        row.tvlUsd = Number.isFinite(tvlUsd) ? tvlUsd : undefined;
+        if (!Number.isFinite(price0)) warnings.push('price_missing_token0');
+        if (!Number.isFinite(price1)) warnings.push('price_missing_token1');
+      }
+    } catch (err) {
+      console.warn(`[api/positions] TVL computation failed for tokenId=${raw.tokenId}:`, err);
+    }
+
+    // Fees (unclaimed) calculations
+    try {
+      if (
+        raw.tick !== null &&
+        raw.tick !== undefined &&
+        raw.feeGrowthInside0LastX128 !== undefined &&
+        raw.feeGrowthInside1LastX128 !== undefined
+      ) {
+        const { fee0Wei, fee1Wei } = await calculateAccruedFees({
+          poolAddress: raw.poolAddress,
+          liquidity: raw.liquidity,
+          tickLower: raw.tickLower,
+          tickUpper: raw.tickUpper,
+          currentTick: raw.tick,
+          feeGrowthInside0LastX128: raw.feeGrowthInside0LastX128,
+          feeGrowthInside1LastX128: raw.feeGrowthInside1LastX128,
+          tokensOwed0: raw.tokensOwed0,
+          tokensOwed1: raw.tokensOwed1,
+        });
+        const fee0 = bigIntToDecimal(fee0Wei, token0Meta.decimals);
+        const fee1 = bigIntToDecimal(fee1Wei, token1Meta.decimals);
+        const usd0 = price0 && Number.isFinite(price0) ? fee0 * price0 : null;
+        const usd1 = price1 && Number.isFinite(price1) ? fee1 * price1 : null;
+        const totalFees = (usd0 ?? 0) + (usd1 ?? 0);
+        const hasUsd = usd0 !== null && usd0 !== undefined || usd1 !== null && usd1 !== undefined;
+        row.unclaimedFeesUsd =
+          hasUsd && Number.isFinite(totalFees) ? totalFees : undefined;
+        if (row.unclaimedFeesUsd === undefined) {
+          warnings.push('fees_unpriced');
+        }
+        counters.feesOk += 1;
+      } else {
+        warnings.push('fees_data_unavailable');
+        counters.feesFailed += 1;
+      }
+    } catch (err) {
+      console.warn(`[api/positions] Fees computation failed for tokenId=${raw.tokenId}:`, err);
+      warnings.push('fees_calc_failed');
+      counters.feesFailed += 1;
+    }
+
+    // Incentives tracking
+    if (incentives) {
+      counters.incentivesOk += 1;
+      if (incentives.usdPerDay === null) {
+        warnings.push('incentives_unpriced');
+      }
+    } else {
+      counters.incentivesNull += 1;
+      warnings.push('incentives_unavailable_for_dex');
+    }
 
     if (!flags.premium) {
       row.fees24hUsd = null;
       row.incentivesUsdPerDay = null;
       row.incentivesTokens = [];
       row.claim = null;
+      row.rangeMin = undefined;
+      row.rangeMax = undefined;
+      row.currentPrice = undefined;
     }
 
+    if (
+      typeof row.rangeMin !== 'number' ||
+      typeof row.rangeMax !== 'number' ||
+      !Number.isFinite(row.rangeMin) ||
+      !Number.isFinite(row.rangeMax) ||
+      row.rangeMin >= row.rangeMax ||
+      typeof row.currentPrice !== 'number' ||
+      !Number.isFinite(row.currentPrice)
+    ) {
+      row.enrichmentStatus = 'partial';
+      warnings.push('Range data unavailable');
+      counters.rangeUnavailable += 1;
+    } else {
+      row.enrichmentStatus = 'ok';
+      counters.rangeOk += 1;
+    }
+
+    if (row.unclaimedFeesUsd !== undefined && row.unclaimedFeesUsd !== null && Number.isFinite(row.unclaimedFeesUsd)) {
+      // already captured in feesOk counter above
+    }
+
+    if (row.enrichmentStatus === 'ok') {
+      counters.mapped += 1;
+    } else {
+      counters.partial += 1;
+    }
     return row;
   } catch (error) {
-    console.warn('[api/positions] failed to map position', error);
-    return null;
+    console.warn(`[api/positions] failed to map position tokenId=${raw.tokenId}:`, error);
+    counters.failed += 1;
+    return {
+      tokenId: raw.tokenId.toString(),
+      nfpm: raw.nfpm,
+      dex: raw.dex,
+      positionKey: `${raw.dex}:${raw.nfpm.toLowerCase()}:${raw.tokenId.toString()}`,
+      poolAddress: raw.poolAddress,
+      pair: {
+        symbol0: 'TKN0',
+        symbol1: 'TKN1',
+        feeBps: raw.fee,
+      },
+      liquidity: raw.liquidity.toString(),
+      amountsUsd: { total: null, token0: null, token1: null },
+      fees24hUsd: null,
+      incentivesUsdPerDay: null,
+      incentivesTokens: [],
+      status: 'unknown',
+      claim: null,
+      entitlements: {
+        role,
+        flags,
+      },
+      rangeMin: undefined,
+      rangeMax: undefined,
+      currentPrice: undefined,
+      tvlUsd: undefined,
+      unclaimedFeesUsd: undefined,
+      enrichmentStatus: 'failed',
+      warnings: ['Mapping failed; returned minimal position'],
+    };
   }
 }
 
@@ -531,7 +817,7 @@ export async function fetchCanonicalPositionData(input: CanonicalPositionInput):
     summary,
     meta: {
       address: normalizedAddress,
-      network: input.network ?? 'flare',
+      elapsedMs: 0,
     },
   };
 }
@@ -545,10 +831,7 @@ export function buildRoleAwareData(
     return {
       ...data,
       positions: data.positions.slice(0, 25),
-      meta: {
-        ...(data.meta ?? {}),
-        truncated: true,
-      },
+      meta: data.meta,
     };
   }
 
