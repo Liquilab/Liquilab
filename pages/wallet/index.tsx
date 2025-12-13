@@ -4,6 +4,7 @@ import Head from 'next/head';
 import { WalletProPage } from '@/components/wallet/WalletProPage';
 import { WalletUpgradePage } from '@/components/wallet/WalletUpgradePage';
 import { useSubscriptionTier } from '@/hooks/useSubscriptionTier';
+import Footer from '@/components/Footer';
 import Navigation from '@/components/Navigation';
 
 function WalletPageContent() {

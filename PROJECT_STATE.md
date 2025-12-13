@@ -1617,6 +1617,7 @@ See archives in /docs/changelog/.
   - Pool routes now consistent: `/pool/[poolAddress]` (index) and `/pool/[poolAddress]/universe` (universe view).
   - Merged `/api/analytics/pool/[id].ts` into `/api/analytics/pool/[poolAddress].ts` with `?simple=true` query parameter for simple pool data; deleted conflicting `[id].ts` API route. Updated `fetchPool()` to use `?simple=true` parameter.
   - Verified all pool routes (pages and API) consistently use `[poolAddress]` as the dynamic segment; no `[id]` routes remain. If Next.js error persists, clear `.next` build cache.
+
 Changelog — 2025-12-13
 - pages/wallet/index.tsx: Fixed Navigation import to match default export, resolving the “Element type is invalid” runtime error on /wallet.
 - PROJECT_STATE.md, RUN_LOG.md: Documented the wallet runtime hotfix.
