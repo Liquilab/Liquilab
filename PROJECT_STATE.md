@@ -1662,3 +1662,10 @@ Changelog — 2025-12-13
 - pages/pricing.tsx: Fixed to use safe accessors for pricingConfig with fallback defaults.
 - pages/account.tsx: Fixed imports (Navigation default, WaveBackground named with children).
 - Build passed; /pricing, /rangeband, /account render without runtime crashes.
+Changelog — 2025-12-13
+- Restored full /pool/[poolAddress] route with PoolUniversePage from git history (936ed79c).
+- Restored components: PoolUniversePage, all pool/universe/* section components, WarmingPlaceholder, DataStateBanner.
+- Restored src/lib/pools/pairSlug.ts for pair slug routing support.
+- Route supports both raw pool addresses and pair slugs (e.g., fxrp-usdt0).
+- Full Pool Universe UI: Liquidity venues by DEX, LP Population, RangeBand distribution, Fees/APR, Wallet Flows, Market Context.
+- Build passed; /pool/[poolAddress] renders with consistent nav and data wiring.

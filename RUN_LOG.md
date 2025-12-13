@@ -11,3 +11,5 @@ OK 2025-12-13T00:00 CET HOTFIX: /api/positions no longer strips range fields for
 OK 2025-12-13T00:00 CET HOTFIX: Removed duplicate Footer on /wallet (Footer now only from _app).
 OK 2025-12-13T00:00 CET PR: /wallet stabilized (positions + RangeBand); build passed; branch wallet-rangeband-pr pushed.
 OK 2025-12-13T16:30 CET RESTORE: Fixed /pricing, /rangeband, /account pages; restored Button.tsx, added pricingConfig export, fixed named/default exports for WaveBackground and GlobalCtaButton; build passed.
+OK 2025-12-13T19:30 CET RESTORE: Restored full /pool/[poolAddress] with PoolUniversePage (Liquidity venues, LP Population, RangeBand, Fees/APR, etc.); build ok.
+OK 2025-12-13T21:00 CET UNIVERSE: Added graceful degradation; ts now from Postgres (last_updated); RangeBand section added to layout; build ok.

@@ -7,6 +7,7 @@ type PoolRow = {
   fees_24h: number | null;
   fees_7d: number | null;
   positions_count: number | null;
+  last_updated: string | null;
 };
 
 const POOL_SQL = `
@@ -28,7 +29,7 @@ fees7d AS (
   GROUP BY pool
 ),
 positions AS (
-  SELECT pool, COUNT(DISTINCT tokenId)::bigint AS positions_count
+  SELECT pool, COUNT(DISTINCT tokenId)::bigint AS positions_count, MAX("updatedAt") AS last_updated
   FROM mv_position_latest_event
   WHERE pool = $1
   GROUP BY pool
@@ -38,7 +39,8 @@ SELECT
   base.tvl_usd,
   fees24h.fees_24h,
   fees7d.fees_7d,
-  positions.positions_count
+  positions.positions_count,
+  positions.last_updated
 FROM base
 LEFT JOIN fees24h ON fees24h.pool = base.pool
 LEFT JOIN fees7d ON fees7d.pool = base.pool
@@ -59,19 +61,23 @@ export default async function handler(
     return res.status(400).json({ error: 'Pool ID required' });
   }
 
-  const ts = Date.now();
   const result = await queryOrDegrade<PoolRow>(POOL_SQL, [id.toLowerCase()], 60_000);
 
   if (!result.ok) {
     return res.status(200).json({
       ok: false,
       degrade: true,
-      ts,
+      ts: Date.now(),
       pool: {},
     });
   }
 
   const row = result.rows?.[0];
+  
+  // Use database timestamp if available, otherwise fallback to current time
+  const dbTimestamp = row?.last_updated ? new Date(row.last_updated).getTime() : null;
+  const ts = dbTimestamp ?? Date.now();
+  
   const poolPayload = {
     state: row?.state ?? 'unknown',
     tvl: Number(row?.tvl_usd ?? 0),
