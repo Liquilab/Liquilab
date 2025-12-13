@@ -1650,3 +1650,5 @@ Changelog — 2025-12-13
 - pages/api/positions.ts: Preserved range fields for non-premium responses so RangeBand can render in dev/local; fees/incentives still gated for non-premium.
 Changelog — 2025-12-13
 - pages/wallet/index.tsx: Removed page-level Footer to avoid duplicate footer since _app already renders Footer.
+Changelog — 2025-12-13
+- PR wallet-rangeband-pr: Stabilized /wallet positions + RangeBand (positions API fields + UI wiring); build passed and branch pushed for review.

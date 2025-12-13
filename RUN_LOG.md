@@ -9,3 +9,4 @@ OK 2025-12-13T00:00 CET HOTFIX: /api/positions emits min/max/current fields and 
 OK 2025-12-13T00:00 CET HOTFIX: /api/positions computes min/max/current from ticks+slot0 with reasoned warnings; range_ok now expected >0; build pending.
 OK 2025-12-13T00:00 CET HOTFIX: /api/positions no longer strips range fields for non-premium so RangeBand can render in dev; build pending.
 OK 2025-12-13T00:00 CET HOTFIX: Removed duplicate Footer on /wallet (Footer now only from _app).
+OK 2025-12-13T00:00 CET PR: /wallet stabilized (positions + RangeBand); build passed; branch wallet-rangeband-pr pushed.
