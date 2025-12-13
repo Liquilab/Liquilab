@@ -15,6 +15,7 @@
 - OK 2025-12-12T19:15 CET HOTFIX-PRICING: CoinGecko-only allowlist mode enabled (`src/lib/pricing/{hints,prices}.ts`); USDT₮0 stable override enforced; non-allowlisted tokens return `unpriced_allowlist`. `npm run verify` + `npm run build` passed.
 - OK 2025-12-12T19:40 CET HOTFIX-WALLET: Grid/List views on `/wallet` now read API `tvlUsd`/`unclaimedFeesUsd` directly (no client USD recompute); dev guard logs when derived values drift 5×. `npm run verify` + `npm run build` passed.
 - OK 2025-12-12T19:55 CET HOTFIX-VALUATION: Fixed stable_pair_spot_truth USD math (`pages/api/positions.ts`); token1-stable now uses price01, token0-stable uses price10. `npm run verify`, `npm run build`, and manual `/api/positions?...&debug=1` confirm #28134 ≈$490 TVL / $0.28 fees.
+- OK 2025-12-12T20:05 CET LOG-UPDATE: RUN_LOG appended after pricing/tvl hotfix commit.
 - OK 2025-12-12T19:15 CET HOTFIX-PRICING: CoinGecko-only allowlist mode enabled (`src/lib/pricing/{hints,prices}.ts`); USDT₮0 stable override enforced; non-allowlisted tokens now return `unpriced_allowlist`. `npm run verify` + `npm run build` passed.
 - OK 2025-12-12T19:15 CET HOTFIX-PRICING: `src/lib/pricing/hints.ts` + `src/lib/pricing/prices.ts` switched to CoinGecko-only allowlist + strict USDT₮0 stable override (others return `unpriced_allowlist`). `npm run verify` + `npm run build` passed.
 - OK 2025-12-12T15:55 CET CLEANUP-REDIRECT: Added temporary `/brand -> /` redirect (pages/brand.tsx via GSSP). Verified with `npm run verify`, `npm run build`, and manual curl to /brand (302 to /).
